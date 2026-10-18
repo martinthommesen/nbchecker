@@ -34,6 +34,10 @@ interface Message {
 }
 
 const read = (bytes: Uint8Array): Message => {
+  // A reply without a whole header can't be checked, even an empty one.
+  if (bytes.length < headerLength) {
+    throw new MalformedResponse({ reason: "bad answer: header cut short" });
+  }
   const r = new Reader(bytes);
   const id = r.u16();
   const flags = r.u16();

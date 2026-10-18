@@ -19,6 +19,14 @@ const withFlags = (bytes: Uint8Array, change: (b: number) => number) => {
   return out;
 };
 
+/** A copy of `bytes` that says it has no question. */
+const strip = (bytes: Uint8Array) => {
+  const out = Uint8Array.from(bytes);
+  const questionCount = 5;
+  out[questionCount] = 0;
+  return out;
+};
+
 describe("mismatch", () => {
   test("accepts the answer to the query", () => {
     expect(mismatch(query, replyTo(query))).toBeUndefined();
@@ -51,16 +59,18 @@ describe("mismatch", () => {
   });
 
   test("accepts an error without a question, but not an answer", () => {
-    const strip = (bytes: Uint8Array) => {
-      const out = Uint8Array.from(bytes);
-      const questionCount = 5;
-      out[questionCount] = 0;
-      return out;
-    };
     const refused = strip(response({ id: queryId, rcode: Rcode.refused }));
     expect(mismatch(query, refused)).toBeUndefined();
     const answer = strip(response({ id: queryId }));
     expect(mismatch(query, answer)).toBe(notMatching);
+  });
+
+  test("rejects an error reply cut short inside its header", () => {
+    const refused = response({ id: queryId, rcode: Rcode.refused });
+    const questionless = 6;
+    expect(mismatch(query, strip(refused).subarray(0, questionless))).toBe(
+      "bad answer: header cut short"
+    );
   });
 
   test("rejects a reply cut short", () => {
