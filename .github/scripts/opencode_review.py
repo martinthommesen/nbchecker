@@ -13,6 +13,10 @@ CONFIG_DIRS = {".git", ".opencode", ".claude", ".agents"}
 INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md", "CONTEXT.md"}
 
 
+def is_private_env(path):
+    return path.name.startswith(".env") and path.name != ".env.example"
+
+
 def git(source, *args):
     return subprocess.check_output(
         ["git", "-c", "core.hooksPath=/dev/null", "-C", str(source), *args]
@@ -41,11 +45,26 @@ def prepare(source, destination, base, head):
         # plugins, custom tools, automatically loaded instructions, or skills.
         if CONFIG_DIRS.intersection(path.parts) or path.name in INSTRUCTION_FILES:
             continue
-        if path.name.startswith(".env") and path.name != ".env.example":
+        if is_private_env(path):
             continue
         files.append((path, oid.decode()))
 
-    diff = git(source, "diff", "--no-ext-diff", "--no-textconv", "--unified=40", f"{base}...{head}")
+    comparison = f"{base}...{head}"
+    # Filter both sides of the diff, including deleted files. Literal pathspecs
+    # prevent a tracked filename from being interpreted as a wildcard/exclusion.
+    changed = git(
+        source, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+        "--name-only", "-z", comparison,
+    )
+    paths = [
+        ":(literal)" + os.fsdecode(path)
+        for path in changed.split(b"\0")
+        if path and not is_private_env(PurePosixPath(os.fsdecode(path)))
+    ]
+    diff = git(
+        source, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+        "--unified=40", comparison, "--", *paths,
+    ) if paths else b""
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     for path, oid in files:

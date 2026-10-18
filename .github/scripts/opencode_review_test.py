@@ -59,10 +59,35 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse((snapshot / ".agents").exists())
         self.assertFalse((snapshot / "nested/.env").exists())
         self.assertFalse(os.access(snapshot / "node_modules/.bin/oxlint", os.X_OK))
-        self.assertIn(".opencode/plugins/attack.ts", (self.destination / "changes.diff").read_text())
+        diff = (self.destination / "changes.diff").read_text()
+        self.assertIn(".opencode/plugins/attack.ts", diff)
+        self.assertIn(".env.example", diff)
+        self.assertNotIn("SYNTHETIC_CANARY", diff)
         self.write("source.ts", "later branch content")
         self.commit()
         self.assertEqual((snapshot / "source.ts").read_text(), "export const value = 2;\n")
+
+    def test_env_only_diff_is_empty_including_deleted_and_modified_files(self):
+        self.write(".env", "DELETED_PRIVATE_VALUE=one")
+        self.write("nested/.env.production", "OLD_PRIVATE_VALUE=two")
+        base = self.commit()
+        (self.source / ".env").unlink()
+        self.write("nested/.env.production", "NEW_PRIVATE_VALUE=three")
+        self.write("nested/.env.local", "ADDED_PRIVATE_VALUE=four")
+        head = self.commit()
+        review.prepare(self.source, self.destination, base, head)
+        self.assertEqual((self.destination / "changes.diff").read_text(), "")
+
+    def test_diff_paths_are_literal_and_safe_example_remains_visible(self):
+        self.write("[literal].ts", "export const bracket = true;")
+        self.write(".env.example", "SAFE_EXAMPLE=value")
+        self.write(".env", "HIDDEN_CANARY=value")
+        head = self.commit()
+        review.prepare(self.source, self.destination, self.base, head)
+        diff = (self.destination / "changes.diff").read_text()
+        self.assertIn("bracket = true", diff)
+        self.assertIn("SAFE_EXAMPLE", diff)
+        self.assertNotIn("HIDDEN_CANARY", diff)
 
     def test_symlink_is_rejected_before_writing_snapshot(self):
         (self.source / "linked.ts").symlink_to("/etc/passwd")
