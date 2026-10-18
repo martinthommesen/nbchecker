@@ -115,3 +115,20 @@ func TestInteractiveExitCode(t *testing.T) {
 		t.Errorf("exit %d, want 0 with no input", code)
 	}
 }
+
+func TestHelpExitsZero(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"--help"}, strings.NewReader(""), &out); code != 0 {
+		t.Errorf("exit %d, want 0", code)
+	}
+}
+
+func TestJSONOmitsUncheckedSystem(t *testing.T) {
+	b, err := json.Marshal(toJSON("Nettvern", []check.Result{{Target: "192.0.2.1", Host: "192.0.2.1", IsIP: true}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "this_computer") {
+		t.Errorf("unchecked IP should have no this_computer verdict: %s", b)
+	}
+}

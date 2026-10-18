@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -48,6 +49,9 @@ filter could not be checked or on other errors.
 	}
 	o := out{stdout}
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 	if *showVersion {
@@ -236,7 +240,7 @@ type jsonResult struct {
 	Truth    []string     `json:"real_answer,omitempty"`
 	TruthErr string       `json:"real_answer_error,omitempty"`
 	Filters  []jsonFilter `json:"filters,omitempty"`
-	System   jsonFilter   `json:"this_computer"`
+	System   *jsonFilter  `json:"this_computer,omitempty"`
 	Notes    []string     `json:"notes,omitempty"`
 }
 
@@ -255,7 +259,10 @@ func toJSON(status string, rs []check.Result) any {
 		for _, f := range r.Filters {
 			jr.Filters = append(jr.Filters, verdictJSON(f.Filter, f.Server, f.Verdict, f.Err))
 		}
-		jr.System = verdictJSON("this computer", "", r.System, r.SysErr)
+		if r.Checked { // an IP with no reverse name was never looked up
+			sys := verdictJSON("this computer", "", r.System, r.SysErr)
+			jr.System = &sys
+		}
 		out.Results = append(out.Results, jr)
 	}
 	return out

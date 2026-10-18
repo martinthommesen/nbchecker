@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"golang.org/x/net/idna"
 )
 
 // Filter is one of Telenor's filtering DNS services. Each is reachable over
@@ -107,7 +108,13 @@ func Normalize(s string) (host string, isIP bool) {
 	if _, err := netip.ParseAddr(s); err == nil {
 		return s, true
 	}
-	return strings.TrimSuffix(strings.ToLower(s), "."), false
+	s = strings.TrimSuffix(strings.ToLower(s), ".")
+	// Internationalised names (blåbær.no) are looked up by their ASCII
+	// form (xn--blbr-roah.no). Leave the name as typed if it isn't valid.
+	if a, err := idna.Lookup.ToASCII(s); err == nil {
+		s = a
+	}
+	return s, false
 }
 
 // Check looks up one target everywhere.

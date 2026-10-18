@@ -89,6 +89,7 @@ func TestNormalize(t *testing.T) {
 		{"1.2.3.4", "1.2.3.4", true},
 		{"[2001:db8::1]:443", "2001:db8::1", true},
 		{"http://[2001:db8::1]/", "2001:db8::1", true},
+		{"https://Blåbær.no/", "xn--blbr-roah.no", false},
 	}
 	for _, tt := range tests {
 		host, ip := Normalize(tt.in)
