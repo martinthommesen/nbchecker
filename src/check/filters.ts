@@ -44,13 +44,13 @@ export interface Filter {
   readonly canary?: Canary;
   readonly category: Category;
   readonly name: string;
-  /**
-   * The network whose customers it answers, as connection detection names
-   * it. Set along with `onlyAnswers`.
-   */
-  readonly network?: string;
-  /** Set when the servers only answer some networks, such as one ISP's. */
-  readonly onlyAnswers?: string;
+  /** Set when the servers only answer one network's customers, as an ISP's. */
+  readonly onlyAnswers?: {
+    /** Who it answers, in words, such as "Telenor customers". */
+    readonly customers: string;
+    /** The network, as connection detection names it. */
+    readonly network: string;
+  };
   readonly servers: readonly string[];
 }
 
@@ -60,8 +60,7 @@ export const filters: readonly Filter[] = [
     canary: telenorCanary("Telenor Nettvern"),
     category: "security",
     name: "Telenor Nettvern",
-    network: "Telenor",
-    onlyAnswers: "Telenor customers",
+    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
     servers: [
       "148.122.16.253",
       "148.122.164.253",
@@ -73,8 +72,7 @@ export const filters: readonly Filter[] = [
     canary: telenorCanary("Telenor Nettvern+"),
     category: "family",
     name: "Telenor Nettvern+",
-    network: "Telenor",
-    onlyAnswers: "Telenor customers",
+    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
     servers: [
       "148.122.16.252",
       "148.122.164.252",

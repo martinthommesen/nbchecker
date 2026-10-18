@@ -23,8 +23,7 @@ const ispFilter: Filter = {
   canary: fakeCanary,
   category: "security",
   name: "ISP filter",
-  network: "Telenor",
-  onlyAnswers: "Telenor customers",
+  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
   servers: ["203.0.113.1"],
 };
 

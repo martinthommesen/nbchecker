@@ -45,7 +45,7 @@ const failedRow = (
     return {
       icon: "?",
       name,
-      text: `no answer (it only answers ${filter.onlyAnswers})`,
+      text: `no answer (it only answers ${filter.onlyAnswers.customers})`,
       tone: "dim",
     };
   }

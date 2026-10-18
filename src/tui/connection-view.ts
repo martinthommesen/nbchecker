@@ -82,8 +82,12 @@ const telenorMark = (c: Connection | undefined, name: string): Mark => {
   return mark.notSeen;
 };
 
+/** Whether Telenor's test page can tell that this computer uses `f`. */
+const onTestPage = (f: Filter): boolean =>
+  telenorTestPage.answers.some((a) => a.filter === f.name);
+
 const markOf = (c: Connection | undefined, f: Filter): Mark => {
-  if (f.onlyAnswers !== undefined) {
+  if (onTestPage(f)) {
     return telenorMark(c, f.name);
   }
   return mark.noTest;
@@ -199,8 +203,9 @@ const filtersText = (
     out.push([paint(groupTitles[category], { fg: theme.faint })]);
     for (const f of items.filter((x) => x.category === category)) {
       out.push([...filterRow(f.name, markOf(c, f)), selfTestChunk(n, f)]);
-      // SafeZone has no server to ask, so it is only listed here.
-      if (f.name === "Telenor Nettvern") {
+      // SafeZone has no server to ask, so it is only listed here, after the
+      // first of Telenor's filters.
+      if (f.name === telenorTestPage.answers[0]?.filter) {
         out.push(filterRow("Telenor SafeZone", mark.cantSee));
       }
     }

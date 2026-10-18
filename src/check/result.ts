@@ -120,10 +120,10 @@ export const wasCancelled = (o: Outcome): boolean =>
  */
 export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
   const c = r.network?.connection;
-  if (f.network === undefined || c === undefined || c.error !== undefined) {
+  if (f.onlyAnswers === undefined || c === undefined || c.error !== undefined) {
     return true;
   }
-  return c.network === f.network;
+  return c.network === f.onlyAnswers.network;
 };
 
 /** The filters that failed the self-test. */

@@ -149,8 +149,7 @@ describe("intercepted DNS: self-tests that get no answer", () => {
       canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
       category: "security",
       name: "ISP filter",
-      network: "Telenor",
-      onlyAnswers: "Telenor customers",
+      onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
       servers: ["203.0.113.1"],
     };
     const r = await runCheck("good.example", {

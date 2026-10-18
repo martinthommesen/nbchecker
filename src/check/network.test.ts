@@ -22,8 +22,7 @@ const telenor = (answer: string, servers = ["192.0.2.53"]): Filter => ({
   canary: { answers: [answer], name: testPage },
   category: "security",
   name: "Telenor filter",
-  network: "Telenor",
-  onlyAnswers: "Telenor customers",
+  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
   servers,
 });
 

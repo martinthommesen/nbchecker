@@ -94,7 +94,7 @@ const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
   }
   if (o.kind === "failed" && f.onlyAnswers !== undefined) {
     if (!shouldAnswer(r, f)) {
-      return `${f.name} only answers ${f.onlyAnswers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
+      return `${f.name} only answers ${f.onlyAnswers.customers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
     }
     return `None of its servers answered, though ${f.name} should answer this computer, so the check is incomplete: ${o.error}`;
   }
