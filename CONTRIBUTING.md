@@ -57,10 +57,12 @@ By contributing, you agree that your contribution is licensed under the
 
 Maintainers release by pushing a tag such as `v1.2.3` to `main`. The release
 workflow builds standalone macOS and Linux binaries with GoReleaser's Bun
-builder, publishes them with checksums and build provenance attestations,
+builder, signs and notarizes the macOS ones, publishes them with checksums and build provenance attestations,
 updates the Homebrew cask in
 [martinthommesen/homebrew-tap](https://github.com/martinthommesen/homebrew-tap),
-and writes the release notes from merged pull requests.
+and writes the release notes from merged pull requests. It stops before
+publishing anything if the macOS signing secrets are missing.
 
 To try the release build locally, run
-`goreleaser release --snapshot --clean --skip=publish`.
+`goreleaser release --snapshot --clean --skip=publish`. Without the signing
+secrets the macOS binaries are left unsigned.

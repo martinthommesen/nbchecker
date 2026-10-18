@@ -33,6 +33,24 @@ archives:
       - LICENSE
       - README.md
 
+# Sign and notarize the macOS binaries so Gatekeeper opens them. This runs
+# from Linux, and only when the signing secrets are set; the release
+# workflow refuses to run without them.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [nbchecker]
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+        entitlements: ./release/entitlements.plist
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
 checksum:
   name_template: checksums.txt
 
@@ -53,14 +71,6 @@ homebrew_casks:
       email: noreply@github.com
     # Leave the tap alone when the release runs without its token.
     skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
-    hooks:
-      post:
-        # The binaries aren't notarized, so macOS would refuse to open a
-        # download marked as quarantined.
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/nbchecker"]
-          end
 
 changelog:
   use: github-native

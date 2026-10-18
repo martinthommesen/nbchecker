@@ -21,7 +21,8 @@ brew install martinthommesen/tap/nbchecker
 Or download the archive for your computer from the
 [latest release](https://github.com/martinthommesen/nbchecker/releases/latest):
 macOS (Apple silicon or Intel) or Linux (x64 or arm64). It holds a single
-program with nothing else to install.
+program with nothing else to install. The macOS programs are signed and
+notarized by Apple, so they open without a security warning.
 
 Each release includes a `checksums.txt` file and a signed build provenance
 attestation, so you can check that a download was built from this repository:
