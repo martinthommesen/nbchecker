@@ -89,19 +89,6 @@ const encode = (id: number, name: string, type: QueryType): Uint8Array =>
     uint16s(typeOpt, ednsBufferSize, 0, 0, 0),
   ]);
 
-const addressParsers = new Map<
-  number,
-  (data: Uint8Array) => NetAddress.IpAddress
->([
-  [ipv4Length, NetAddress.ipv4FromBytesUnsafe],
-  [ipv6Length, NetAddress.ipv6FromBytesUnsafe],
-]);
-
-const formatAddress = (data: Uint8Array): string | undefined => {
-  const parse = addressParsers.get(data.length);
-  return parse && NetAddress.formatIp(parse(data));
-};
-
 const readExtendedErrors = (data: Uint8Array): ExtendedError[] => {
   const r = new Reader(data);
   const out: ExtendedError[] = [];
@@ -134,25 +121,57 @@ const readRecord = (r: Reader): RawRecord => {
   return { data: r.take(length), dataOffset, name, ttl, type };
 };
 
-const addressTypes = new Map<number, "A" | "AAAA">([
-  [typeA, "A"],
-  [typeAaaa, "AAAA"],
+interface AddressType {
+  readonly length: number;
+  readonly parse: (data: Uint8Array) => NetAddress.IpAddress;
+  readonly type: "A" | "AAAA";
+}
+
+const addressTypes = new Map<number, AddressType>([
+  [
+    typeA,
+    { length: ipv4Length, parse: NetAddress.ipv4FromBytesUnsafe, type: "A" },
+  ],
+  [
+    typeAaaa,
+    { length: ipv6Length, parse: NetAddress.ipv6FromBytesUnsafe, type: "AAAA" },
+  ],
 ]);
 
-const toRecord = (r: Reader, raw: RawRecord): DnsRecord | undefined => {
-  if (raw.type === typeCname) {
-    const saved = r.offset;
-    r.offset = raw.dataOffset;
+/**
+ * Reads a CNAME target, which must end where its record does. Pointers to
+ * earlier parts of the message are fine.
+ */
+const readCname = (bytes: Uint8Array, raw: RawRecord): string => {
+  const end = raw.dataOffset + raw.data.length;
+  const r = new Reader(bytes.subarray(0, end));
+  r.offset = raw.dataOffset;
+  try {
     const value = r.name();
-    r.offset = saved;
-    return { name: raw.name, type: "CNAME", value };
+    if (r.offset === end) {
+      return value;
+    }
+  } catch (error) {
+    if (!(error instanceof MalformedResponse)) {
+      throw error;
+    }
   }
-  const type = addressTypes.get(raw.type);
-  const value = formatAddress(raw.data);
-  if (type === undefined || value === undefined) {
+  throw new MalformedResponse({ reason: "bad CNAME record" });
+};
+
+const toRecord = (bytes: Uint8Array, raw: RawRecord): DnsRecord | undefined => {
+  if (raw.type === typeCname) {
+    return { name: raw.name, type: "CNAME", value: readCname(bytes, raw) };
+  }
+  const address = addressTypes.get(raw.type);
+  if (address === undefined) {
     return;
   }
-  return { name: raw.name, type, value };
+  if (raw.data.length !== address.length) {
+    throw new MalformedResponse({ reason: `bad ${address.type} record` });
+  }
+  const value = NetAddress.formatIp(address.parse(raw.data));
+  return { name: raw.name, type: address.type, value };
 };
 
 const times = <A>(n: number, f: () => A): A[] => Array.from({ length: n }, f);
@@ -172,7 +191,7 @@ const decode = (bytes: Uint8Array): DnsAnswer => {
     r.name();
     r.take(questionTail);
   });
-  const records = times(answers, () => toRecord(r, readRecord(r))).filter(
+  const records = times(answers, () => toRecord(bytes, readRecord(r))).filter(
     (rec) => rec !== undefined
   );
   times(authorities, () => readRecord(r));
@@ -195,7 +214,9 @@ const decode = (bytes: Uint8Array): DnsAnswer => {
 export type QueryType = "A" | "AAAA";
 
 export const Rcode = {
+  formErr: 1,
   noError: 0,
+  notImp: 4,
   nxDomain: 3,
   refused: 5,
   servFail: 2,
