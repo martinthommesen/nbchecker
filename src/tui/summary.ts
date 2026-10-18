@@ -1,10 +1,20 @@
-/** The one-line summaries: the verdict, progress, connection and keys. */
+/**
+ * The summary under the input: the verdict, or progress while checking, and
+ * the hint at the end of the input.
+ */
 import type { StyledText, TextChunk } from "@opentui/core";
-import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
-import { type CheckResult, settled, unavailable } from "../check/result.ts";
-import { type Status, statusOf } from "../report/status.ts";
+import type { Reason } from "../check/classify.ts";
+import { trustedFilters } from "../check/evidence.ts";
+import {
+  type CheckResult,
+  type Outcome,
+  realAddresses,
+  settled,
+} from "../check/result.ts";
+import { realAnswerState, systemState } from "../report/resolver-state.ts";
+import { type Status, statusOf, statusPhrases } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
-import { lines, paint, spinner } from "./paint.ts";
+import { lines, oneLine, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
 import { theme } from "./theme.ts";
 
@@ -29,51 +39,66 @@ const progress = (r: CheckResult) => {
   return { finished, total: r.filters.length + extraResolvers };
 };
 
+/** The reason a lookup's answer gives, if it answered. */
+const reasonOf = (o: Outcome): Reason | undefined => {
+  if (o.kind === "answered") {
+    return o.verdict.reason;
+  }
+  return undefined;
+};
+
+/** "blocked", naming the ISP's filter whose block answer this computer gets. */
+const blockedPhrase = (r: CheckResult): string => {
+  const reason = reasonOf(r.system);
+  const same = trustedFilters(r).find(
+    (f) =>
+      f.outcome.kind === "answered" &&
+      f.outcome.verdict.reason === reason &&
+      f.filter.onlyAnswers !== undefined
+  );
+  if (same === undefined) {
+    return "blocked";
+  }
+  return `blocked (${same.filter.name})`;
+};
+
 const systemPhrase = (r: CheckResult): TextChunk => {
-  const o = r.system;
-  if (o.kind === "pending") {
-    return paint("asking…", { fg: theme.dim });
+  switch (systemState(r)) {
+    case "pending":
+      return paint("asking…", { fg: theme.dim });
+    case "blocked":
+      return paint(blockedPhrase(r), { fg: theme.block });
+    case "inspected":
+      return paint("inspected", { fg: theme.warn });
+    case "missing":
+      return paint("no address", { fg: theme.dim });
+    case "resolves":
+      return paint("resolves", { fg: theme.ok });
+    default:
+      // It failed, or the check was cancelled first.
+      return paint("no answer", { fg: theme.warn });
   }
-  if (unavailable(o)) {
-    return paint("no answer", { fg: theme.warn });
+};
+
+const addressesPhrase = (addresses: readonly string[]): string => {
+  if (addresses.length === 0) {
+    return "no addresses";
   }
-  if (o.verdict.blocked) {
-    const same = trustedFilters(r).find(
-      (f) =>
-        f.outcome.kind === "answered" &&
-        f.outcome.verdict.reason === o.verdict.reason &&
-        f.filter.onlyAnswers !== undefined
-    );
-    let text = "blocked";
-    if (same !== undefined) {
-      text = `blocked (${same.filter.name})`;
-    }
-    return paint(text, { fg: theme.block });
-  }
-  if (o.verdict.inspected) {
-    return paint("inspected", { fg: theme.warn });
-  }
-  if (o.verdict.missing) {
-    return paint("no address", { fg: theme.dim });
-  }
-  return paint("resolves", { fg: theme.ok });
+  return shortList(addresses, realAddressesShown);
 };
 
 const realAnswerPhrase = (r: CheckResult): TextChunk => {
-  const o = r.realAnswer;
-  if (unavailable(o)) {
-    return paint("unavailable", { fg: theme.warn });
+  switch (realAnswerState(r)) {
+    case "pending":
+      return paint("asking…", { fg: theme.dim });
+    case "missing":
+      return paint("doesn't exist", { fg: theme.dim });
+    case "resolves":
+      return paint(addressesPhrase(realAddresses(r)), { fg: theme.ok });
+    default:
+      // It failed, or the check was cancelled first.
+      return paint("unavailable", { fg: theme.warn });
   }
-  if (o.kind === "pending") {
-    return paint("asking…", { fg: theme.dim });
-  }
-  if (!o.exists) {
-    return paint("doesn't exist", { fg: theme.dim });
-  }
-  if (o.addresses.length === 0) {
-    return paint("no addresses", { fg: theme.ok });
-  }
-  return paint(shortList(o.addresses, realAddressesShown), { fg: theme.ok });
 };
 
 const counted = (n: number, of: number, color: string): TextChunk =>
@@ -112,7 +137,7 @@ const verdictBadge = (status: Status): TextChunk[] => {
     case "cant-tell":
       return [
         badge("COULDN'T TELL", theme.warn),
-        paint("  the real answer is unavailable"),
+        paint(`  ${statusPhrases.cantTell}`),
       ];
     case "inspected":
       return inspectedBadge(status);
@@ -124,7 +149,7 @@ const verdictBadge = (status: Status): TextChunk[] => {
     case "local-only":
       return [
         badge("ONLY HERE", theme.dim),
-        paint("  only resolves on this computer (private or split DNS)"),
+        paint(`  ${statusPhrases.localOnly}`),
       ];
     case "missing":
       return [
@@ -132,7 +157,10 @@ const verdictBadge = (status: Status): TextChunk[] => {
         paint("  the real answer says so"),
       ];
     case "no-answer":
-      return [badge("NO ANSWER", theme.warn), paint("  no filter answered")];
+      return [
+        badge("NO ANSWER", theme.warn),
+        paint(`  ${statusPhrases.noAnswer}`),
+      ];
     default:
       return [
         badge("NOT BLOCKED", theme.ok),
@@ -200,34 +228,13 @@ const checkingSummary = (
 };
 
 /** A cancelled check has no verdict, only what answered before. */
-const cancelledSummary = (r: CheckResult): StyledText => {
-  const { answered, blocked, total } = statusOf(r);
-  return lines([
+const cancelledSummary = (r: CheckResult): StyledText =>
+  lines([
     [
       badge("CANCELLED", theme.warn),
-      paint(
-        `  ${answered} of ${total} filters answered first, ${blocked} of them blocking`
-      ),
+      paint(`  ${statusPhrases.cancelled(statusOf(r))}`),
     ],
   ]);
-};
-
-const connectionStatus = (s: State): TextChunk => {
-  const c = s.network?.connection;
-  if (c === undefined) {
-    return paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim });
-  }
-  if (seemsIntercepted(s.network)) {
-    return paint("? DNS intercepted", { fg: theme.warn });
-  }
-  if (c.filter !== undefined) {
-    return paint(`✕ ${c.filter}`, { fg: theme.block });
-  }
-  if (c.error !== undefined) {
-    return paint("? unknown", { fg: theme.warn });
-  }
-  return paint("· no filter detected", { fg: theme.dim });
-};
 
 /**
  * The line under the input: the verdict, or progress while checking. On a
@@ -242,14 +249,10 @@ export const summaryText = (s: State, wide: boolean): StyledText => {
     return cancelledSummary(s.result);
   }
   if (s.result === undefined) {
-    return lines([
-      [
-        paint(
-          "Type a domain, URL or IP address and press enter to see which DNS filters block it.",
-          { fg: theme.dim }
-        ),
-      ],
-    ]);
+    return oneLine(
+      "Type a domain, URL or IP address and press enter to see which DNS filters block it.",
+      { fg: theme.dim }
+    );
   }
   return resultSummary(s.result, wide);
 };
@@ -257,22 +260,14 @@ export const summaryText = (s: State, wide: boolean): StyledText => {
 /** The hint at the right end of the input. */
 export const inputHint = (s: State): StyledText => {
   if (s.checking) {
-    return lines([[paint("esc cancel", { fg: theme.dim })]]);
+    return oneLine("esc cancel", { fg: theme.dim });
   }
   if (s.result?.checked !== true || s.elapsedMs === undefined) {
-    return lines([[paint("enter check", { fg: theme.dim })]]);
+    return oneLine("enter check", { fg: theme.dim });
   }
   const seconds = (s.elapsedMs / msPerSecond).toFixed(1);
   const { total } = progress(s.result);
-  return lines([
-    [
-      paint(`A + AAAA · checked ${total} resolvers in ${seconds} s`, {
-        fg: theme.dim,
-      }),
-    ],
-  ]);
+  return oneLine(`A + AAAA · checked ${total} resolvers in ${seconds} s`, {
+    fg: theme.dim,
+  });
 };
-
-/** The box at the top right: which filter this computer's DNS uses. */
-export const connectionBadge = (s: State): StyledText =>
-  lines([[paint("your connection  ", { fg: theme.dim }), connectionStatus(s)]]);

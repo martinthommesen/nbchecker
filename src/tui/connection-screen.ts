@@ -7,7 +7,7 @@ import {
   filtersText,
   howText,
   safeZoneText,
-} from "./connection-view.ts";
+} from "./connection-text.ts";
 import type { State } from "./state.ts";
 import { theme } from "./theme.ts";
 import {

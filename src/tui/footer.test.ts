@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { footerText } from "./footer.ts";
+import { plainText } from "./paint.ts";
 import { initialState, type State } from "./state.ts";
 
 const browsing = { ...initialState("1.0.0"), focus: "table" as const };
@@ -9,10 +10,7 @@ const tight = 118;
 const roomy = 168;
 
 const plainLines = (s: State, width: number): string[] =>
-  footerText(s, width)
-    .chunks.map((c) => c.text)
-    .join("")
-    .split("\n");
+  plainText(footerText(s, width)).split("\n");
 
 test("the footer wraps between keys, not inside them", () => {
   const lines = plainLines(browsing, narrow);

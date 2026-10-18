@@ -1,66 +1,52 @@
 /** Explains in a sentence or two why a row says what it says. */
-import type { Reason, Verdict } from "../check/classify.ts";
-import {
-  isRedirected,
-  shouldAnswer,
-  trustedFilters,
-} from "../check/evidence.ts";
+import type { Verdict } from "../check/classify.ts";
+import { trustedFilters } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
+  type FilterResult,
   nameExists,
-  type Outcome,
   realAddresses,
   realAnswerKnown,
   realAnswerPending,
   realAnswerUnavailable,
 } from "../check/result.ts";
-
-/** Why an answer is blocked, or for the inspection proxy, why it isn't. */
-const reasonWhy: Record<Reason, (name: string, detail: string) => string> = {
-  adguard: () =>
-    "The answer points to AdGuard's block page, 94.140.14.35, which AdGuard Family gives for sites it blocks.",
-  ede: (name, detail) =>
-    `${name} says outright that it blocked the domain, using an Extended DNS Error (${detail}).`,
-  kripos: () =>
-    "The domain is on the police's child sexual abuse block list, so it points to Kripos' stop page at kid.telenor.net.",
-  legal: () =>
-    "Telenor blocks this domain for all its customers on legal grounds, such as a court order, by pointing it to dns-block.telenor.net.",
-  nettvern: () =>
-    "Nettvern answers blocked domains with a CNAME to nettvern-info.telenor.net, which shows Telenor's warning page.",
-  "nettvern+": () =>
-    "Nettvern+ blocks everything Nettvern does, plus more categories. Its block answer points to nettvernpluss-info.telenor.net.",
-  "no-address": () =>
-    "This computer's resolver finds no address for the domain, while the real answer has an IPv4 address, which every computer can use. So something on the way blocks it.",
-  "null-ip": (name) =>
-    `${name} answers 0.0.0.0 or :: for domains it blocks, so nothing loads.`,
-  nxdomain: (name) =>
-    `${name} says the domain does not exist, while the real answer says it does, so it is blocking it.`,
-  umbrella: (_, detail) =>
-    `The answer points to a Cisco Umbrella block page (${detail}).`,
-  "umbrella-proxy": () =>
-    "The answer points to Cisco's inspection proxy, so the site is sent through it rather than blocked by DNS. The proxy checks the pages as they load and may still block some URLs.",
-};
+import { reasonWhy } from "./reasons.ts";
+import { filterState } from "./resolver-state.ts";
 
 const waitingForRealAnswer = "Waiting for the real answer to compare it with.";
 
-const missingWhy = (r: CheckResult): string => {
+/** Whose answer the reasons on the "Your DNS" row are about. */
+const systemName = "This computer's DNS";
+
+/** What to say of a comparison with the real answer, wherever it stands. */
+interface Compared {
+  readonly known: string;
+  readonly pending: string;
+  readonly unavailable: string;
+}
+
+const compared = (r: CheckResult, said: Compared): string => {
   if (realAnswerPending(r)) {
-    return `It says the domain doesn't exist. ${waitingForRealAnswer}`;
+    return said.pending;
   }
   if (realAnswerUnavailable(r)) {
-    return "It says the domain doesn't exist. The real answer couldn't be fetched, so nbchecker can't tell whether that is a block.";
+    return said.unavailable;
   }
-  return "It says the domain doesn't exist, and the real answer agrees, so this is not a block.";
+  return said.known;
 };
 
-const resolvesWhy = (name: string, v: Verdict, r: CheckResult): string => {
-  if (realAnswerPending(r)) {
-    return `${name} resolves the domain. ${waitingForRealAnswer}`;
-  }
-  if (realAnswerUnavailable(r)) {
-    return `${name} resolves the domain. The real answer couldn't be fetched, so nbchecker can't compare the addresses.`;
-  }
+const missingWhy = (r: CheckResult): string =>
+  compared(r, {
+    known:
+      "It says the domain doesn't exist, and the real answer agrees, so this is not a block.",
+    pending: `It says the domain doesn't exist. ${waitingForRealAnswer}`,
+    unavailable:
+      "It says the domain doesn't exist. The real answer couldn't be fetched, so nbchecker can't tell whether that is a block.",
+  });
+
+/** Whether addresses that aren't a block answer agree with the real answer. */
+const sameWhy = (name: string, v: Verdict, r: CheckResult): string => {
   const real = realAddresses(r);
   if (v.answers.some((a) => real.includes(a))) {
     return `Same as the real answer, so ${name} does not block this domain.`;
@@ -68,9 +54,16 @@ const resolvesWhy = (name: string, v: Verdict, r: CheckResult): string => {
   return `${name} gives a different address from the real answer, but not a known block answer. Sites on content delivery networks often answer differently per resolver.`;
 };
 
+const resolvesWhy = (name: string, v: Verdict, r: CheckResult): string =>
+  compared(r, {
+    known: sameWhy(name, v, r),
+    pending: `${name} resolves the domain. ${waitingForRealAnswer}`,
+    unavailable: `${name} resolves the domain. The real answer couldn't be fetched, so nbchecker can't compare the addresses.`,
+  });
+
 const verdictWhy = (name: string, v: Verdict, r: CheckResult): string => {
   if (v.reason !== undefined) {
-    return reasonWhy[v.reason](name, v.detail);
+    return reasonWhy(v.reason, name, v.detail);
   }
   if (v.missing) {
     return missingWhy(r);
@@ -86,27 +79,33 @@ const redirectedWhy = (f: Filter): string => {
   return `nbchecker asked ${f.name} for its test name ${f.canary.name} and didn't get the answer ${f.name} gives for it. So its answers don't look like they come from ${f.name}: DNS may be redirected on this network, to a resolver of its own. They don't count, and the check is incomplete.`;
 };
 
-/** Why a filter's row reads as it does. */
-const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
+/**
+ * Why a filter's row reads as it does. Its state says whether it is
+ * redirected or needn't answer here, so the explanation agrees with the row.
+ */
+const filterWhy = (r: CheckResult, f: FilterResult): string => {
+  const { filter, outcome: o } = f;
+  const { name, onlyAnswers } = filter;
+  const state = filterState(r, f);
+  if (state === "redirected") {
+    return redirectedWhy(filter);
+  }
+  if (state === "optional" && onlyAnswers !== undefined) {
+    return `${name} only answers ${onlyAnswers.customers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
+  }
   if (o.kind === "pending") {
     return "Waiting for an answer.";
-  }
-  if (o.kind === "answered" && isRedirected(r, f)) {
-    return redirectedWhy(f);
   }
   if (o.kind === "cancelled") {
     return "The check was cancelled before it answered.";
   }
-  if (o.kind === "failed" && f.onlyAnswers !== undefined) {
-    if (!shouldAnswer(r, f)) {
-      return `${f.name} only answers ${f.onlyAnswers.customers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
-    }
-    return `None of its servers answered, though ${f.name} should answer this computer, so the check is incomplete: ${o.error}`;
+  if (o.kind === "failed" && onlyAnswers !== undefined) {
+    return `None of its servers answered, though ${name} should answer this computer, so the check is incomplete: ${o.error}`;
   }
   if (o.kind === "failed") {
     return `None of its servers answered: ${o.error}`;
   }
-  return verdictWhy(f.name, o.verdict, r);
+  return verdictWhy(name, o.verdict, r);
 };
 
 const systemBlockWhy = (v: Verdict, r: CheckResult): string => {
@@ -120,20 +119,18 @@ const systemBlockWhy = (v: Verdict, r: CheckResult): string => {
   if (v.reason === undefined) {
     return "";
   }
-  return reasonWhy[v.reason]("This computer's DNS", v.detail);
+  return reasonWhy(v.reason, systemName, v.detail);
 };
 
 /** Why this computer finding no address is not a block. */
 const noAddressWhy = (r: CheckResult): string => {
   const same =
     "This computer's resolver found no address for the domain. It says the same for a domain that doesn't exist, one without addresses, and one with only IPv6 addresses on a computer without IPv6,";
-  if (realAnswerPending(r)) {
-    return `${same} so it is compared with the real answer. ${waitingForRealAnswer}`;
-  }
-  if (realAnswerUnavailable(r)) {
-    return `${same} and the real answer couldn't be fetched, so nbchecker can't tell whether this is a block.`;
-  }
-  return `${same} and the real answer has no IPv4 address, so this is not a block.`;
+  return compared(r, {
+    known: `${same} and the real answer has no IPv4 address, so this is not a block.`,
+    pending: `${same} so it is compared with the real answer. ${waitingForRealAnswer}`,
+    unavailable: `${same} and the real answer couldn't be fetched, so nbchecker can't tell whether this is a block.`,
+  });
 };
 
 /** Why this computer resolving the domain is not a block. */
@@ -145,9 +142,10 @@ const resolvesHereWhy = (r: CheckResult): string => {
 };
 
 /** Why the "Your DNS" row reads as it does. */
-const systemWhy = (o: Outcome, r: CheckResult): string => {
+const systemWhy = (r: CheckResult): string => {
   const browsers =
     " A browser with secure DNS turned on asks its own server, so it may differ.";
+  const o = r.system;
   if (o.kind === "pending") {
     return "Waiting for this computer's resolver.";
   }
@@ -161,7 +159,7 @@ const systemWhy = (o: Outcome, r: CheckResult): string => {
     return `${systemBlockWhy(o.verdict, r)}${browsers}`;
   }
   if (o.verdict.inspected) {
-    return `${reasonWhy["umbrella-proxy"]("This computer's DNS", "")}${browsers}`;
+    return `${reasonWhy("umbrella-proxy", systemName, "")}${browsers}`;
   }
   if (o.verdict.missing) {
     return noAddressWhy(r);

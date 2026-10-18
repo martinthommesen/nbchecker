@@ -4,7 +4,6 @@ import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 import {
   classify,
   classifySystem,
-  describe as describeVerdict,
   merge,
   type Reason,
   type Reference,
@@ -188,15 +187,6 @@ test("merge keeps the block and removes duplicate answers", () => {
   expect(merged.answers).toEqual(["192.0.2.1", "nettvern-info.telenor.net"]);
 });
 
-test("describe", () => {
-  const absent = classify(answer([], { rcode: Rcode.nxDomain }), missing);
-  expect(describeVerdict(absent)).toBe("not found (the domain doesn't exist)");
-  const umbrella = classify(answer([a("x.example", "146.112.61.108")]), exists);
-  expect(describeVerdict(umbrella)).toBe(
-    "blocked by Cisco Umbrella (phishing)"
-  );
-});
-
 describe("classify: compared with the real answer", () => {
   const zero: Reference = { addresses: ["0.0.0.0"], exists: true };
 
@@ -233,9 +223,6 @@ describe("classify: Cisco's inspection proxy", () => {
       inspected: true,
       reason: "umbrella-proxy",
     });
-    expect(describeVerdict(v)).toBe(
-      "sent through Cisco's inspection proxy; the site may still be blocked by URL"
-    );
   });
 
   test("a block in the other answer wins", () => {

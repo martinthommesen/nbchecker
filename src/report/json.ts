@@ -1,16 +1,24 @@
-/** The --json output. */
+/** The JSON document: the --json output, and what the screen exports. */
 import type { Verdict } from "../check/classify.ts";
-import { isBlocked, isRedirected } from "../check/evidence.ts";
+import { dnsFilterOf } from "../check/connection.ts";
+import {
+  isBlocked,
+  isRedirected,
+  redirectedFilters,
+} from "../check/evidence.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   type Completion,
+  type Network,
   nameExists,
   type Outcome,
   type RealAnswer,
   realAddresses,
 } from "../check/result.ts";
 import { type StatusKind, statusOf } from "./status.ts";
+
+const jsonIndent = 2;
 
 /** What JSON says for a lookup cut short by a cancelled check. */
 const cancelledError = "cancelled";
@@ -133,15 +141,39 @@ const resultJson = (r: CheckResult): JsonResult => ({
   thisComputer: thisComputerJson(r),
 });
 
+/** What the document says about the run, before its results. */
+export interface JsonMeta {
+  readonly dnsFilter: string;
+  /**
+   * The filters that failed the self-test; left out when the self-test
+   * didn't run.
+   */
+  readonly intercepted?: readonly string[] | undefined;
+  readonly version: string;
+}
+
 /**
- * The whole document. `intercepted` lists the filters that failed the
- * self-test; it is left out when the self-test didn't run.
+ * The meta for a run on `network`, which is undefined while the network
+ * hasn't been detected: `dnsFilter` then says `fallback`.
  */
-export const toJson = (
-  meta: {
-    readonly dnsFilter: string;
-    readonly intercepted?: readonly string[] | undefined;
-    readonly version: string;
-  },
+export const jsonMeta = (
+  network: Network | undefined,
+  fallback: string,
+  version: string
+): JsonMeta => ({
+  dnsFilter: dnsFilterOf(network?.connection, fallback),
+  intercepted: network && redirectedFilters(network),
+  version,
+});
+
+/** The whole document. */
+export const toJson = (meta: JsonMeta, results: readonly CheckResult[]) => ({
+  ...meta,
+  results: results.map(resultJson),
+});
+
+/** The whole document as text, without a newline at the end. */
+export const jsonText = (
+  meta: JsonMeta,
   results: readonly CheckResult[]
-) => ({ ...meta, results: results.map(resultJson) });
+): string => JSON.stringify(toJson(meta, results), null, jsonIndent);

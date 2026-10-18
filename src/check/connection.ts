@@ -95,3 +95,17 @@ export const connectionText = (c: Connection): string => {
   }
   return "none detected";
 };
+
+/**
+ * The filter on this computer, or `fallback` while the network hasn't been
+ * detected, which each output words its own way.
+ */
+export const dnsFilterOf = (
+  c: Connection | undefined,
+  fallback: string
+): string => {
+  if (c === undefined) {
+    return fallback;
+  }
+  return connectionText(c);
+};

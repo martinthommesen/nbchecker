@@ -23,11 +23,11 @@ import {
   rewritingTransport,
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
-import { systemWhy } from "../tui/why.ts";
 import { toJson } from "./json.ts";
 import { statusOf } from "./status.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
+import { systemWhy } from "./why.ts";
 
 const text = (r: CheckResult): string => renderText(view(r), false);
 
@@ -201,9 +201,7 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
       "redirected",
       "passed",
     ]);
-    expect(systemWhy(r.system, r)).toContain(
-      "same block answer as Family filter"
-    );
+    expect(systemWhy(r)).toContain("same block answer as Family filter");
   });
 });
 

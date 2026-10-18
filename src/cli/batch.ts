@@ -5,44 +5,20 @@
 import { Effect, Stdio, Stream } from "effect";
 import { check } from "../check/checker.ts";
 import { connectionText } from "../check/connection.ts";
-import { redirectedFilters } from "../check/evidence.ts";
 import { detectNetwork } from "../check/network.ts";
 import type { CheckResult, Network } from "../check/result.ts";
-import { toJson } from "../report/json.ts";
-import { renderText } from "../report/text.ts";
+import { jsonMeta, jsonText } from "../report/json.ts";
+import { dnsFilterLine, renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
 import { version } from "../version.ts";
 import { ExitStatus, exitCode, exitNotBlocked } from "./exit-status.ts";
 import { print } from "./output.ts";
 
-const jsonIndent = 2;
-
-/** What `dnsFilter` says when no target could be checked. */
-const notChecked = "not checked";
-
-/** The line above the text results that says which DNS filter is in use. */
-const dnsFilterLine = (n: Network) =>
-  `DNS filter on this computer: ${connectionText(n.connection)}\n`;
-
 /**
- * The --json document. `network` is undefined when no target could be
- * checked, so the network was never found out.
+ * What `dnsFilter` says when no target could be checked, so the network was
+ * never found out.
  */
-const jsonDocument = (
-  results: readonly CheckResult[],
-  network: Network | undefined
-) => {
-  let dnsFilter = notChecked;
-  if (network !== undefined) {
-    dnsFilter = connectionText(network.connection);
-  }
-  const meta = {
-    dnsFilter,
-    intercepted: network && redirectedFilters(network),
-    version,
-  };
-  return JSON.stringify(toJson(meta, results), null, jsonIndent);
-};
+const notChecked = "not checked";
 
 /**
  * Prints one result as text, below the DNS filter line for `header`, the
@@ -55,7 +31,7 @@ const printText = (
 ) =>
   Effect.gen(function* () {
     if (header !== undefined) {
-      yield* print(dnsFilterLine(header));
+      yield* print(`${dnsFilterLine(connectionText(header.connection))}\n`);
     }
     yield* print(renderText(view(result), color));
   });
@@ -107,7 +83,7 @@ export const checkTargets = <E, R>(
       })
     );
     if (json) {
-      yield* print(jsonDocument(results, detected));
+      yield* print(jsonText(jsonMeta(detected, notChecked, version), results));
     }
     const code = exitCode(results);
     if (code !== exitNotBlocked) {

@@ -61,22 +61,6 @@ const addAddress = (v: Draft, raw: string, real: ReadonlySet<string>): void => {
   }
 };
 
-const reasonText: Record<Reason, string> = {
-  adguard: "blocked: points to AdGuard's block page",
-  ede: "blocked with an Extended DNS Error",
-  kripos: "blocked by the Kripos child-abuse filter",
-  legal: "blocked by Telenor on legal grounds, for every Telenor customer",
-  nettvern: "blocked by Nettvern",
-  "nettvern+": "blocked by Nettvern+",
-  "no-address":
-    "blocked: no address on this computer, though the domain has one",
-  "null-ip": "blocked: answers 0.0.0.0",
-  nxdomain: "blocked: says the domain doesn't exist",
-  umbrella: "blocked by Cisco Umbrella",
-  "umbrella-proxy":
-    "sent through Cisco's inspection proxy; the site may still be blocked by URL",
-};
-
 export type Reason =
   | "adguard" // AdGuard Family's block page
   | "ede" // Extended DNS Error: Blocked, Censored or Filtered
@@ -215,18 +199,3 @@ export const classifyAll = (
   answers: readonly DnsAnswer[],
   reference: Reference
 ): Verdict => merge(...answers.map((a) => classify(a, reference)));
-
-/** Says what a verdict means, in a phrase for people. */
-export const describe = (v: Verdict): string => {
-  if (v.reason === undefined) {
-    if (v.missing) {
-      return "not found (the domain doesn't exist)";
-    }
-    return "not blocked";
-  }
-  const text = reasonText[v.reason];
-  if (v.detail === "") {
-    return text;
-  }
-  return `${text} (${v.detail})`;
-};

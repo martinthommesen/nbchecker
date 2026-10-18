@@ -19,6 +19,7 @@ import {
 } from "../cli/exit-status.ts";
 import { fakeCanary } from "../testing/fake-network.ts";
 import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { plainText } from "../tui/paint.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
 import { toJson } from "./json.ts";
@@ -28,9 +29,7 @@ import { view } from "./view.ts";
 const text = (r: CheckResult): string => renderText(view(r), false);
 
 const screen = (r: CheckResult): string =>
-  summaryText({ ...initialState("0.0.0"), result: r }, true)
-    .chunks.map((c) => c.text)
-    .join("");
+  plainText(summaryText({ ...initialState("0.0.0"), result: r }, true));
 
 /** A filter with one server, which blocks the fake canary. */
 const fake = (category: Category, name: string, server: string): Filter => ({
@@ -183,6 +182,6 @@ describe("verdicts: text from the network", () => {
     expect(out).not.toContain("\n  ✓ Fake");
     const narrow = summaryText({ ...initialState("0.0.0"), result: r }, false);
     expect(narrow.chunks.filter((c) => c.text === "\n")).toHaveLength(1);
-    expect(narrow.chunks.map((c) => c.text).join("")).not.toContain("\n  ✓");
+    expect(plainText(narrow)).not.toContain("\n  ✓");
   });
 });

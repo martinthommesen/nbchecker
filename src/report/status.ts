@@ -133,6 +133,18 @@ export const statusOf = (r: CheckResult): Status => {
   return { ...counts, kind: kindOf(r, counts) };
 };
 
+/**
+ * Words the text output and the screen's summary share; the summary puts a
+ * badge of its own before them.
+ */
+export const statusPhrases = {
+  cancelled: (s: Status) =>
+    `${s.answered} of ${s.total} filters answered first, ${s.blocked} of them blocking`,
+  cantTell: "the real answer is unavailable",
+  localOnly: "only resolves on this computer (private or split DNS)",
+  noAnswer: "no filter answered",
+} as const;
+
 /** How a status reads in one line of text. */
 export const statusText = (s: Status): string => {
   switch (s.kind) {
@@ -141,9 +153,9 @@ export const statusText = (s: Status): string => {
     case "blocked-here":
       return "blocked by your own DNS, but by none of the filters";
     case "cancelled":
-      return `cancelled: ${s.answered} of ${s.total} filters answered first, ${s.blocked} of them blocking`;
+      return `cancelled: ${statusPhrases.cancelled(s)}`;
     case "cant-tell":
-      return "couldn't tell: the real answer is unavailable";
+      return `couldn't tell: ${statusPhrases.cantTell}`;
     case "error":
       return "could not check";
     case "inspected":
@@ -154,11 +166,11 @@ export const statusText = (s: Status): string => {
     case "intercepted":
       return `DNS on this network seems to be intercepted: ${s.redirected} of ${s.tested} filters failed the self-test, so these results can't be trusted`;
     case "local-only":
-      return "only resolves on this computer (private or split DNS)";
+      return statusPhrases.localOnly;
     case "missing":
       return "the domain doesn't exist";
     case "no-answer":
-      return "no filter answered";
+      return statusPhrases.noAnswer;
     case "not-blocked":
       return `not blocked by any of ${s.answered} filters`;
     default:
