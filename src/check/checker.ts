@@ -13,7 +13,7 @@ import type { Filter } from "./filters.ts";
 import { normalize } from "./normalize.ts";
 import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
-import { askFilter, askUnfiltered, type FilterAnswer } from "./remote.ts";
+import { askFilter, askUnfiltered, type ServerAnswer } from "./remote.ts";
 import {
   type CheckResult,
   completionOf,
@@ -41,9 +41,9 @@ interface Asked<A> {
 
 /** Everything that has answered so far. */
 interface Gathered {
-  readonly filters: readonly (Asked<FilterAnswer> | undefined)[];
+  readonly filters: readonly (Asked<ServerAnswer> | undefined)[];
   readonly network: Network | undefined;
-  readonly realAnswer: Asked<FilterAnswer & Reference> | undefined;
+  readonly realAnswer: Asked<ServerAnswer & Reference> | undefined;
   readonly system: Asked<SystemAnswer> | undefined;
 }
 
@@ -88,7 +88,7 @@ const assemble = (
     exists: a.exists,
   }));
   const reference = referenceOf(realAnswer);
-  const filterAnswered = (a: FilterAnswer, ms: number) => ({
+  const filterAnswered = (a: ServerAnswer, ms: number) => ({
     exchange: { answers: a.answers, ms, server: a.server },
     verdict: classifyAll(a.answers, reference),
   });
