@@ -77,7 +77,7 @@ const filterRow = (r: CheckResult, f: FilterResult): TableRow => {
     ...filterBase(f.filter),
     ...lookupFields(f.outcome),
     state,
-    why: filterWhy(f.filter, f.outcome, r),
+    why: filterWhy(r, f),
     word: words[state],
   };
 };
@@ -91,7 +91,7 @@ const systemRow = (r: CheckResult): TableRow => {
     transport: "system resolver",
     ...lookupFields(r.system),
     state,
-    why: systemWhy(r.system, r),
+    why: systemWhy(r),
     word: systemWords[state],
   };
 };

@@ -1,21 +1,18 @@
 /** Explains in a sentence or two why a row says what it says. */
 import type { Verdict } from "../check/classify.ts";
-import {
-  isRedirected,
-  shouldAnswer,
-  trustedFilters,
-} from "../check/evidence.ts";
+import { trustedFilters } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
+  type FilterResult,
   nameExists,
-  type Outcome,
   realAddresses,
   realAnswerKnown,
   realAnswerPending,
   realAnswerUnavailable,
 } from "../check/result.ts";
 import { reasonWhy } from "./reasons.ts";
+import { filterState } from "./resolver-state.ts";
 
 const waitingForRealAnswer = "Waiting for the real answer to compare it with.";
 
@@ -82,27 +79,33 @@ const redirectedWhy = (f: Filter): string => {
   return `nbchecker asked ${f.name} for its test name ${f.canary.name} and didn't get the answer ${f.name} gives for it. So its answers don't look like they come from ${f.name}: DNS may be redirected on this network, to a resolver of its own. They don't count, and the check is incomplete.`;
 };
 
-/** Why a filter's row reads as it does. */
-const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
+/**
+ * Why a filter's row reads as it does. Its state says whether it is
+ * redirected or needn't answer here, so the explanation agrees with the row.
+ */
+const filterWhy = (r: CheckResult, f: FilterResult): string => {
+  const { filter, outcome: o } = f;
+  const { name, onlyAnswers } = filter;
+  const state = filterState(r, f);
+  if (state === "redirected") {
+    return redirectedWhy(filter);
+  }
+  if (state === "optional" && onlyAnswers !== undefined) {
+    return `${name} only answers ${onlyAnswers.customers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
+  }
   if (o.kind === "pending") {
     return "Waiting for an answer.";
-  }
-  if (o.kind === "answered" && isRedirected(r, f)) {
-    return redirectedWhy(f);
   }
   if (o.kind === "cancelled") {
     return "The check was cancelled before it answered.";
   }
-  if (o.kind === "failed" && f.onlyAnswers !== undefined) {
-    if (!shouldAnswer(r, f)) {
-      return `${f.name} only answers ${f.onlyAnswers.customers}, so it can't be asked from this network. That is expected elsewhere and doesn't make the check incomplete.`;
-    }
-    return `None of its servers answered, though ${f.name} should answer this computer, so the check is incomplete: ${o.error}`;
+  if (o.kind === "failed" && onlyAnswers !== undefined) {
+    return `None of its servers answered, though ${name} should answer this computer, so the check is incomplete: ${o.error}`;
   }
   if (o.kind === "failed") {
     return `None of its servers answered: ${o.error}`;
   }
-  return verdictWhy(f.name, o.verdict, r);
+  return verdictWhy(name, o.verdict, r);
 };
 
 const systemBlockWhy = (v: Verdict, r: CheckResult): string => {
@@ -139,9 +142,10 @@ const resolvesHereWhy = (r: CheckResult): string => {
 };
 
 /** Why the "Your DNS" row reads as it does. */
-const systemWhy = (o: Outcome, r: CheckResult): string => {
+const systemWhy = (r: CheckResult): string => {
   const browsers =
     " A browser with secure DNS turned on asks its own server, so it may differ.";
+  const o = r.system;
   if (o.kind === "pending") {
     return "Waiting for this computer's resolver.";
   }

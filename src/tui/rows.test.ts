@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import type { Filter } from "../check/filters.ts";
 import { type CheckResult, cancelPending, pending } from "../check/result.ts";
+import {
+  computer,
+  computerWith,
+  fakeCanary,
+  fakeFilters,
+  publicTestPage,
+} from "../testing/fake-network.ts";
 import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
 import { flatRows, type TableRow, tableGroups } from "./rows.ts";
 
@@ -88,5 +96,34 @@ describe("tableGroups after a cancel", () => {
     const after = cancelPending(waiting);
     expect(row(after, "Your DNS")).toMatchObject(cancelled);
     expect(row(after, "Security filter")).toMatchObject(cancelled);
+  });
+});
+
+describe("tableGroups for a filter that only answers its own network", () => {
+  const ispFilter: Filter = {
+    canary: fakeCanary,
+    category: "security",
+    name: "ISP filter",
+    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
+    servers: ["203.0.113.1"],
+  };
+  const filters = [...fakeFilters, ispFilter];
+
+  test("not answering elsewhere is explained as expected", async () => {
+    const r = await runCheck("good.example", {
+      dns: computerWith(publicTestPage),
+      filters,
+    });
+    const isp = row(r, "ISP filter");
+    expect(isp).toMatchObject({ state: "optional", word: "no answer" });
+    expect(isp?.why).toContain("can't be asked from this network");
+  });
+
+  test("not answering on its own network is explained as incomplete", async () => {
+    // This computer's DNS goes through Nettvern+, so it is on Telenor's network.
+    const r = await runCheck("good.example", { dns: computer, filters });
+    const isp = row(r, "ISP filter");
+    expect(isp).toMatchObject({ state: "failed", word: "no answer" });
+    expect(isp?.why).toContain("should answer this computer");
   });
 });

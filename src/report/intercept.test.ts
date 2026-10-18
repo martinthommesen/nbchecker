@@ -201,9 +201,7 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
       "redirected",
       "passed",
     ]);
-    expect(systemWhy(r.system, r)).toContain(
-      "same block answer as Family filter"
-    );
+    expect(systemWhy(r)).toContain("same block answer as Family filter");
   });
 });
 
