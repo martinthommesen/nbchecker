@@ -97,14 +97,20 @@ export interface CheckResult {
    */
   readonly network: Network | undefined;
   readonly notes: readonly string[];
-  /** The unfiltered answer every other answer is read against. */
+  /**
+   * The unfiltered answer every other answer is read against; pending when
+   * not checked.
+   */
   readonly realAnswer: Outcome<RealAnswer>;
   /** What this computer's own DNS says; pending when not checked. */
   readonly system: Outcome;
   readonly target: string;
 }
 
-/** A lookup still on its way. */
+/**
+ * A lookup still on its way, or one never asked because the target isn't
+ * checked.
+ */
 export const pending = { kind: "pending" } as const;
 
 /** Whether a lookup is over, whichever way it went. */
@@ -116,7 +122,10 @@ export const unavailable = <A>(
 ): o is Extract<Outcome<A>, { readonly kind: "cancelled" | "failed" }> =>
   o.kind === "failed" || o.kind === "cancelled";
 
-/** Whether the real answer is still on its way. */
+/**
+ * Whether the real answer is still on its way; false for a target that was
+ * never checked, whose lookups stay pending.
+ */
 export const realAnswerPending = (r: CheckResult): boolean =>
   r.checked && r.realAnswer.kind === "pending";
 
