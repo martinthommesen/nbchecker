@@ -29,7 +29,8 @@ const answerState = (v: Verdict): ResolverState => {
  * - cancelled: the check was cancelled before it answered
  * - failed: it didn't answer
  * - inspected: sent through Cisco's inspection proxy rather than blocked
- * - missing: says the name doesn't exist
+ * - missing: says the name doesn't exist, or for this computer, that it
+ *   found no address
  * - optional: a filter that needn't answer here didn't, such as an ISP's
  *   filter off its network
  * - pending: still being asked
