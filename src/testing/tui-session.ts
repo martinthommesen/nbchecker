@@ -37,9 +37,7 @@ interface TuiSession {
   readonly check: (target?: string) => Promise<void>;
   /** What was last copied to the clipboard. */
   readonly copied: () => string | undefined;
-  /** Resolves when the app has stopped by itself, such as after quitting. */
-  readonly ended: Promise<void>;
-  /** Whether the app stops by itself within `ms`. */
+  /** Whether the app stops by itself, as after quitting, within `ms`. */
   readonly endsWithin: (ms: number) => Promise<boolean>;
   readonly frame: () => Promise<string>;
   readonly input: TestRendererSetup["mockInput"];
@@ -107,7 +105,6 @@ const startTui = async ({
       input.pressEnter();
     },
     copied,
-    ended,
     endsWithin: (ms) =>
       Promise.race([ended.then(() => true), sleep(ms).then(() => false)]),
     frame,

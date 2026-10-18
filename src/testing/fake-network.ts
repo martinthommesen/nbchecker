@@ -184,8 +184,8 @@ export const untestedSecurityFilter: Filter = {
 
 /**
  * A filter that, like Telenor's, only answers on Telenor's network. Its
- * server is down, as Telenor's are to everyone else, and its canary is
- * Telenor's test page with Nettvern's answer.
+ * server never answers, as Telenor's don't off that network, and its canary
+ * is Telenor's test page with Nettvern's answer.
  */
 export const ispFilter: Filter = {
   canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
