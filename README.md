@@ -150,6 +150,11 @@ provider itself gives as a test are used, so an honest filter doesn't fail.
 That is an A and an AAAA query to each of a filter's four servers: up to 40
 small queries per run.
 
+The self-test catches a resolver that doesn't block the test name the way the
+filter does. Plain DNS can't prove where an answer came from, so a resolver
+that happens to block the same name with the same answer, such as `0.0.0.0`,
+would still pass.
+
 - **passed**: the filter's answers count as usual.
 - **no test name**: the provider documents no test name, such as Quad9 and
   AdGuard, so the filter isn't self-tested. Its answers count as usual,
