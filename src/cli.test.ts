@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
-import { argv, sleep, spawn } from "bun";
+import { argv, file, sleep, spawn, spawnSync } from "bun";
 import { Console, Effect, Exit, Layer, Stdio, Stream } from "effect";
 import { cli } from "./cli.ts";
-import { ExitStatus, exitUsage } from "./exit-status.ts";
+import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
 import { exitIncomplete } from "./report/json.ts";
 import { computer, fakeTransport } from "./testing/fake-network.ts";
 
@@ -40,6 +40,9 @@ const runPiped = async (args: readonly string[], stdin: Blob) => {
   await proc.exited;
   return { code: Number(err.trim().split("\n").at(-1)), out };
 };
+
+/** Linux's always-full device; macOS has none. */
+const hasDevFull = spawnSync(["test", "-c", "/dev/full"]).exitCode === 0;
 
 /** Lines that aren't targets, so they're rejected before any DNS query. */
 const invalidTargets = (count: number) =>
@@ -92,6 +95,35 @@ describe("output into a pipe", () => {
     await proc.stdin.end();
     expect(out).toContain("not a name! is not a domain");
     expect(await proc.exited).toBe(exitIncomplete);
+  });
+});
+
+describe("output that can't be written", () => {
+  test.skipIf(!hasDevFull)(
+    "a full disk exits with 74 and says why",
+    async () => {
+      const proc = spawn([bun, fakeCli], {
+        stderr: "pipe",
+        stdin: invalidTargets(1),
+        stdout: file("/dev/full"),
+      });
+      const err = await new Response(proc.stderr).text();
+      expect(await proc.exited).toBe(exitOutput);
+      expect(err).toContain("couldn't write the results");
+    }
+  );
+
+  test("a reader that stops early isn't an output error", async () => {
+    const script = '{ "$0" "$@"; echo "$?" >&2; } | head -c 1 > /dev/null';
+    const proc = spawn(["sh", "-c", script, bun, fakeCli], {
+      stderr: "pipe",
+      stdin: invalidTargets(textTargets),
+      stdout: "pipe",
+    });
+    const err = await new Response(proc.stderr).text();
+    await proc.exited;
+    expect(err).not.toContain("couldn't write the results");
+    expect(Number(err.trim().split("\n").at(-1))).toBe(exitIncomplete);
   });
 });
 

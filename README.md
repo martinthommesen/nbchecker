@@ -92,6 +92,7 @@ When it checks targets from arguments or standard input, the exit status is:
 | 1 | Something is blocked, even if some filters didn't answer |
 | 2 | Incomplete: nothing is known to be blocked, but a check couldn't tell, for example because a filter, your own DNS or the real answer could not be reached |
 | 64 | Usage error, such as a mistyped flag |
+| 74 | The results couldn't be written, for example because the disk is full |
 
 A filter that only answers some networks, such as Telenor's, doesn't make a
 check incomplete when you are elsewhere. The interactive app always exits

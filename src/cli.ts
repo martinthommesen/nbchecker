@@ -6,7 +6,7 @@ import { check } from "./check/checker.ts";
 import { connectionText, detectConnection } from "./check/connection.ts";
 import { normalize } from "./check/normalize.ts";
 import type { CheckResult } from "./check/result.ts";
-import { ExitStatus, exitUsage } from "./exit-status.ts";
+import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
 import { exitCode, toJson } from "./report/json.ts";
 import { renderText } from "./report/text.ts";
 import { view } from "./report/view.ts";
@@ -17,19 +17,36 @@ const jsonIndent = 2;
 
 let out: FileSink | undefined;
 
+/** A reader that has gone away, such as `head`, isn't worth reporting. */
+const readerGone = (error: unknown) =>
+  error instanceof Error && "code" in error && error.code === "EPIPE";
+
 /**
  * Prints a line and waits until it has been written. The runtime exits
  * straight away on a nonzero status, and Console.log (or Bun.write) can
  * still be holding output for a slow reader at the other end of a pipe,
- * which then got a cut-off or garbled copy. A reader that has gone away
- * isn't an error worth reporting.
+ * which then got a cut-off or garbled copy. Any other write failure, such
+ * as a full disk, ends the run with its own status, so a script doesn't
+ * take missing results for a clean check.
  */
 const print = (text: string) =>
-  Effect.tryPromise(async () => {
-    out ??= stdout.writer();
-    out.write(`${text}\n`);
-    await out.flush();
-  }).pipe(Effect.ignore);
+  Effect.tryPromise({
+    catch: (error) => error,
+    try: async () => {
+      out ??= stdout.writer();
+      out.write(`${text}\n`);
+      await out.flush();
+    },
+  }).pipe(
+    Effect.catch((error) => {
+      if (readerGone(error)) {
+        return Effect.void;
+      }
+      return Console.error(
+        `nbchecker: couldn't write the results: ${error}`
+      ).pipe(Effect.andThen(Effect.fail(new ExitStatus({ code: exitOutput }))));
+    })
+  );
 
 /** Targets from standard input, one per line, for scripts and pipes. */
 const stdinTargets = Stream.unwrap(
@@ -136,7 +153,7 @@ export const command = Command.make(
   handler
 ).pipe(
   Command.withDescription(
-    "Checks whether DNS filters, such as Telenor Nettvern, Cloudflare and Quad9, block a domain or IP address. Exit status: 0 not blocked, 1 blocked (even if some filters didn't answer), 2 incomplete (it couldn't tell), 64 usage error."
+    "Checks whether DNS filters, such as Telenor Nettvern, Cloudflare and Quad9, block a domain or IP address. Exit status: 0 not blocked, 1 blocked (even if some filters didn't answer), 2 incomplete (it couldn't tell), 64 usage error, 74 the results couldn't be written."
   )
 );
 
