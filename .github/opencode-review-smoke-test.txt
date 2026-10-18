@@ -1,0 +1,2 @@
+Temporary OpenCode review validation fixture.
+No application behavior changes. This PR will be closed without merging.
