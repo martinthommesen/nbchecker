@@ -34,9 +34,11 @@ jobs:
             echo "::error::The tag $GITHUB_REF_NAME points to a commit that isn't on main."
             exit 1
           fi
-          result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=CI%20result" \
-            --jq '[.check_runs[] | select(.conclusion == "success")] | length')
-          if [ "$result" = "0" ]; then
+          # The newest CI result run decides, so a later failed or running
+          # rerun isn't hidden by an older success.
+          result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=CI%20result&filter=all&per_page=100" \
+            --jq '.check_runs | sort_by(.started_at) | last | .conclusion // "none"')
+          if [ "$result" != "success" ]; then
             echo "::error::CI hasn't passed on $GITHUB_SHA. Wait for the CI result check on main, then tag again."
             exit 1
           fi
