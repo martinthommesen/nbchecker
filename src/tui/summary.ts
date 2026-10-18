@@ -198,9 +198,6 @@ const connectionStatus = (s: State): TextChunk => {
   if (c.filter !== undefined) {
     return paint(`✕ ${c.filter}`, { fg: theme.block });
   }
-  if (c.network !== undefined) {
-    return paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok });
-  }
   if (c.error !== undefined) {
     return paint("? unknown", { fg: theme.warn });
   }

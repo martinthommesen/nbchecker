@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { Connection } from "../check/connection.ts";
-import { howText } from "./connection-view.ts";
+import { Effect } from "effect";
+import { Dns } from "effect/net";
+import {
+  type Connection,
+  detectConnection,
+  testPage,
+} from "../check/connection.ts";
+import { detectedText, howText } from "./connection-view.ts";
 
 const failed: Connection = {
   error: "timed out",
@@ -24,4 +30,19 @@ describe("howText", () => {
     const text = plain({ ...failed, error: undefined });
     expect(text).toContain("· nettvern.telenor.net");
   });
+});
+
+test("the test page's public answer is not shown as Telenor's DNS", async () => {
+  const c = await detectConnection.pipe(
+    Effect.provide(
+      Dns.layerStatic({ hosts: { [testPage]: ["148.123.15.37"] } })
+    ),
+    Effect.runPromise
+  );
+  const text = detectedText(c, 0)
+    .chunks.map((ch) => ch.text)
+    .join("");
+  expect(text).toContain("No filter detected");
+  expect(text).not.toContain("Telenor's DNS");
+  expect(plain(c)).toContain("public answer");
 });

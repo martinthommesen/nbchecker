@@ -17,9 +17,11 @@ test("reads which filter Telenor's test page answers for", async () => {
   expect(await detect({ [testPage]: ["148.123.15.38"] })).toBe(
     "Telenor Nettvern"
   );
-  expect(await detect({ [testPage]: ["148.123.15.37"] })).toBe(
-    "none (Telenor DNS without a filter)"
-  );
+});
+
+test("the public answer to the test page doesn't mean Telenor's DNS", async () => {
+  // Every unfiltered resolver, Google's and Cloudflare's too, gets this one.
+  expect(await detect({ [testPage]: ["148.123.15.37"] })).toBe("none detected");
 });
 
 test("reports no filter when the test page answers anything else", async () => {

@@ -23,7 +23,6 @@ const groupTitles = {
 const mark = {
   cantSee: { color: theme.warn, glyph: "?", text: "can't see" },
   detected: { color: theme.block, glyph: "✕", text: "detected" },
-  noFilter: { color: theme.ok, glyph: "✓", text: "no filter" },
   noTest: { color: theme.faint, glyph: "·", text: "no test page" },
   notSeen: { color: theme.dim, glyph: "·", text: "not seen" },
 } as const;
@@ -39,14 +38,6 @@ const detectedLines = (c: Connection): TextChunk[][] => {
       [paint(`✕ ${c.filter}`, { bold: true, fg: theme.block })],
       prose(
         `Lookups from this computer get ${short}'s answers. Sites ${short} blocks show Telenor's warning page instead.`
-      ),
-    ];
-  }
-  if (c.network !== undefined) {
-    return [
-      [paint(`✓ ${c.network} DNS, no filter`, { bold: true, fg: theme.ok })],
-      prose(
-        "This computer uses Telenor's DNS with no filter turned on. Telenor still blocks some domains for every customer on legal grounds."
       ),
     ];
   }
@@ -111,9 +102,6 @@ const detectedText = (c: Connection | undefined, tick: number): StyledText => {
 const testMark = (c: Connection): Mark => {
   if (c.filter !== undefined) {
     return mark.detected;
-  }
-  if (c.network !== undefined) {
-    return mark.noFilter;
   }
   if (c.error !== undefined) {
     return mark.cantSee;
