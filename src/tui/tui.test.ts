@@ -1,12 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { sleep } from "bun";
-import { Dns } from "effect/net";
+import { describe, expect, test } from "bun:test";
 import {
   blockedName,
+  designComputerWith,
   redirectedDesignTransport,
   slowDesignTransport,
 } from "../testing/design-network.ts";
-import { startTui, type TuiSession } from "../testing/tui-session.ts";
+import { useTui } from "../testing/tui-session.ts";
 
 /** The narrowest terminal the README promises to fit. */
 const narrowWidth = 80;
@@ -19,30 +18,9 @@ const cloudflareRedirected =
   /Cloudflare Family\s+no test page\s+\? redirected\?/u;
 
 /** On Telenor's network with Nettvern, but its DNS doesn't block the name. */
-const unblockedComputer = Dns.layerStatic({
-  hosts: {
-    [blockedName]: ["203.0.113.42"],
-    "nettvern.telenor.net": ["148.123.15.38"],
-  },
-});
+const unblockedComputer = designComputerWith("203.0.113.42");
 
-let current: TuiSession | undefined;
-
-const start = async (options?: Parameters<typeof startTui>[0]) => {
-  current = await startTui(options);
-  return current;
-};
-
-const checkBlocked = async (s: TuiSession) => {
-  await s.input.typeText(blockedName);
-  s.input.pressEnter();
-  return await s.until("BLOCKED");
-};
-
-afterEach(async () => {
-  await current?.stop();
-  current = undefined;
-});
+const start = useTui();
 
 describe("tui", () => {
   test("lists the filters by category before anything is checked", async () => {
@@ -55,7 +33,8 @@ describe("tui", () => {
 
   test("checks a domain and shows each resolver's verdict", async () => {
     const s = await start();
-    const screen = await checkBlocked(s);
+    await s.check();
+    const screen = await s.until("BLOCKED");
     expect(screen).toContain("by 8 of 9 filters");
     expect(screen).toContain("CNAME nettvern-info.telenor.net");
     expect(screen).toContain("NXDOMAIN · EDE 15");
@@ -64,7 +43,8 @@ describe("tui", () => {
 
   test("the details pane follows the selection", async () => {
     const s = await start();
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressArrow("down");
     const screen = await s.until("cloudflare-dns.com");
     expect(screen).toContain("HTTPS 443");
@@ -72,8 +52,7 @@ describe("tui", () => {
 
   test("a cancelled check shows no verdict", async () => {
     const s = await start({ transport: slowDesignTransport });
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
+    await s.check();
     await s.until("answered");
     s.input.pressEscape();
     const screen = await s.until("CANCELLED");
@@ -83,7 +62,8 @@ describe("tui", () => {
 
   test("shows the connection screen and goes back", async () => {
     const s = await start();
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressKey("c");
     const screen = await s.until("Filters we look for");
     expect(screen).toContain("can't see");
@@ -95,7 +75,8 @@ describe("tui", () => {
 describe("tui while typing a target", () => {
   test("leaving a new check shows the checked domain again", async () => {
     const s = await start();
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressKey("/");
     await s.until("a domain, URL or IP address");
     s.input.pressEscape();
@@ -105,11 +86,11 @@ describe("tui while typing a target", () => {
 
   test("the / that starts a new check isn't typed into it", async () => {
     const s = await start();
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressKey("/");
     await s.until("a domain, URL or IP address");
-    await s.input.typeText("example.com");
-    s.input.pressEnter();
+    await s.check("example.com");
     const screen = await s.until("A + AAAA example.com");
     expect(screen).not.toContain("/example.com");
     expect(screen).toContain("› example.com");
@@ -119,13 +100,8 @@ describe("tui while typing a target", () => {
     const s = await start();
     await s.until("Quad9");
     s.input.pressEscape();
-    const ended = await Promise.race([
-      s.ended.then(() => true),
-      sleep(settleMs).then(() => false),
-    ]);
-    expect(ended).toBe(false);
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
+    expect(await s.endsWithin(settleMs)).toBe(false);
+    await s.check();
     await s.until("BLOCKED");
   });
 });
@@ -133,7 +109,8 @@ describe("tui while typing a target", () => {
 describe("tui: the self-test", () => {
   test("the connection screen lists each filter's self-test", async () => {
     const s = await start();
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressKey("c");
     const screen = await s.until("✓ passed");
     expect(screen).toMatch(cloudflarePassed);
@@ -147,8 +124,7 @@ describe("tui: the self-test", () => {
       computer: unblockedComputer,
       transport: redirectedDesignTransport,
     });
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
+    await s.check();
     const screen = await s.until("INTERCEPTED?");
     expect(screen).toContain("results can't be trusted");
     expect(screen).toContain("? DNS intercepted");
@@ -161,8 +137,7 @@ describe("tui: the self-test", () => {
 
   test("this computer's block stays the headline", async () => {
     const s = await start({ transport: redirectedDesignTransport });
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
+    await s.check();
     const screen = await s.until("by your DNS, but by none of the filters");
     expect(screen).toContain("? DNS intercepted");
     expect(screen).toContain("untrusted");
@@ -173,10 +148,10 @@ describe("tui: copying", () => {
   test("a result that couldn't be checked still names the detected filter", async () => {
     const s = await start();
     // A first check waits for the network to be detected.
-    await checkBlocked(s);
+    await s.check();
+    await s.until("BLOCKED");
     s.input.pressKey("/");
-    await s.input.typeText("not a name!");
-    s.input.pressEnter();
+    await s.check("not a name!");
     await s.until("not a name!");
     s.input.pressKey("y");
     expect(s.copied()).toStartWith(
@@ -191,8 +166,7 @@ describe("tui on a narrow terminal", () => {
       transport: slowDesignTransport,
       width: narrowWidth,
     });
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
+    await s.check();
     const screen = await s.until("answered");
     const line = screen.split("\n").find((l) => l.includes("answered"));
     expect(line).toContain("Checking");

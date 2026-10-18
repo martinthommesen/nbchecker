@@ -111,11 +111,18 @@ export const redirectedDesignTransport = Layer.succeed(DnsTransport, {
   doh: (_url, _name, type) => realAnswer(type),
 });
 
-export const designComputer = Dns.layerStatic({
-  hosts: {
-    [domain]: ["0.0.0.0"],
-    "nettvern.telenor.net": ["148.123.15.38"],
-  },
-});
+/**
+ * This computer on the design network: on Telenor's network, behind
+ * Nettvern, with its DNS answering `blockedAnswer` for the blocked name.
+ */
+export const designComputerWith = (blockedAnswer: string) =>
+  Dns.layerStatic({
+    hosts: {
+      [domain]: [blockedAnswer],
+      "nettvern.telenor.net": ["148.123.15.38"],
+    },
+  });
+
+export const designComputer = designComputerWith("0.0.0.0");
 
 export const blockedName = domain;
