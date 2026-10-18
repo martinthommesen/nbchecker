@@ -13,7 +13,10 @@ interface TestPageAnswer {
 }
 
 interface TestPage {
-  /** In the order the connection screen lists them. */
+  /**
+   * In the order the connection screen lists them. Its filter list also puts
+   * Telenor SafeZone, which has no answer here, after the first one's filter.
+   */
   readonly answers: readonly TestPageAnswer[];
   readonly name: string;
   /** The network its filters serve, as connection detection names it. */

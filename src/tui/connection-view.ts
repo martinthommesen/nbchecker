@@ -27,6 +27,12 @@ const mark = {
   notSeen: { color: theme.dim, glyph: "·", text: "not seen" },
 } as const;
 
+/**
+ * SafeZone has no server to ask, so it is only listed here, after the first
+ * of Telenor's filters on its test page.
+ */
+const safeZoneFollows = telenorTestPage.answers[0]?.filter;
+
 const selfTestNote =
   "Self-test: each filter is asked for a name it documents as blocked. One that doesn't block it is marked redirected?: its answers seem to come from another resolver, so they don't count.";
 
@@ -203,9 +209,7 @@ const filtersText = (
     out.push([paint(groupTitles[category], { fg: theme.faint })]);
     for (const f of items.filter((x) => x.category === category)) {
       out.push([...filterRow(f.name, markOf(c, f)), selfTestChunk(n, f)]);
-      // SafeZone has no server to ask, so it is only listed here, after the
-      // first of Telenor's filters.
-      if (f.name === telenorTestPage.answers[0]?.filter) {
+      if (f.name === safeZoneFollows) {
         out.push(filterRow("Telenor SafeZone", mark.cantSee));
       }
     }
