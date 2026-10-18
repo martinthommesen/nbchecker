@@ -68,6 +68,17 @@ describe("Reader.name", () => {
     expect(nameError([...labels(...parts), 0])).toBe("name is too long");
   });
 
+  test("counts the labels a pointer leads to towards the 255 bytes", () => {
+    const label = "a".repeat(longestLabel);
+    // Three labels (192 bytes) and their end, then one more label and a
+    // pointer back to them: 64 + 192 + 1 bytes once expanded.
+    const target = [...labels(label, label, label), 0];
+    const prefixed = [...labels(label), ...pointer(0)];
+    expect(nameError([...target, ...prefixed], target.length)).toBe(
+      "name is too long"
+    );
+  });
+
   test("fails on a label longer than 63 bytes", () => {
     expect(nameError([...labels("a".repeat(tooLongLabel)), 0])).toBe(
       "bad label length"
