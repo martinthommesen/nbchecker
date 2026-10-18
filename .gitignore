@@ -1,0 +1,28 @@
+# Binaries
+/nettvern-check
+/nettvern-check.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build and release output
+/bin/
+/dist/
+
+# Test output
+*.test
+*.out
+coverage.*
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Environment and editor files
+.env
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,82 @@
+name: Wrong result
+description: The checker said something is blocked when it isn't, or the other way around.
+title: "Wrong result: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Wrong results are the most useful reports this project gets.
+        Please don't include anything you consider private, such as your home IP address.
+  - type: input
+    id: target
+    attributes:
+      label: Domain or IP checked
+      placeholder: example.com
+    validations:
+      required: true
+  - type: dropdown
+    id: filter
+    attributes:
+      label: Which Telenor filter is turned on?
+      options:
+        - Nettvern
+        - Nettvern+
+        - SafeZone
+        - None
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: What went wrong?
+      options:
+        - Reported as blocked, but it is not blocked
+        - Reported as not blocked, but it is blocked
+        - Reported the wrong filter
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Telenor fixed broadband
+        - Telenor mobile
+        - Other provider
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Program output
+      description: Paste the full output, ideally run with any verbose or debug option.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and how you know
+      description: For example, what you saw when opening the site in a browser.
+  - type: input
+    id: version
+    attributes:
+      label: nettvern-check version
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
