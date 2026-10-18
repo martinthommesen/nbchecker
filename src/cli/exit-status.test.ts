@@ -1,38 +1,23 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
-import { Dns } from "effect/net";
-import type { Filter } from "../check/filters.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
 import {
   computer,
   computerWith,
-  fakeCanary,
+  downRealAnswerUrl,
+  failingComputer,
+  fakeFilter,
   fakeFilters,
+  ispFilter,
   publicTestPage,
 } from "../testing/fake-network.ts";
-import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { runCheck } from "../testing/run-check.ts";
 import {
   exitBlocked,
   exitCode,
   exitIncomplete,
   exitNotBlocked,
 } from "./exit-status.ts";
-
-const ispFilter: Filter = {
-  canary: fakeCanary,
-  category: "security",
-  name: "ISP filter",
-  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
-  servers: ["203.0.113.1"],
-};
-
-const failing = Dns.make({
-  lookup: (hostname) =>
-    Effect.fail(
-      new Dns.DnsError({ hostname, method: "lookup", reason: "ServerFailure" })
-    ),
-});
 
 describe("exit status", () => {
   test("a clean check exits 0", async () => {
@@ -46,7 +31,7 @@ describe("exit status", () => {
     expect(noRealAnswer.completion).toBe("incomplete");
     expect(exitCode([noRealAnswer])).toBe(exitIncomplete);
     const noSystem = await runCheck("good.example", {
-      dns: Layer.succeed(Dns.Dns, failing),
+      dns: failingComputer,
     });
     expect(noSystem.system.kind).toBe("failed");
     expect(exitCode([noSystem])).toBe(exitIncomplete);
@@ -58,15 +43,7 @@ describe("exit status", () => {
 
   test("a definite block wins over a filter that didn't answer", async () => {
     const r = await runCheck("bad.example", {
-      filters: [
-        ...fakeFilters,
-        {
-          canary: fakeCanary,
-          category: "ads",
-          name: "Down",
-          servers: ["203.0.113.1"],
-        },
-      ],
+      filters: [...fakeFilters, fakeFilter("ads", "Down", "203.0.113.1")],
     });
     expect(r.completion).toBe("incomplete");
     expect(exitCode([r])).toBe(exitBlocked);

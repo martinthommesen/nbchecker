@@ -6,9 +6,11 @@ import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer, QueryType } from "../dns/wire.ts";
+import { nettvernTestPage, testPageName } from "./fake-network.ts";
 import { a, answer, cname, noRecords } from "./records.ts";
 
 const domain = "bad.example";
+/** The blocked name's address, as the unfiltered resolver answers it. */
 const realAddress = "203.0.113.42";
 
 /** An answer for `domain` with just this address. */
@@ -111,11 +113,20 @@ export const redirectedDesignTransport = Layer.succeed(DnsTransport, {
   doh: (_url, _name, type) => realAnswer(type),
 });
 
-export const designComputer = Dns.layerStatic({
-  hosts: {
-    [domain]: ["0.0.0.0"],
-    "nettvern.telenor.net": ["148.123.15.38"],
-  },
-});
+/**
+ * This computer on the design network: on Telenor's network, behind
+ * Nettvern, with its DNS answering `address` for the blocked name.
+ */
+export const designComputerWith = (address: string) =>
+  Dns.layerStatic({
+    hosts: {
+      [domain]: [address],
+      [testPageName]: [nettvernTestPage],
+    },
+  });
+
+export const designComputer = designComputerWith("0.0.0.0");
 
 export const blockedName = domain;
+
+export { realAddress };

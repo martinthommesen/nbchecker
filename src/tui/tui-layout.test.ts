@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import { blockedName } from "../testing/design-network.ts";
-import { startTui, type TuiSession } from "../testing/tui-session.ts";
+import { answer } from "../testing/records.ts";
+import { type TuiSession, useTui } from "../testing/tui-session.ts";
 
 const tiny = { height: 12, width: 40 };
 const small = { height: 24, width: 80 };
@@ -23,12 +23,8 @@ const addresses = new Map([
   ["AAAA", [longAddress]],
 ]);
 
-const answerOf = (name: string, type: QueryType): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records: (addresses.get(type) ?? []).map((value) => ({ name, type, value })),
-  truncated: false,
-});
+const answerOf = (name: string, type: QueryType): DnsAnswer =>
+  answer((addresses.get(type) ?? []).map((value) => ({ name, type, value })));
 
 /** Every resolver answers with many addresses, so the details are long. */
 const longAnswers = Layer.succeed(DnsTransport, {
@@ -42,23 +38,10 @@ const longAnswers = Layer.succeed(DnsTransport, {
  */
 const checked = "checked 12 resolvers";
 
-let current: TuiSession | undefined;
+/** The quit key, as the footer shows it once a check has started. */
+const quitKey = "q  quit";
 
-const start = async (options?: Parameters<typeof startTui>[0]) => {
-  current = await startTui(options);
-  return current;
-};
-
-afterEach(async () => {
-  await current?.stop();
-  current = undefined;
-});
-
-const check = async (s: TuiSession, done = "q  quit") => {
-  await s.input.typeText(blockedName);
-  s.input.pressEnter();
-  return await s.until(done);
-};
+const start = useTui();
 
 /** What a terminal sends for the page up and page down keys. */
 const pageKeys = { down: "\u001b[6~", up: "\u001b[5~" } as const;
@@ -79,7 +62,7 @@ const detailsOf = (screen: string): string => {
 describe("tui messages and keys", () => {
   test("the saved message shows on a 120 by 40 terminal", async () => {
     const s = await start({ transport: longAnswers });
-    await check(s, checked);
+    await s.check({ target: blockedName, until: checked });
     s.input.pressArrow("down");
     s.input.pressKey("e");
     await s.until(`saved nbchecker-${blockedName}.json`);
@@ -88,13 +71,13 @@ describe("tui messages and keys", () => {
   test("the keys stay visible on a 40 by 12 terminal", async () => {
     const s = await start(tiny);
     await s.until("ctrl+c");
-    await check(s);
+    await s.check({ until: quitKey });
   });
 
   test("the keys stay visible on an 80 by 24 terminal", async () => {
     const s = await start(small);
     await s.until("ctrl+c");
-    const screen = await check(s);
+    const screen = await s.check({ until: quitKey });
     // The table's column titles aren't drawn over by its rows.
     expect(screen).toContain("resolver");
   });
@@ -103,7 +86,7 @@ describe("tui messages and keys", () => {
 describe("tui scrolling", () => {
   test("help scrolls to its last line on an 80 by 24 terminal", async () => {
     const s = await start(small);
-    await check(s);
+    await s.check({ until: quitKey });
     s.input.pressKey("?");
     const screen = await s.until("scroll");
     expect(screen).not.toContain("Press esc or ? to go back.");
@@ -113,7 +96,7 @@ describe("tui scrolling", () => {
 
   test("the connection screen scrolls on an 80 by 24 terminal", async () => {
     const s = await start(small);
-    await check(s);
+    await s.check({ until: quitKey });
     s.input.pressKey("c");
     const screen = await s.until("scroll");
     expect(screen).not.toContain("computer is blocked.");
@@ -127,7 +110,7 @@ describe("tui scrolling", () => {
 
   test("long answers wrap in the details pane", async () => {
     const s = await start({ height: 60, transport: longAnswers });
-    await check(s, checked);
+    await s.check({ until: checked });
     s.input.pressArrow("down");
     const screen = await s.until("192.0.2.12");
     expect(detailsOf(screen)).toContain(`AAAA${longAddress}`);

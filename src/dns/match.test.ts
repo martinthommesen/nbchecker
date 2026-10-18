@@ -1,17 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { Effect } from "effect";
-import { replyTo, response } from "../testing/response.ts";
+import { query, queryId, replyTo, response } from "../testing/response.ts";
 import { Rcode } from "./codes.ts";
 import { mismatch } from "./match.ts";
-import { encodeQuery } from "./wire.ts";
 
-const queryId = 4242;
 const flagsByte = 2;
 /** The opcode bits in the first flags byte; 0x10 is opcode 2 (STATUS). */
 const opcodeStatus = 0x10;
 const notMatching = "bad answer: question doesn't match";
-
-const query = Effect.runSync(encodeQuery(queryId, "example.com", "AAAA"));
 
 /** A copy of `bytes` with the first flags byte changed. */
 const withFlags = (bytes: Uint8Array, change: (b: number) => number) => {
@@ -55,7 +50,7 @@ describe("mismatch", () => {
   test("rejects another name or type", () => {
     const otherName = replyTo(query, { question: "bad.example" });
     expect(mismatch(query, otherName)).toBe(notMatching);
-    const otherType = replyTo(query, { questionType: "A" });
+    const otherType = replyTo(query, { questionType: "AAAA" });
     expect(mismatch(query, otherType)).toBe(notMatching);
   });
 

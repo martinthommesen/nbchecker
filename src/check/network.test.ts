@@ -1,25 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import {
   blockingRedirectTransport,
   computer,
   fakeFilters,
+  fakeOptions,
   fakeTransport,
+  familyFilter,
+  nettvernPlusTestPage,
+  nettvernTestPage,
   redirectingTransport,
+  securityFilter,
+  testPageName,
+  untestedSecurityFilter,
 } from "../testing/fake-network.ts";
+import { a, aaaa, answer } from "../testing/records.ts";
 import { redirectedFilters, seemsIntercepted } from "./evidence.ts";
 import type { Filter } from "./filters.ts";
 import { detectNetwork } from "./network.ts";
 import { CheckerOptions } from "./options.ts";
 
-const testPage = "nettvern.telenor.net";
-
-/** A Telenor filter whose server, 192.0.2.53, gives Nettvern's answer. */
-const telenor = (answer: string, servers = ["192.0.2.53"]): Filter => ({
-  canary: { answers: [answer], name: testPage },
+/**
+ * A Telenor filter that expects `ip` for Telenor's test page. Its server,
+ * 192.0.2.53 by default, gives Nettvern's answer.
+ */
+const telenor = (ip: string, servers = ["192.0.2.53"]): Filter => ({
+  canary: { answers: [ip], name: testPageName },
   category: "security",
   name: "Telenor filter",
   onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
@@ -31,32 +38,21 @@ const detect = (
   filters: readonly Filter[] = fakeFilters
 ) =>
   detectNetwork.pipe(
-    Effect.provideService(CheckerOptions, { filters, unfilteredResolvers: [] }),
+    Effect.provideService(CheckerOptions, { ...fakeOptions, filters }),
     Effect.provide(transport),
     Effect.provide(computer),
     Effect.runPromise
   );
 
-const dnsAnswer = (
-  name: string,
-  type: QueryType,
-  value: string
-): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records: [{ name, type, value }],
-  truncated: false,
-});
-
 /** Every filter blocks the canary over IPv4, but IPv6 queries go elsewhere. */
 const redirectedIpv6 = Layer.succeed(DnsTransport, {
   ask: (_server, name, type) => {
     if (type === "A") {
-      return Effect.succeed(dnsAnswer(name, type, "0.0.0.0"));
+      return Effect.succeed(answer([a(name, "0.0.0.0")]));
     }
-    return Effect.succeed(dnsAnswer(name, type, "2001:db8::5"));
+    return Effect.succeed(answer([aaaa(name, "2001:db8::5")]));
   },
-  doh: (_url, name, type) => Effect.succeed(dnsAnswer(name, type, "192.0.2.5")),
+  doh: (_url, name) => Effect.succeed(answer([a(name, "192.0.2.5")])),
 });
 
 const results = async (...args: Parameters<typeof detect>) =>
@@ -97,15 +93,14 @@ describe("self-test", () => {
   });
 
   test("a canary with no answer is unknown, not failed", async () => {
-    const [security, family] = fakeFilters;
     const quiet = [
       // Its server refuses this name.
       {
-        ...security,
+        ...securityFilter,
         canary: { answers: ["0.0.0.0"], name: "refused.example" },
       },
-      { ...family, servers: ["203.0.113.1"] },
-    ] as Filter[];
+      { ...familyFilter, servers: ["203.0.113.1"] },
+    ];
     const n = await detect(fakeTransport, quiet);
     expect(n.selfTests.map((t) => t.result)).toEqual([
       "no-answer",
@@ -115,33 +110,31 @@ describe("self-test", () => {
   });
 
   test("Telenor's filters must answer their own test page address", async () => {
-    expect(await results(fakeTransport, [telenor("148.123.15.38")])).toEqual([
-      "passed",
-    ]);
+    const nettvern = telenor(nettvernTestPage);
+    expect(await results(fakeTransport, [nettvern])).toEqual(["passed"]);
     // Nettvern's answer where Nettvern+'s was expected.
-    expect(await results(fakeTransport, [telenor("148.123.15.1")])).toEqual([
+    const nettvernPlus = telenor(nettvernPlusTestPage);
+    expect(await results(fakeTransport, [nettvernPlus])).toEqual([
       "redirected",
     ]);
     // The public answer, as a redirecting network gives it.
-    expect(
-      await results(redirectingTransport(), [telenor("148.123.15.38")])
-    ).toEqual(["redirected"]);
+    expect(await results(redirectingTransport(), [nettvern])).toEqual([
+      "redirected",
+    ]);
   });
 
   test("Telenor's filters not answering off its network is no answer", async () => {
-    const off = telenor("148.123.15.38", ["203.0.113.1"]);
+    const off = telenor(nettvernTestPage, ["203.0.113.1"]);
     expect(await results(fakeTransport, [off])).toEqual(["no-answer"]);
   });
 });
 
 describe("self-test without a test name", () => {
   test("a filter with no documented test name isn't self-tested", async () => {
-    const [security, family] = fakeFilters;
-    const { canary: _, ...untested } = security as Filter;
     const n = await detect(redirectingTransport(), [
-      untested,
-      family,
-    ] as Filter[]);
+      untestedSecurityFilter,
+      familyFilter,
+    ]);
     expect(n.selfTests.map((t) => t.result)).toEqual([
       "untested",
       "redirected",
@@ -150,27 +143,24 @@ describe("self-test without a test name", () => {
   });
 
   test("one redirected filter, when the others can't tell, isn't an intercepted network", async () => {
-    const [security, family] = fakeFilters;
-    const { canary: _, ...untested } = security as Filter;
     const n = await detect(redirectingTransport(), [
-      untested,
-      family,
-    ] as Filter[]);
+      untestedSecurityFilter,
+      familyFilter,
+    ]);
     expect(redirectedFilters(n)).toEqual(["Family filter"]);
     expect(seemsIntercepted(n)).toBe(false);
   });
 
   test("a block that isn't the filter's own doesn't pass", async () => {
-    const [security, family] = fakeFilters;
     // The resolver the network uses answers 0.0.0.0, like the family filter;
     // the security filter's own block is a CNAME to its warning page.
     const ownBlocks = [
       {
-        ...security,
+        ...securityFilter,
         canary: { answers: ["148.123.15.44"], name: "canary.example" },
       },
-      family,
-    ] as Filter[];
+      familyFilter,
+    ];
     expect(await results(blockingRedirectTransport, ownBlocks)).toEqual([
       "redirected",
       "passed",

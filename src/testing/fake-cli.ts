@@ -14,11 +14,10 @@ import { cli } from "../cli/command.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import {
   computer,
-  fakeFilters,
+  fakeOptions,
   fakeTransport,
   redirectingTransport,
 } from "./fake-network.ts";
-import { realAnswerUrl } from "./run-check.ts";
 
 const { NBCHECKER_FAKE_NETWORK: network, NBCHECKER_FAKE_QUERIES: logQueries } =
   env;
@@ -66,10 +65,7 @@ const recordedComputer = Layer.effect(
 ).pipe(Layer.provide(computer));
 
 cli.pipe(
-  Effect.provideService(CheckerOptions, {
-    filters: fakeFilters,
-    unfilteredResolvers: [realAnswerUrl],
-  }),
+  Effect.provideService(CheckerOptions, fakeOptions),
   Effect.provide(
     Layer.mergeAll(BunServices.layer, recordedTransport, recordedComputer)
   ),

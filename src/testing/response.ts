@@ -1,4 +1,5 @@
-/** Builds DNS response messages for tests. */
+/** Builds DNS response messages for tests, and the query they answer. */
+import { Effect } from "effect";
 import { NetAddress } from "effect/net";
 import { concat, uint16s } from "../dns/bytes.ts";
 import { Rcode } from "../dns/codes.ts";
@@ -17,6 +18,7 @@ import {
   type DnsRecord,
   type ExtendedError,
   encodeName,
+  encodeQuery,
   type QueryType,
   typeCode,
 } from "../dns/wire.ts";
@@ -112,9 +114,9 @@ export const response = (spec: ResponseSpec): Uint8Array => {
   ]);
 };
 
-/** Encodes a response to `query`, with its ID and question. */
-export const replyTo = (query: Uint8Array, spec: ResponseSpec = {}) => {
-  const r = new Reader(query);
+/** Encodes a response to the query `asked`, with its ID and question. */
+export const replyTo = (asked: Uint8Array, spec: ResponseSpec = {}) => {
+  const r = new Reader(asked);
   const { id } = r.header();
   const question = r.question();
   return response({
@@ -124,3 +126,9 @@ export const replyTo = (query: Uint8Array, spec: ResponseSpec = {}) => {
     ...spec,
   });
 };
+
+/** The ID of `query`. */
+export const queryId = 7;
+
+/** An A query for example.com, as nbchecker sends one. */
+export const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));

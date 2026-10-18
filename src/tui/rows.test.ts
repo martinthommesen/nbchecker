@@ -4,11 +4,12 @@ import { type CheckResult, cancelPending, pending } from "../check/result.ts";
 import {
   computer,
   computerWith,
+  downRealAnswerUrl,
   fakeCanary,
   fakeFilters,
   publicTestPage,
 } from "../testing/fake-network.ts";
-import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { runCheck } from "../testing/run-check.ts";
 import { flatRows, type TableRow, tableGroups } from "./rows.ts";
 
 const row = (r: CheckResult, name: string): TableRow | undefined =>

@@ -15,8 +15,9 @@ import {
   computer,
   fakeFilters,
   fakeTransport,
+  realAnswerUrl,
 } from "../testing/fake-network.ts";
-import { realAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { runCheck } from "../testing/run-check.ts";
 import { jsonMeta, jsonText, toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
