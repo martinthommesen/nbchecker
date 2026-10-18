@@ -32,6 +32,9 @@ describe("normalize", () => {
     ["https://192.0.2.1:8443/", "192.0.2.1"],
     ["https:good.example/path", "good.example"],
     ["HTTP:good.example", "good.example"],
+    ["https:/good.example/path", "good.example"],
+    ["https:\\good.example/path", "good.example"],
+    ["http:///good.example", "good.example"],
   ] as const)("checks the host a browser would open for %s", (input, host) => {
     expect(normalize(input).host).toBe(host);
   });
