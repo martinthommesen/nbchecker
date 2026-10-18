@@ -20,7 +20,11 @@ export interface Canary {
  * VPN or firewall often blocks one address family.
  */
 export interface Filter {
-  readonly canary: Canary;
+  /**
+   * Only a name the provider itself documents as a test, so an honest filter
+   * never fails: a filter without one isn't self-tested.
+   */
+  readonly canary?: Canary;
   readonly category: Category;
   readonly name: string;
   /**
@@ -73,7 +77,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "pornography.testcategory.com" },
+    canary: { name: "nudity.testcategory.com" },
     category: "family",
     name: "Cloudflare Family",
     servers: [
@@ -84,13 +88,12 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "isitblocked.org" },
     category: "security",
     name: "Quad9",
     servers: ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"],
   },
   {
-    canary: { name: "internetbadguys.com" },
+    canary: { name: "exampleadultsite.com" },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [
@@ -101,7 +104,6 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "doubleclick.net" },
     category: "family",
     name: "AdGuard Family",
     servers: [
@@ -112,7 +114,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "internetbadguys.com" },
+    canary: { name: "pornhub.com" },
     category: "family",
     name: "CleanBrowsing Family",
     servers: [
@@ -123,7 +125,6 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "doubleclick.net" },
     category: "ads",
     name: "AdGuard DNS",
     servers: [
@@ -134,7 +135,6 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "internetbadguys.com" },
     category: "security",
     name: "CleanBrowsing Security",
     servers: [

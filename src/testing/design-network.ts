@@ -54,7 +54,7 @@ const filterOf = new Map(
 
 /** Each filter blocks its own canary, as on a network that doesn't redirect. */
 const canaryAnswer = (f: Filter): DnsAnswer =>
-  answer([address(f.canary.answer ?? "0.0.0.0")]);
+  answer([address(f.canary?.answer ?? "0.0.0.0")]);
 
 const serverAnswer = (server: string, name: string) => {
   const f = filterOf.get(server);
@@ -62,7 +62,7 @@ const serverAnswer = (server: string, name: string) => {
     return;
   }
   const a = byFilter.get(f.name);
-  if (a !== "down" && name === f.canary.name) {
+  if (a !== "down" && name === f.canary?.name) {
     return canaryAnswer(f);
   }
   return a;

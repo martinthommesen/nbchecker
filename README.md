@@ -145,11 +145,14 @@ DNS query to their own resolver, whatever server it was sent to. Every filter
 then seems to give that resolver's answers. So once per run, and once per
 session in the interactive app, nbchecker asks each filter for a test name it
 documents as blocked, such as Cloudflare's `malware.testcategory.com` or
-Telenor's test page, and checks that the answer is its block. That is an A
-and an AAAA query to each of a filter's four servers: up to 80 small
-queries per run.
+Telenor's test page, and checks that the answer is its block. Only names the
+provider itself gives as a test are used, so an honest filter doesn't fail.
+That is an A and an AAAA query to each of a filter's four servers: up to 80
+small queries per run.
 
 - **passed**: the filter's answers count as usual.
+- **no test name**: the provider documents no test name, such as Quad9 and
+  AdGuard, so the filter isn't self-tested and its answers count as usual.
 - **no answer**: nothing can be told either way, so its answers count as
   usual. Telenor's filters don't answer outside Telenor's network.
 - **redirected?**: the answer wasn't the filter's block, so its answers seem

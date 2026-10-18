@@ -19,8 +19,16 @@ const canaryExists: Reference = { addresses: [], exists: true };
  * from the filter: the network sent the query to another resolver. No
  * answer says nothing either way, as for Telenor's filters elsewhere.
  */
-const selfTest = (filter: Filter) =>
-  askFilter(filter, filter.canary.name).pipe(
+const selfTest = (filter: Filter) => {
+  const { canary } = filter;
+  if (canary === undefined) {
+    return Effect.succeed<SelfTest>({
+      answers: [],
+      filter: filter.name,
+      result: "untested",
+    });
+  }
+  return askFilter(filter, canary.name).pipe(
     Effect.result,
     Effect.map((asked): SelfTest => {
       if (Result.isFailure(asked)) {
@@ -29,7 +37,7 @@ const selfTest = (filter: Filter) =>
       const verdict = merge(
         ...asked.success.answers.map((a) => classify(a, canaryExists))
       );
-      const expected = filter.canary.answer;
+      const expected = canary.answer;
       let passed = verdict.blocked;
       if (expected !== undefined) {
         passed = verdict.answers.includes(expected);
@@ -41,6 +49,7 @@ const selfTest = (filter: Filter) =>
       return { ...test, result: "redirected" };
     })
   );
+};
 
 /** Detects the connection and runs every filter's self-test at once. */
 export const detectNetwork = Effect.gen(function* () {

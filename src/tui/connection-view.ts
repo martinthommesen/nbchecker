@@ -168,6 +168,7 @@ const selfTestMarks: Record<SelfTestResult, Mark> = {
   "no-answer": { color: theme.faint, glyph: "·", text: "no answer" },
   passed: { color: theme.ok, glyph: "✓", text: "passed" },
   redirected: { color: theme.warn, glyph: "?", text: "redirected?" },
+  untested: { color: theme.faint, glyph: "·", text: "no test name" },
 };
 
 /** The self-test column: whether a filter's answers are its own. */

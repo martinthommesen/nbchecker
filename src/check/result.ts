@@ -41,9 +41,10 @@ export type Outcome =
 
 /**
  * How a filter answered the self-test, which asks it for a name it
- * documents as blocked: "redirected" when the answer isn't its block.
+ * documents as blocked: "redirected" when the answer isn't its block, and
+ * "untested" for a filter that documents no such name.
  */
-export type SelfTestResult = "no-answer" | "passed" | "redirected";
+export type SelfTestResult = "no-answer" | "passed" | "redirected" | "untested";
 
 export interface SelfTest {
   /** What it answered, for display. */

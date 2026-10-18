@@ -100,3 +100,19 @@ describe("self-test", () => {
     expect(await results(fakeTransport, [off])).toEqual(["no-answer"]);
   });
 });
+
+describe("self-test without a test name", () => {
+  test("a filter with no documented test name isn't self-tested", async () => {
+    const [security, family] = fakeFilters;
+    const { canary: _, ...untested } = security as Filter;
+    const n = await detect(redirectingTransport(), [
+      untested,
+      family,
+    ] as Filter[]);
+    expect(n.selfTests.map((t) => t.result)).toEqual([
+      "untested",
+      "redirected",
+    ]);
+    expect(redirectedFilters(n)).toEqual(["Family filter"]);
+  });
+});

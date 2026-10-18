@@ -20,7 +20,7 @@ const width = 120;
 const narrowWidth = 80;
 /** The blocked count, unbroken by wrapping. */
 const blockedSoFar = /blocked so far: \d/u;
-const adguardNoAnswer = /· AdGuard DNS\s+no test page\s+· no answer/u;
+const quad9Untested = /· Quad9\s+no test page\s+· no test name/u;
 const cloudflarePassed = /· Cloudflare Family\s+no test page\s+✓ passed/u;
 const cloudflareRedirected =
   /Cloudflare Family\s+no test page\s+\? redirected\?/u;
@@ -147,8 +147,8 @@ describe("tui: the self-test", () => {
     s.input.pressKey("c");
     const screen = await s.until("✓ passed");
     expect(screen).toMatch(cloudflarePassed);
-    // AdGuard DNS is down on the design network.
-    expect(screen).toMatch(adguardNoAnswer);
+    // Quad9 documents no test name, so it isn't self-tested.
+    expect(screen).toMatch(quad9Untested);
     expect(screen).not.toContain("? redirected?");
   });
 
