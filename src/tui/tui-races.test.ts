@@ -10,6 +10,7 @@ import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
 const slowMs = 500;
 const slowTransport = slowDesignTransportBy(`${slowMs} millis`);
+const endMs = 1000;
 const firstDetectionMs = 800;
 const laterDetectionMs = 10;
 
@@ -75,5 +76,17 @@ describe("tui with work in flight", () => {
     await s.until("get Nettvern+'s answers");
     await sleep(firstDetectionMs);
     expect(await s.frame()).toContain("get Nettvern+'s answers");
+  });
+
+  test("the app ends when its terminal goes away", async () => {
+    const s = await startTui();
+    current = s;
+    await s.until("Quad9");
+    s.renderer.destroy();
+    const ended = await Promise.race([
+      s.ended.then(() => true),
+      sleep(endMs).then(() => false),
+    ]);
+    expect(ended).toBe(true);
   });
 });

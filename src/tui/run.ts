@@ -76,6 +76,9 @@ const runTui = (version: string, first?: string) =>
       },
       store,
     });
+    // OpenTUI closes the renderer itself on SIGHUP and the other signals that
+    // end a terminal; quit with it rather than run on without a screen.
+    renderer.on("destroy", () => Deferred.doneUnsafe(quit, Effect.void));
     screen.input.on("enter", () => {
       const target = screen.input.value.trim();
       if (target !== "") {
