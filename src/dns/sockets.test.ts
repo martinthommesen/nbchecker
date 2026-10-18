@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { connect, listen, sleep } from "bun";
 import { Effect, Fiber } from "effect";
-import { replyTo } from "../testing/response.ts";
+import { query, queryId, replyTo } from "../testing/response.ts";
 import { frame, unframe } from "./bytes.ts";
 import { type OpenTcp, sendTcp } from "./sockets.ts";
-import { encodeQuery } from "./wire.ts";
 
-const queryId = 7;
 const waitMs = 500;
-const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
 
 /** A loopback DNS server over TCP that says if the client hung up. */
 const tcpServer = (reply: (query: Uint8Array) => Uint8Array) => {
