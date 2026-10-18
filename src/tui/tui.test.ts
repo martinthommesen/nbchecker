@@ -29,6 +29,8 @@ const pollMs = 10;
 const pollTries = 200;
 
 interface Session {
+  /** What was last copied to the clipboard. */
+  readonly copied: () => string | undefined;
   readonly frame: () => Promise<string>;
   readonly input: TestRendererSetup["mockInput"];
   readonly stop: () => Promise<void>;
@@ -43,6 +45,11 @@ const start = async (
   columns = width
 ): Promise<Session> => {
   const setup = await createTestRenderer({ height, width: columns });
+  let copied: string | undefined;
+  setup.renderer.copyToClipboardOSC52 = (text: string) => {
+    copied = text;
+    return true;
+  };
   const fiber = runTui("0.0.0").pipe(
     Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
     Effect.provide(
@@ -67,7 +74,13 @@ const start = async (
   };
   const stop = () =>
     Effect.runPromise(Fiber.interrupt(fiber)).then(() => undefined);
-  current = { frame, input: setup.mockInput, stop, until };
+  current = {
+    copied: () => copied,
+    frame,
+    input: setup.mockInput,
+    stop,
+    until,
+  };
   return current;
 };
 
@@ -176,5 +189,21 @@ describe("tui on a narrow terminal", () => {
     const line = screen.split("\n").find((l) => l.includes("answered"));
     expect(line).toContain("Checking");
     expect(screen).toMatch(blockedSoFar);
+  });
+});
+
+describe("tui: copying", () => {
+  test("a result that couldn't be checked still names the detected filter", async () => {
+    const s = await start();
+    // A first check waits for the network to be detected.
+    await checkBlocked(s);
+    s.input.pressKey("/");
+    await s.input.typeText("not a name!");
+    s.input.pressEnter();
+    await s.until("not a name!");
+    s.input.pressKey("y");
+    expect(s.copied()).toStartWith(
+      "DNS filter on this computer: Telenor Nettvern"
+    );
   });
 });

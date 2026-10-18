@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, type Layer } from "effect";
 import type { DnsTransport } from "../dns/transport.ts";
 import {
+  blockingRedirectTransport,
   computer,
   fakeFilters,
   fakeTransport,
@@ -16,7 +17,7 @@ const testPage = "nettvern.telenor.net";
 
 /** A Telenor filter whose server, 192.0.2.53, gives Nettvern's answer. */
 const telenor = (answer: string, servers = ["192.0.2.53"]): Filter => ({
-  canary: { answer, name: testPage },
+  canary: { answers: [answer], name: testPage },
   category: "security",
   name: "Telenor filter",
   network: "Telenor",
@@ -70,7 +71,10 @@ describe("self-test", () => {
     const [security, family] = fakeFilters;
     const quiet = [
       // Its server refuses this name.
-      { ...security, canary: { name: "refused.example" } },
+      {
+        ...security,
+        canary: { answers: ["0.0.0.0"], name: "refused.example" },
+      },
       { ...family, servers: ["203.0.113.1"] },
     ] as Filter[];
     const n = await detect(fakeTransport, quiet);
@@ -125,5 +129,22 @@ describe("self-test without a test name", () => {
     ] as Filter[]);
     expect(redirectedFilters(n)).toEqual(["Family filter"]);
     expect(seemsIntercepted(n)).toBe(false);
+  });
+
+  test("a block that isn't the filter's own doesn't pass", async () => {
+    const [security, family] = fakeFilters;
+    // The resolver the network uses answers 0.0.0.0, like the family filter;
+    // the security filter's own block is a CNAME to its warning page.
+    const ownBlocks = [
+      {
+        ...security,
+        canary: { answers: ["148.123.15.44"], name: "canary.example" },
+      },
+      family,
+    ] as Filter[];
+    expect(await results(blockingRedirectTransport, ownBlocks)).toEqual([
+      "redirected",
+      "passed",
+    ]);
   });
 });

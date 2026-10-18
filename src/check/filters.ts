@@ -1,6 +1,9 @@
 /** The filtering DNS services nbchecker asks. */
 
 /** What a filter blocks; results are grouped by this, not by provider. */
+/** Cloudflare's filters answer a blocked name with these. */
+const cloudflareBlock = ["0.0.0.0", "::"];
+
 export type Category = "ads" | "family" | "security";
 
 /**
@@ -9,8 +12,12 @@ export type Category = "ads" | "family" | "security";
  * every DNS query to their own resolver, whatever server it was sent to.
  */
 export interface Canary {
-  /** The address it must answer, for a test page; otherwise any block. */
-  readonly answer?: string;
+  /**
+   * The addresses its own block gives for the name, any one of which passes.
+   * Any other block doesn't: a resolver the network sends queries to may
+   * block the name too.
+   */
+  readonly answers: readonly string[];
   readonly name: string;
 }
 
@@ -40,7 +47,7 @@ export interface Filter {
 export const filters: readonly Filter[] = [
   {
     // Telenor's test page, which each of its filters answers differently.
-    canary: { answer: "148.123.15.38", name: "nettvern.telenor.net" },
+    canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
     category: "security",
     name: "Telenor Nettvern",
     network: "Telenor",
@@ -53,7 +60,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { answer: "148.123.15.1", name: "nettvern.telenor.net" },
+    canary: { answers: ["148.123.15.1"], name: "nettvern.telenor.net" },
     category: "family",
     name: "Telenor Nettvern+",
     network: "Telenor",
@@ -66,7 +73,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "malware.testcategory.com" },
+    canary: { answers: cloudflareBlock, name: "malware.testcategory.com" },
     category: "security",
     name: "Cloudflare Security",
     servers: [
@@ -77,7 +84,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "nudity.testcategory.com" },
+    canary: { answers: cloudflareBlock, name: "nudity.testcategory.com" },
     category: "family",
     name: "Cloudflare Family",
     servers: [
@@ -93,7 +100,8 @@ export const filters: readonly Filter[] = [
     servers: ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"],
   },
   {
-    canary: { name: "exampleadultsite.com" },
+    // Umbrella's block page for a content category.
+    canary: { answers: ["146.112.61.106"], name: "exampleadultsite.com" },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [
@@ -114,7 +122,6 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { name: "pornhub.com" },
     category: "family",
     name: "CleanBrowsing Family",
     servers: [

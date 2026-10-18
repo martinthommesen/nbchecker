@@ -169,8 +169,14 @@ export const redirectingTransport = (only?: readonly string[]) =>
     return servers[server];
   });
 
-/** The fake filters' self-test: both block `canary.example`. */
-export const fakeCanary = { name: canaryName };
+/** The fake filters' self-test: each blocks `canary.example` its own way. */
+export const fakeCanary = {
+  answers: ["148.123.15.44", "0.0.0.0"],
+  name: canaryName,
+};
+
+/** A resolver the network sends every query to, which blocks names too. */
+export const blockingRedirectTransport = transportWith(() => family);
 
 /**
  * Like `redirectingTransport`, with a resolver that also says a name whose

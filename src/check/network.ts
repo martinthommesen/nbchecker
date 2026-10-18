@@ -37,11 +37,7 @@ const selfTest = (filter: Filter) => {
       const verdict = merge(
         ...asked.success.answers.map((a) => classify(a, canaryExists))
       );
-      const expected = canary.answer;
-      let passed = verdict.blocked;
-      if (expected !== undefined) {
-        passed = verdict.answers.includes(expected);
-      }
+      const passed = verdict.answers.some((a) => canary.answers.includes(a));
       const test = { answers: verdict.answers, filter: filter.name };
       if (passed) {
         return { ...test, result: "passed" };

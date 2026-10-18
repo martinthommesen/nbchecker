@@ -123,7 +123,7 @@ describe("intercepted DNS: self-tests that get no answer", () => {
   test("a canary with no answer leaves the results as they are", async () => {
     const quiet: Filter[] = fakeFilters.map((f) => ({
       ...f,
-      canary: { name: "refused.example" },
+      canary: { answers: ["0.0.0.0"], name: "refused.example" },
       servers: f.servers.filter((s) => s !== "198.51.100.53"),
     }));
     const r = await runCheck("good.example", {
@@ -137,7 +137,7 @@ describe("intercepted DNS: self-tests that get no answer", () => {
 
   test("Telenor's filters off its network aren't redirected", async () => {
     const telenor: Filter = {
-      canary: { answer: "148.123.15.38", name: "nettvern.telenor.net" },
+      canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
       category: "security",
       name: "ISP filter",
       network: "Telenor",

@@ -2,7 +2,6 @@
 import type { CliRenderer, InputRenderable } from "@opentui/core";
 import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
-import { connectionText } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
@@ -12,9 +11,7 @@ import {
   redirectedFilters,
 } from "../check/result.ts";
 import { toJson } from "../report/json.ts";
-import { renderText } from "../report/text.ts";
-import { view } from "../report/view.ts";
-import { connectionCopy } from "./connection-view.ts";
+import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
 import { flatRows, resultGroups } from "./rows.ts";
 import type { State } from "./state.ts";
@@ -33,19 +30,6 @@ interface Session {
   network: Deferred.Deferred<Network>;
   recalled: number;
 }
-
-const dnsFilterOf = (n: Network | undefined): string =>
-  (n && connectionText(n.connection)) ?? "unknown";
-
-const copyText = (s: State, filters: readonly Filter[]): string | undefined => {
-  if (s.screen === "connection") {
-    return connectionCopy(s.network, filters);
-  }
-  if (s.result === undefined || s.checking) {
-    return;
-  }
-  return `DNS filter on this computer: ${dnsFilterOf(s.result.network)}\n\n${renderText(view(s.result), false)}`;
-};
 
 const toaster =
   ({ run, store }: ControllerDeps) =>
@@ -154,9 +138,10 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
       return toast("nothing to export yet");
     }
     const path = `nbchecker-${result.host}.json`;
+    const network = networkOf(s);
     const meta = {
-      dnsFilter: dnsFilterOf(result.network),
-      intercepted: result.network && redirectedFilters(result.network),
+      dnsFilter: dnsFilterOf(network),
+      intercepted: network && redirectedFilters(network),
       version: s.version,
     };
     const json = toJson(meta, [result]);
