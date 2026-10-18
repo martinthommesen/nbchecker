@@ -5,29 +5,24 @@
  */
 import { Effect } from "effect";
 import { NetAddress } from "effect/net";
+import { concat, uint16s } from "./bytes.ts";
 import { MalformedResponse } from "./malformed.ts";
+import {
+  classIn,
+  extendedErrorOption,
+  extendedRcodeUnit,
+  Flag,
+  maxLabelLength,
+  RecordType,
+  rcodeValues,
+  uint16Bytes,
+} from "./protocol.ts";
 import { Reader } from "./reader.ts";
 
-const typeA = 1;
-const typeCname = 5;
-const typeAaaa = 28;
-const typeOpt = 41;
-const classIn = 1;
-
-const headerLength = 12;
-const headerCounts = 4;
-const flagRecursionDesired = 0x01_00;
-const flagTruncated = 0x02_00;
-const rcodeValues = 16;
-const extendedRcodeDivisor = 2 ** 24;
-const maxLabelLength = 63;
 /** The EDNS buffer size recommended by DNS Flag Day 2020. */
 const ednsBufferSize = 1232;
-const extendedErrorOption = 15;
 const ipv4Length = 4;
 const ipv6Length = 16;
-const uint16Bytes = 2;
-const questionTail = 4;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -39,54 +34,23 @@ const asMalformed = (error: unknown): MalformedResponse => {
   return new MalformedResponse({ reason: String(error) });
 };
 
-const nameBytes = (name: string): Uint8Array[] => {
-  const out: Uint8Array[] = [];
-  for (const label of name.split(".").filter((l) => l !== "")) {
-    const bytes = encoder.encode(label);
-    if (bytes.length > maxLabelLength) {
-      throw new MalformedResponse({ reason: `label too long: ${label}` });
-    }
-    out.push(Uint8Array.of(bytes.length), bytes);
+const labelBytes = (label: string): Uint8Array[] => {
+  const bytes = encoder.encode(label);
+  if (bytes.length > maxLabelLength) {
+    throw new MalformedResponse({ reason: `label too long: ${label}` });
   }
-  out.push(Uint8Array.of(0));
-  return out;
-};
-
-const uint16s = (...values: readonly number[]): Uint8Array => {
-  const out = new Uint8Array(values.length * uint16Bytes);
-  const view = new DataView(out.buffer);
-  for (const [i, v] of values.entries()) {
-    view.setUint16(i * uint16Bytes, v);
-  }
-  return out;
-};
-
-const concat = (parts: readonly Uint8Array[]): Uint8Array => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
-  return out;
-};
-
-const typeCode = (type: QueryType): number => {
-  if (type === "A") {
-    return typeA;
-  }
-  return typeAaaa;
+  return [Uint8Array.of(bytes.length), bytes];
 };
 
 const encode = (id: number, name: string, type: QueryType): Uint8Array =>
   concat([
     // Header: one question, one additional (the OPT record).
-    uint16s(id, flagRecursionDesired, 1, 0, 0, 1),
-    ...nameBytes(name),
+    uint16s(id, Flag.recursionDesired, 1, 0, 0, 1),
+    encodeName(name),
     uint16s(typeCode(type), classIn),
     // OPT pseudo-record: root name, type, buffer size, TTL 0, no data.
     Uint8Array.of(0),
-    uint16s(typeOpt, ednsBufferSize, 0, 0, 0),
+    uint16s(RecordType.opt, ednsBufferSize, 0, 0, 0),
   ]);
 
 const readExtendedErrors = (data: Uint8Array): ExtendedError[] => {
@@ -129,11 +93,11 @@ interface AddressType {
 
 const addressTypes = new Map<number, AddressType>([
   [
-    typeA,
+    RecordType.a,
     { length: ipv4Length, parse: NetAddress.ipv4FromBytesUnsafe, type: "A" },
   ],
   [
-    typeAaaa,
+    RecordType.aaaa,
     { length: ipv6Length, parse: NetAddress.ipv6FromBytesUnsafe, type: "AAAA" },
   ],
 ]);
@@ -160,7 +124,7 @@ const readCname = (bytes: Uint8Array, raw: RawRecord): string => {
 };
 
 const toRecord = (bytes: Uint8Array, raw: RawRecord): DnsRecord | undefined => {
-  if (raw.type === typeCname) {
+  if (raw.type === RecordType.cname) {
     return { name: raw.name, type: "CNAME", value: readCname(bytes, raw) };
   }
   const address = addressTypes.get(raw.type);
@@ -177,38 +141,22 @@ const toRecord = (bytes: Uint8Array, raw: RawRecord): DnsRecord | undefined => {
 const times = <A>(n: number, f: () => A): A[] => Array.from({ length: n }, f);
 
 const decode = (bytes: Uint8Array): DnsAnswer => {
-  if (bytes.length < headerLength) {
-    throw new MalformedResponse({ reason: "response is cut short" });
-  }
   const r = new Reader(bytes);
-  r.u16(); // id
-  const flags = r.u16();
-  const [questions = 0, answers = 0, authorities = 0, additionals = 0] = times(
-    headerCounts,
-    () => r.u16()
-  );
-  times(questions, () => {
-    r.name();
-    r.take(questionTail);
-  });
-  const records = times(answers, () => toRecord(bytes, readRecord(r))).filter(
-    (rec) => rec !== undefined
-  );
-  times(authorities, () => readRecord(r));
-  let rcode = flags % rcodeValues;
+  const header = r.header();
+  times(header.questions, () => r.question());
+  const records = times(header.answers, () =>
+    toRecord(bytes, readRecord(r))
+  ).filter((rec) => rec !== undefined);
+  times(header.authorities, () => readRecord(r));
+  let { rcode } = header;
   const extendedErrors: ExtendedError[] = [];
-  for (const raw of times(additionals, () => readRecord(r))) {
-    if (raw.type === typeOpt) {
-      rcode += Math.floor(raw.ttl / extendedRcodeDivisor) * rcodeValues;
+  for (const raw of times(header.additionals, () => readRecord(r))) {
+    if (raw.type === RecordType.opt) {
+      rcode += Math.floor(raw.ttl / extendedRcodeUnit) * rcodeValues;
       extendedErrors.push(...readExtendedErrors(raw.data));
     }
   }
-  return {
-    extendedErrors,
-    rcode,
-    records,
-    truncated: Math.floor(flags / flagTruncated) % 2 === 1,
-  };
+  return { extendedErrors, rcode, records, truncated: header.truncated };
 };
 
 export type QueryType = "A" | "AAAA";
@@ -234,6 +182,26 @@ export interface DnsAnswer {
   readonly truncated: boolean;
 }
 
+/** The code a record type has on the wire. */
+export const typeCode = (type: DnsRecord["type"]): number => {
+  if (type === "A") {
+    return RecordType.a;
+  }
+  if (type === "AAAA") {
+    return RecordType.aaaa;
+  }
+  return RecordType.cname;
+};
+
+/**
+ * Writes a name as length-prefixed labels. Throws a `MalformedResponse` for
+ * a label longer than 63 bytes.
+ */
+export const encodeName = (name: string): Uint8Array => {
+  const labels = name.split(".").filter((l) => l !== "");
+  return concat([...labels.flatMap(labelBytes), Uint8Array.of(0)]);
+};
+
 /** Encodes a recursive query with an EDNS OPT record. */
 export const encodeQuery = (
   id: number,
@@ -241,14 +209,6 @@ export const encodeQuery = (
   type: QueryType
 ): Effect.Effect<Uint8Array, MalformedResponse> =>
   Effect.try({ catch: asMalformed, try: () => encode(id, name, type) });
-
-/** Reads the query ID, so answers can be matched to queries. */
-export const responseId = (bytes: Uint8Array): number | undefined => {
-  if (bytes.length < uint16Bytes) {
-    return;
-  }
-  return new DataView(bytes.buffer, bytes.byteOffset).getUint16(0);
-};
 
 /** Decodes a DNS response message. */
 export const decodeResponse = (

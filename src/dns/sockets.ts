@@ -2,10 +2,9 @@
 import { connect, udpSocket } from "bun";
 import { Effect } from "effect";
 import { NetAddress } from "effect/net";
+import { concat, frame, unframe } from "./bytes.ts";
 import { mismatch } from "./match.ts";
 import { QueryError } from "./query-error.ts";
-
-const lengthPrefixBytes = 2;
 
 const bindAddress = (server: string): string => {
   const ip = NetAddress.ipFromString(server);
@@ -20,33 +19,6 @@ const errorText = (error: unknown): string => {
     return error.message;
   }
   return String(error);
-};
-
-/** Prefixes a message with its length, as DNS over TCP needs. */
-const frame = (packet: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(packet.length + lengthPrefixBytes);
-  new DataView(out.buffer).setUint16(0, packet.length);
-  out.set(packet, lengthPrefixBytes);
-  return out;
-};
-
-const append = (a: Uint8Array, b: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a);
-  out.set(b, a.length);
-  return out;
-};
-
-/** Returns the framed message once all of it has arrived. */
-const unframe = (received: Uint8Array): Uint8Array | undefined => {
-  if (received.length < lengthPrefixBytes) {
-    return;
-  }
-  const want = new DataView(received.buffer, received.byteOffset).getUint16(0);
-  if (received.length < want + lengthPrefixBytes) {
-    return;
-  }
-  return received.subarray(lengthPrefixBytes, want + lengthPrefixBytes);
 };
 
 type Resume = (result: Effect.Effect<Uint8Array, QueryError>) => void;
@@ -207,7 +179,7 @@ export const sendTcp = (
       if (query.done()) {
         return;
       }
-      received = append(received, chunk);
+      received = concat([received, chunk]);
       const message = unframe(received);
       if (message === undefined) {
         return;

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { response } from "../testing/response.ts";
 import { Ede, Rcode } from "./codes.ts";
-import { decodeResponse, encodeQuery, responseId } from "./wire.ts";
+import { Reader } from "./reader.ts";
+import { decodeResponse, encodeQuery } from "./wire.ts";
 
 const decode = (bytes: Uint8Array) => Effect.runSync(decodeResponse(bytes));
 const decodeError = (bytes: Uint8Array) =>
@@ -28,7 +29,7 @@ const extendedRcode = 23;
 describe("encodeQuery", () => {
   test("writes the header, question and an EDNS OPT record", () => {
     const q = Effect.runSync(encodeQuery(queryId, "vg.no", "AAAA"));
-    expect(responseId(q)).toBe(queryId);
+    expect(new Reader(q).header().id).toBe(queryId);
     expect(toHex(q)).toBe(
       [
         "10 92 01 00 00 01 00 00 00 00 00 01", // header

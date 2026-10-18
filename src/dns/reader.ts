@@ -1,20 +1,50 @@
 import { MalformedResponse } from "./malformed.ts";
+import {
+  Flag,
+  maxLabelLength,
+  rcodeValues,
+  uint16Bytes,
+  uint32Bytes,
+} from "./protocol.ts";
 
-const uint16Bytes = 2;
-const uint32Bytes = 4;
 /** A length byte at or above this starts a compression pointer. */
 const pointerTag = 0xc0;
 const byteValues = 256;
-/** Labels are at most 63 bytes; length bytes 0x40 to 0xbf are reserved. */
-const maxLabelLength = 63;
 /** A name is at most 255 bytes on the wire, length bytes included. */
 const maxNameBytes = 255;
 /** A name has at most 127 labels, so more jumps than that is a loop. */
 const maxPointerJumps = 128;
+/** The opcode sits above the AA, TC, RD, RA, Z and rcode bits. */
+const opcodeUnit = 0x08_00;
+const opcodeValues = 16;
 
 const decoder = new TextDecoder();
 
-/** Reads big-endian fields and compressed names from a DNS message. */
+const hasFlag = (flags: number, flag: number): boolean =>
+  Math.floor(flags / flag) % 2 === 1;
+
+/** A message's header, with the flags that say what kind of reply it is. */
+export interface Header {
+  readonly additionals: number;
+  readonly answers: number;
+  readonly authorities: number;
+  readonly id: number;
+  readonly isResponse: boolean;
+  readonly opcode: number;
+  readonly questions: number;
+  /** The rcode's low four bits; an OPT record can carry the rest. */
+  readonly rcode: number;
+  readonly truncated: boolean;
+}
+
+/** What a question asks for. */
+export interface Question {
+  readonly dnsClass: number;
+  readonly name: string;
+  readonly type: number;
+}
+
+/** Reads big-endian fields, names, headers and questions from a message. */
 export class Reader {
   offset = 0;
   private readonly bytes: Uint8Array;
@@ -77,6 +107,35 @@ export class Reader {
         at += len + 1;
       }
     }
+  }
+
+  /** Reads the header that starts every message. */
+  header(): Header {
+    const id = this.u16();
+    const flags = this.u16();
+    const questions = this.u16();
+    const answers = this.u16();
+    const authorities = this.u16();
+    const additionals = this.u16();
+    return {
+      additionals,
+      answers,
+      authorities,
+      id,
+      isResponse: hasFlag(flags, Flag.response),
+      opcode: Math.floor(flags / opcodeUnit) % opcodeValues,
+      questions,
+      rcode: flags % rcodeValues,
+      truncated: hasFlag(flags, Flag.truncated),
+    };
+  }
+
+  /** Reads one entry of the question section. */
+  question(): Question {
+    const name = this.name();
+    const type = this.u16();
+    const dnsClass = this.u16();
+    return { dnsClass, name, type };
   }
 
   private checkLabel(len: number, size: number): void {

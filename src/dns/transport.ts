@@ -8,6 +8,7 @@ import {
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
+import { concat } from "./bytes.ts";
 import type { MalformedResponse } from "./malformed.ts";
 import { mismatch } from "./match.ts";
 import { QueryError } from "./query-error.ts";
@@ -41,13 +42,6 @@ const failed =
 const timedOut = (server: string) => () =>
   Effect.fail(new QueryError({ reason: "no answer (timed out)", server }));
 
-const append = (a: Uint8Array, b: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a);
-  out.set(b, a.length);
-  return out;
-};
-
 /** Reads a DoH body, giving up as soon as it is bigger than a DNS message. */
 const readBody = (
   response: HttpClientResponse.HttpClientResponse,
@@ -63,7 +57,7 @@ const readBody = (
             new QueryError({ reason: "answer is too big", server: url })
           );
         }
-        return Effect.succeed(append(body, chunk));
+        return Effect.succeed(concat([body, chunk]));
       }
     )
   );

@@ -3,6 +3,7 @@ import { listen, serve, udpSocket } from "bun";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { replyTo } from "../testing/response.ts";
+import { frame, unframe } from "./bytes.ts";
 import { DnsTransport, layer } from "./transport.ts";
 
 const answerRecord = {
@@ -15,7 +16,6 @@ const bigRecord = {
   type: "A",
   value: "192.0.2.2",
 } as const;
-const lengthPrefix = 2;
 /** The TCP server says answers for this name are truncated too. */
 const cutName = "cut.example";
 const decoder = new TextDecoder();
@@ -47,13 +47,14 @@ beforeAll(async () => {
     socket: {
       binaryType: "uint8array",
       data: (socket, data) => {
-        const query = data.subarray(lengthPrefix);
+        const query = unframe(data);
+        if (query === undefined) {
+          return;
+        }
         const truncated = decoder.decode(query).includes("cut");
-        const body = replyTo(query, { records: [bigRecord], truncated });
-        const framed = new Uint8Array(body.length + lengthPrefix);
-        new DataView(framed.buffer).setUint16(0, body.length);
-        framed.set(body, lengthPrefix);
-        socket.write(framed);
+        socket.write(
+          frame(replyTo(query, { records: [bigRecord], truncated }))
+        );
       },
     },
   });
