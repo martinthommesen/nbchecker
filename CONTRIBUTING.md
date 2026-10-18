@@ -61,7 +61,9 @@ builder, signs and notarizes the macOS ones, publishes them with checksums and b
 updates the Homebrew cask in
 [martinthommesen/homebrew-tap](https://github.com/martinthommesen/homebrew-tap),
 and writes the release notes from merged pull requests. It stops before
-publishing anything if the macOS signing secrets are missing.
+publishing anything if the tagged commit isn't on `main`, if CI hasn't passed
+on it, if types, lint or tests fail, or if the macOS signing secrets are
+missing.
 
 To try the release build locally, run
 `goreleaser release --snapshot --clean --skip=publish`. Without the signing
