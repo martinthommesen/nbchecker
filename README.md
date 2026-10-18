@@ -77,9 +77,14 @@ Nettvern and Nettvern+ only filter DNS. An IP address you connect to directly
 is never blocked by them, so for an IP address the checker looks up its reverse
 DNS name and checks that instead.
 
-SafeZone support is not confirmed yet. If you have SafeZone, please
+**SafeZone** (Telenor's business mobile protection) filters inside Telenor's
+mobile network and has no public DNS server, so the checker can't ask it
+directly. It only shows up in the "This computer" line, and only when the
+computer is online through a SafeZone phone's hotspot or the SafeZone VPN.
+SafeZone can also block IP addresses, which this checker doesn't test. How
+SafeZone answers in Norway isn't confirmed yet. If you have SafeZone, please
 [open an issue](https://github.com/martinthommesen/nettvern-check/issues/new/choose)
-with the program's `--json` output.
+with the program's `--json` output from such a connection.
 
 ## Building from source
 
