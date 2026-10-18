@@ -2,7 +2,7 @@
  * Turns a check result into rows and sections, shared by the terminal
  * interface and plain text output.
  */
-import { describe } from "../check/classify.ts";
+import { describe, type Verdict } from "../check/classify.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import type { CheckResult, Outcome } from "../check/result.ts";
 
@@ -14,6 +14,14 @@ const failedText = (filter: Filter | undefined): string => {
     return "no answer";
   }
   return `no answer (it only answers ${filter.onlyAnswers})`;
+};
+
+/** The answers worth showing next to a block, such as the block page. */
+const blockDetail = (v: Verdict): string => {
+  if (v.reason === "null-ip") {
+    return "";
+  }
+  return shortList(v.answers, maxAnswers);
 };
 
 const outcomeRow = (name: string, outcome: Outcome, filter?: Filter): Row => {
@@ -30,7 +38,7 @@ const outcomeRow = (name: string, outcome: Outcome, filter?: Filter): Row => {
   const v = outcome.verdict;
   if (v.blocked) {
     return {
-      detail: shortList(v.answers, maxAnswers),
+      detail: blockDetail(v),
       icon: "✗",
       name,
       text: describe(v),
@@ -89,17 +97,20 @@ const summaryOf = (r: CheckResult): Line => {
   return { text: `✓ not blocked by any of ${answered} filters`, tone: "ok" };
 };
 
-const truthLine = (r: CheckResult): Line => {
+const truthRow = (r: CheckResult): Row => {
+  const name = "Real answer";
   if (r.truthError !== undefined) {
     return {
+      icon: "?",
+      name,
       text: `could not reach an unfiltered resolver: ${r.truthError}`,
       tone: "warn",
     };
   }
   if (!r.exists) {
-    return { text: "the domain doesn't exist", tone: "plain" };
+    return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
   }
-  return { text: shortList(r.truth, maxTruth), tone: "plain" };
+  return { icon: "✓", name, text: shortList(r.truth, maxTruth), tone: "plain" };
 };
 
 const filterSections = (r: CheckResult): Section[] =>
@@ -163,14 +174,16 @@ export const view = (r: CheckResult): View => {
   if (!r.checked) {
     return { ...base, sections: [] };
   }
-  const sections: Section[] = [...filterSections(r)];
+  const reference: Row[] = [];
   if (r.system !== undefined) {
-    sections.push({
-      lines: [],
-      rows: [outcomeRow("Your DNS", r.system)],
-      title: "THIS COMPUTER",
-    });
+    reference.push(outcomeRow("Your DNS", r.system));
   }
-  sections.push({ lines: [truthLine(r)], rows: [], title: "REAL ANSWER" });
-  return { ...base, sections };
+  reference.push(truthRow(r));
+  return {
+    ...base,
+    sections: [
+      { lines: [], rows: reference, title: "REFERENCE" },
+      ...filterSections(r),
+    ],
+  };
 };

@@ -4,10 +4,10 @@
 
 ## How it was tested
 
-<!-- Unit tests, and whether you ran it on a real Telenor connection (which filter: Nettvern, Nettvern+ or SafeZone). -->
+<!-- Tests, and whether you ran it on a network with a DNS filter (which one). -->
 
 ## Checklist
 
-- [ ] `go vet ./...`, `go test -race ./...` and `golangci-lint run` pass locally
+- [ ] `bun run check` passes locally
 - [ ] Tests added or updated for the change
-- [ ] README or docs updated if behaviour or flags changed
+- [ ] README or docs updated if behaviour, keys or flags changed

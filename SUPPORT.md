@@ -9,5 +9,5 @@
   [feature request](https://github.com/martinthommesen/nbchecker/issues/new?template=feature_request.yml).
 - **A security problem:** follow [SECURITY.md](SECURITY.md).
 
-This project can't help with your Telenor subscription or change what Telenor
-blocks. Contact Telenor for that.
+This project can't help with your internet subscription or change what a
+filter blocks. Contact the filter's provider for that.

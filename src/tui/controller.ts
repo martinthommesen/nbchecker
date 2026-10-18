@@ -150,7 +150,7 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
 };
 
 const moveActions = (
-  { filters, input, store }: ControllerDeps,
+  { filters, input, quit, store }: ControllerDeps,
   session: Session
 ) => {
   const move = (delta: number) => {
@@ -177,12 +177,14 @@ const moveActions = (
     input.value = "";
     input.focus();
   };
+  // Leaving the input goes back to the results, or quits if there are none.
   const leaveInput = () => {
     const s = store.get();
-    if (s.result !== undefined || s.checking) {
-      input.blur();
-      store.set({ focus: "table" });
+    if (s.result === undefined && !s.checking) {
+      return quit();
     }
+    input.blur();
+    store.set({ focus: "table" });
   };
   return { focusInput, leaveInput, move, recall };
 };

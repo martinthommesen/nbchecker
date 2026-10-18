@@ -89,7 +89,7 @@ const footers = {
   typing: [
     ["enter", "check"],
     ["↑↓", "earlier checks"],
-    ["esc", "leave the input"],
+    ["esc", "back"],
     ["ctrl+c", "quit"],
   ],
 } as const;

@@ -18,11 +18,17 @@ body:
   - type: dropdown
     id: filter
     attributes:
-      label: Which Telenor filter is turned on?
+      label: Which DNS filter do you use?
       options:
-        - Nettvern
-        - Nettvern+
-        - SafeZone
+        - Telenor Nettvern
+        - Telenor Nettvern+
+        - Telenor SafeZone
+        - Cloudflare
+        - Quad9
+        - OpenDNS
+        - AdGuard
+        - CleanBrowsing
+        - Another filter
         - None
         - Not sure
     validations:
@@ -43,9 +49,10 @@ body:
     attributes:
       label: Connection
       options:
-        - Telenor fixed broadband
-        - Telenor mobile
-        - Other provider
+        - Home broadband
+        - Mobile data or a phone hotspot
+        - Work or school network
+        - VPN
         - Not sure
     validations:
       required: true
@@ -53,7 +60,7 @@ body:
     id: output
     attributes:
       label: Program output
-      description: Paste the full output, ideally run with any verbose or debug option.
+      description: Paste the output of `nbchecker --json <domain>`, or copy it from the interactive screen with `y`.
       render: text
     validations:
       required: true
@@ -74,7 +81,6 @@ body:
     attributes:
       label: Operating system
       options:
-        - Windows
         - macOS
         - Linux
         - Other

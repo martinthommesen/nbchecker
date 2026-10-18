@@ -73,7 +73,7 @@ const addAddress = (v: Draft, raw: string): void => {
 };
 
 const reasonText: Record<Reason, string> = {
-  ede: "blocked",
+  ede: "blocked with an Extended DNS Error",
   kripos: "blocked by the Kripos child-abuse filter",
   legal: "blocked by Telenor on legal grounds, for every Telenor customer",
   nettvern: "blocked by Nettvern",

@@ -25,5 +25,5 @@ credit to you, unless you ask to stay anonymous.
 In scope: the `nbchecker` program, its build and release process, and the
 files published in this repository's releases.
 
-Out of scope: Telenor's services themselves, including how Nettvern, Nettvern+
-or SafeZone decide what to block. Report those to Telenor.
+Out of scope: the DNS filters themselves, such as how Telenor Nettvern or
+Quad9 decide what to block. Report those to their providers.

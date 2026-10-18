@@ -3,29 +3,30 @@ version: 2
 
 project_name: nbchecker
 
-builds:
-  - id: nbchecker
-    main: ./cmd/nbchecker
-    binary: nbchecker
-    env:
-      - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    flags:
-      - -trimpath
-    ldflags:
-      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }}
-    mod_timestamp: "{{ .CommitTimestamp }}"
+before:
+  hooks:
+    # Every platform's native OpenTUI package, so one runner can build all.
+    - bun install --frozen-lockfile --os=* --cpu=*
 
-# One macOS binary that runs on both Intel and Apple silicon.
-universal_binaries:
-  - replace: true
+builds:
+  # Standalone executables with Bun built in, so nothing else is needed to
+  # run them. GoReleaser's Bun builder needs --compile in the flags.
+  - id: nbchecker
+    builder: bun
+    main: ./src/main.ts
+    binary: nbchecker
+    targets:
+      - linux-x64
+      - linux-arm64
+      - darwin-x64
+      - darwin-arm64
+    flags:
+      - --compile
+      - --minify
+      - --define=NBCHECKER_VERSION="{{ .Version }}"
 
 archives:
   - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}_{{ .Arch }}
     files:
@@ -37,6 +38,29 @@ checksum:
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
+
+homebrew_casks:
+  - name: nbchecker
+    repository:
+      owner: martinthommesen
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/martinthommesen/nbchecker
+    description: Checks whether DNS filters block a domain or IP address
+    license: MIT
+    commit_author:
+      name: nbchecker release
+      email: noreply@github.com
+    # Leave the tap alone when the release runs without its token.
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_GITHUB_TOKEN" }}false{{ else }}true{{ end }}'
+    hooks:
+      post:
+        # The binaries aren't notarized, so macOS would refuse to open a
+        # download marked as quarantined.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/nbchecker"]
+          end
 
 changelog:
   use: github-native
