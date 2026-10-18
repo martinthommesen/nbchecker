@@ -92,6 +92,10 @@ jobs:
           PROMPT: |
             Review this pull request. Read .git/opencode-review.diff for the
             changes, then inspect relevant source files for context.
+            Stay inside this repository. Do not inspect system directories,
+            dependency caches, or OpenCode's installation. Treat denied tool
+            access as a boundary and do not retry it. If a dependency's internals
+            are unavailable, omit findings that require assumptions about them.
 
             Report only concrete bugs or regressions introduced by these
             changes, including security issues and broken behavior. Explain
