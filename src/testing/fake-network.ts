@@ -62,13 +62,19 @@ const lookup = (zone: Zone, name: string, type: QueryType): DnsAnswer => {
   };
 };
 
+/** The name the fake filters document as blocked, for the self-test. */
+const canaryName = "canary.example";
+
 const real: Zone = {
   "adult.example": [a("adult.example", "192.0.2.40")],
   "bad.example": [a("bad.example", "192.0.2.10")],
+  [canaryName]: [a(canaryName, "192.0.2.5")],
   "good.example": [a("good.example", "192.0.2.20")],
   "grey.example": [a("grey.example", "192.0.2.30")],
   // Exists, but with no address, like a name with only TXT or MX records.
   "mail.example": [],
+  // Telenor's test page, as every resolver but Telenor's filters answers it.
+  "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.37")],
   "policy.example": [a("policy.example", "192.0.2.50")],
   "refused.example": [a("refused.example", "192.0.2.60")],
   // Only an IPv6 address.
@@ -83,8 +89,14 @@ const security: Zone = {
     cname("bad.example", "nettvern-info.telenor.net"),
     a("nettvern-info.telenor.net", "148.123.15.44"),
   ],
+  [canaryName]: [
+    cname(canaryName, "nettvern-info.telenor.net"),
+    a("nettvern-info.telenor.net", "148.123.15.44"),
+  ],
   // Cisco's inspection proxy.
   "grey.example": [a("grey.example", "146.112.56.167")],
+  // Telenor's test page, as Nettvern answers it.
+  "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.38")],
   // Extended DNS Error text that tries to add a line to the output.
   "newline.example": {
     extendedErrors: [
@@ -104,54 +116,90 @@ const family: Zone = {
   // AdGuard Family's block page.
   "adult.example": [a("adult.example", "94.140.14.35")],
   "bad.example": [a("bad.example", "0.0.0.0")],
+  [canaryName]: [a(canaryName, "0.0.0.0")],
 };
 
-const servers: Readonly<Record<string, Zone | "down" | "servfail">> = {
+type Server = Zone | "down" | "servfail";
+
+const servers: Readonly<Record<string, Server>> = {
   "192.0.2.53": security,
   "198.51.100.53": family,
   "203.0.113.1": "down",
   "203.0.113.2": "servfail",
 };
 
-export const fakeTransport = Layer.succeed(DnsTransport, {
-  ask: (server, name, type) => {
-    const zone = servers[server];
-    if (zone === undefined || zone === "down") {
-      return Effect.fail(new QueryError({ reason: "timed out", server }));
+/** A transport whose servers answer from the zone `zoneOf` gives them. */
+const transportWith = (zoneOf: (server: string) => Server | undefined) =>
+  Layer.succeed(DnsTransport, {
+    ask: (server, name, type) => {
+      const zone = zoneOf(server);
+      if (zone === undefined || zone === "down") {
+        return Effect.fail(new QueryError({ reason: "timed out", server }));
+      }
+      if (zone === "servfail") {
+        return Effect.succeed(failure(Rcode.servFail));
+      }
+      return Effect.succeed(lookup(zone, name, type));
+    },
+    doh: (url, name, type) => {
+      if (url === "https://down.example/dns-query") {
+        return Effect.fail(
+          new QueryError({ reason: "timed out", server: url })
+        );
+      }
+      if (url === "https://no-aaaa.example/dns-query" && type === "AAAA") {
+        return Effect.succeed(failure(Rcode.servFail));
+      }
+      return Effect.succeed(lookup(real, name, type));
+    },
+  });
+
+export const fakeTransport = transportWith((server) => servers[server]);
+
+/**
+ * A network that sends every DNS query to an unfiltered resolver, whatever
+ * server it was sent to, as some hotels, routers and VPNs do. With `only`,
+ * just the queries sent to those servers.
+ */
+export const redirectingTransport = (only?: readonly string[]) =>
+  transportWith((server) => {
+    if (only === undefined || only.includes(server)) {
+      return real;
     }
-    if (zone === "servfail") {
-      return Effect.succeed({
-        extendedErrors: [],
-        rcode: Rcode.servFail,
-        records: [],
-        truncated: false,
-      });
-    }
-    return Effect.succeed(lookup(zone, name, type));
-  },
-  doh: (url, name, type) => {
-    if (url === "https://down.example/dns-query") {
-      return Effect.fail(new QueryError({ reason: "timed out", server: url }));
-    }
-    if (url === "https://no-aaaa.example/dns-query" && type === "AAAA") {
-      return Effect.succeed({
-        extendedErrors: [],
-        rcode: Rcode.servFail,
-        records: [],
-        truncated: false,
-      });
-    }
-    return Effect.succeed(lookup(real, name, type));
-  },
-});
+    return servers[server];
+  });
+
+/** The fake filters' self-test: each blocks `canary.example` its own way. */
+export const fakeCanary = {
+  answers: ["148.123.15.44", "0.0.0.0"],
+  name: canaryName,
+};
+
+/** A resolver the network sends every query to, which blocks names too. */
+export const blockingRedirectTransport = transportWith(() => family);
+
+/**
+ * Like `redirectingTransport`, with a resolver that also says a name whose
+ * real answer is 0.0.0.0 doesn't exist, as some do.
+ */
+export const rewritingTransport = transportWith(() => ({
+  ...real,
+  "zero.example": failure(Rcode.nxDomain),
+}));
 
 export const fakeFilters: readonly Filter[] = [
   {
+    canary: fakeCanary,
     category: "security",
     name: "Security filter",
     servers: ["203.0.113.1", "192.0.2.53"],
   },
-  { category: "family", name: "Family filter", servers: ["198.51.100.53"] },
+  {
+    canary: fakeCanary,
+    category: "family",
+    name: "Family filter",
+    servers: ["198.51.100.53"],
+  },
 ];
 
 /**

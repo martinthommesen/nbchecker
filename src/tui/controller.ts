@@ -1,15 +1,16 @@
 /** What each action does: checks, copying, saving and moving around. */
-import { Duration, Effect, FileSystem } from "effect";
+import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
-import { connectionText, detectConnection } from "../check/connection.ts";
-import type { Filter } from "../check/filters.ts";
+import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
-import { cancelPending } from "../check/result.ts";
+import {
+  cancelPending,
+  type Network,
+  redirectedFilters,
+} from "../check/result.ts";
 import { toJson } from "../report/json.ts";
-import { renderText } from "../report/text.ts";
-import { view } from "../report/view.ts";
-import { connectionCopy } from "./connection-view.ts";
 import type { Controller, ControllerDeps } from "./controller-deps.ts";
+import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
 import { flatRows, resultGroups } from "./rows.ts";
 import type { State } from "./state.ts";
@@ -25,21 +26,15 @@ interface Session {
   detections: number;
   readonly history: string[];
   lastTarget: string | undefined;
+  /**
+   * The network, found out once when the screen opens and again on "detect
+   * again"; checks wait for it.
+   */
+  network: Deferred.Deferred<Network>;
   recalled: number;
+  /** Networks checks wait for that no detection has found yet. */
+  readonly waiting: Deferred.Deferred<Network>[];
 }
-
-const dnsFilterOf = (s: State): string =>
-  (s.connection && connectionText(s.connection)) ?? "unknown";
-
-const copyText = (s: State, filters: readonly Filter[]): string | undefined => {
-  if (s.screen === "connection") {
-    return connectionCopy(s.connection, filters);
-  }
-  if (s.result === undefined || s.checking) {
-    return;
-  }
-  return `DNS filter on this computer: ${dnsFilterOf(s)}\n\n${renderText(view(s.result), false)}`;
-};
 
 const toaster =
   ({ run, store }: ControllerDeps) =>
@@ -81,7 +76,11 @@ const checkTarget = (
       screen: "main",
       selected: 0,
     }));
-    const [duration, result] = yield* check(target).pipe(
+    const { network } = session;
+    const [duration, result] = yield* check(
+      target,
+      Deferred.await(network)
+    ).pipe(
       Effect.provideService(Progress, (sofar) =>
         update(() => ({ result: sofar }))
       ),
@@ -130,16 +129,27 @@ const checkActions = (
       toast("cancelled");
     }
   };
-  // Only the latest detection may show its answer.
+  /**
+   * Starts a detection and interrupts the one before it, so pressing "detect
+   * again" doesn't pile up self-test queries. Checks still waiting for an
+   * interrupted detection get this one's network instead.
+   */
   const detect = () => {
     session.detections += 1;
     const generation = session.detections;
-    deps.store.set({ connection: undefined });
-    deps.run.background(
+    const network = Deferred.makeUnsafe<Network>();
+    session.network = network;
+    session.waiting.push(network);
+    deps.store.set({ network: undefined });
+    deps.run.detect(
       Effect.gen(function* () {
-        const connection = yield* detectConnection;
-        if (session.detections === generation) {
-          deps.store.set({ connection });
+        const found = yield* detectNetwork;
+        if (session.detections !== generation) {
+          return;
+        }
+        deps.store.set({ network: found });
+        for (const waiting of session.waiting.splice(0)) {
+          yield* Deferred.succeed(waiting, found);
         }
       })
     );
@@ -155,9 +165,13 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
       return toast("nothing to export yet");
     }
     const path = `nbchecker-${result.host}.json`;
-    const json = toJson({ dnsFilter: dnsFilterOf(s), version: s.version }, [
-      result,
-    ]);
+    const network = networkOf(s);
+    const meta = {
+      dnsFilter: dnsFilterOf(network),
+      intercepted: network && redirectedFilters(network),
+      version: s.version,
+    };
+    const json = toJson(meta, [result]);
     deps.run.background(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -229,12 +243,15 @@ const moveActions = (
 };
 
 const makeController = (deps: ControllerDeps): Controller => {
+  const first = Deferred.makeUnsafe<Network>();
   const session: Session = {
     checks: 0,
     detections: 0,
     history: [],
     lastTarget: undefined,
+    network: first,
     recalled: 0,
+    waiting: [first],
   };
   const toast = toaster(deps);
   const checks = checkActions(deps, session, toast);

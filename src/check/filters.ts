@@ -1,7 +1,30 @@
 /** The filtering DNS services nbchecker asks. */
 
 /** What a filter blocks; results are grouped by this, not by provider. */
+/** Umbrella's block pages, 146.112.61.104 to .110, as OpenDNS answers. */
+const umbrellaBlock = ["104", "105", "106", "107", "108", "109", "110"].map(
+  (n) => `146.112.61.${n}`
+);
+
+/** Cloudflare's filters answer a blocked name with these. */
+const cloudflareBlock = ["0.0.0.0", "::"];
+
 export type Category = "ads" | "family" | "security";
+
+/**
+ * A name a filter documents as blocked. nbchecker asks for it once per run,
+ * to see that the answers really come from the filter: some networks send
+ * every DNS query to their own resolver, whatever server it was sent to.
+ */
+export interface Canary {
+  /**
+   * The addresses its own block gives for the name, any one of which passes.
+   * Any other block doesn't: a resolver the network sends queries to may
+   * block the name too.
+   */
+  readonly answers: readonly string[];
+  readonly name: string;
+}
 
 /**
  * A filtering DNS service. Each is reachable over IPv4 and IPv6; nbchecker
@@ -9,6 +32,11 @@ export type Category = "ads" | "family" | "security";
  * VPN or firewall often blocks one address family.
  */
 export interface Filter {
+  /**
+   * Only a name the provider itself documents as a test, so an honest filter
+   * never fails: a filter without one isn't self-tested.
+   */
+  readonly canary?: Canary;
   readonly category: Category;
   readonly name: string;
   /**
@@ -23,6 +51,8 @@ export interface Filter {
 
 export const filters: readonly Filter[] = [
   {
+    // Telenor's test page, which each of its filters answers differently.
+    canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
     category: "security",
     name: "Telenor Nettvern",
     network: "Telenor",
@@ -35,6 +65,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { answers: ["148.123.15.1"], name: "nettvern.telenor.net" },
     category: "family",
     name: "Telenor Nettvern+",
     network: "Telenor",
@@ -47,6 +78,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { answers: cloudflareBlock, name: "malware.testcategory.com" },
     category: "security",
     name: "Cloudflare Security",
     servers: [
@@ -57,6 +89,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { answers: cloudflareBlock, name: "nudity.testcategory.com" },
     category: "family",
     name: "Cloudflare Family",
     servers: [
@@ -72,6 +105,8 @@ export const filters: readonly Filter[] = [
     servers: ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"],
   },
   {
+    // Any of Umbrella's block pages; a content category usually gets .106.
+    canary: { answers: umbrellaBlock, name: "exampleadultsite.com" },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [

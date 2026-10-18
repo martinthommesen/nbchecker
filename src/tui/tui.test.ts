@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { sleep } from "bun";
-import { blockedName, slowDesignTransport } from "../testing/design-network.ts";
+import { Dns } from "effect/net";
+import {
+  blockedName,
+  redirectedDesignTransport,
+  slowDesignTransport,
+} from "../testing/design-network.ts";
 import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
 /** The narrowest terminal the README promises to fit. */
@@ -8,6 +13,18 @@ const narrowWidth = 80;
 /** The blocked count, unbroken by wrapping. */
 const blockedSoFar = /blocked so far: \d/u;
 const settleMs = 100;
+const quad9Untested = /· Quad9\s+no test page\s+· no test name/u;
+const cloudflarePassed = /· Cloudflare Family\s+no test page\s+✓ passed/u;
+const cloudflareRedirected =
+  /Cloudflare Family\s+no test page\s+\? redirected\?/u;
+
+/** On Telenor's network with Nettvern, but its DNS doesn't block the name. */
+const unblockedComputer = Dns.layerStatic({
+  hosts: {
+    [blockedName]: ["203.0.113.42"],
+    "nettvern.telenor.net": ["148.123.15.38"],
+  },
+});
 
 let current: TuiSession | undefined;
 
@@ -110,6 +127,61 @@ describe("tui while typing a target", () => {
     await s.input.typeText(blockedName);
     s.input.pressEnter();
     await s.until("BLOCKED");
+  });
+});
+
+describe("tui: the self-test", () => {
+  test("the connection screen lists each filter's self-test", async () => {
+    const s = await start();
+    await checkBlocked(s);
+    s.input.pressKey("c");
+    const screen = await s.until("✓ passed");
+    expect(screen).toMatch(cloudflarePassed);
+    // Quad9 documents no test name, so it isn't self-tested.
+    expect(screen).toMatch(quad9Untested);
+    expect(screen).not.toContain("? redirected?");
+  });
+
+  test("a redirecting network is flagged on every screen", async () => {
+    const s = await start({
+      computer: unblockedComputer,
+      transport: redirectedDesignTransport,
+    });
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("INTERCEPTED?");
+    expect(screen).toContain("results can't be trusted");
+    expect(screen).toContain("? DNS intercepted");
+    expect(screen).toContain("untrusted");
+    expect(screen).not.toContain("NOT BLOCKED");
+    s.input.pressKey("c");
+    const connection = await s.until("self-test");
+    expect(connection).toMatch(cloudflareRedirected);
+  });
+
+  test("this computer's block stays the headline", async () => {
+    const s = await start({ transport: redirectedDesignTransport });
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("by your DNS, but by none of the filters");
+    expect(screen).toContain("? DNS intercepted");
+    expect(screen).toContain("untrusted");
+  });
+});
+
+describe("tui: copying", () => {
+  test("a result that couldn't be checked still names the detected filter", async () => {
+    const s = await start();
+    // A first check waits for the network to be detected.
+    await checkBlocked(s);
+    s.input.pressKey("/");
+    await s.input.typeText("not a name!");
+    s.input.pressEnter();
+    await s.until("not a name!");
+    s.input.pressKey("y");
+    expect(s.copied()).toStartWith(
+      "DNS filter on this computer: Telenor Nettvern"
+    );
   });
 });
 

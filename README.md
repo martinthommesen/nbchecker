@@ -43,7 +43,7 @@ table fills in as the answers arrive.
 | `↑` `↓` | Select a row and see its details: the server asked, the raw answer and why it counts as blocked or not |
 | `/` | Type a new check |
 | `r` | Check the same target again |
-| `c` | Show which filter your computer's DNS uses |
+| `c` | Show which filter your computer's DNS uses, and the self-test |
 | `y` | Copy the result as text |
 | `e` | Save the result as JSON in the current folder |
 | `?` | Help |
@@ -80,8 +80,9 @@ targets from it, one per line, and prints each result as soon as it's
 checked. With `--json`, it prints one JSON document at the end. Without
 arguments and with standard input a terminal, it opens the interactive app, or
 prints a usage error if `--json` is given or the output isn't a terminal.
-It only looks up which DNS filter your computer uses once a target can be
-checked, so a list of invalid targets needs no network; the JSON then says
+It only looks up which DNS filter your computer uses, and runs the self-test,
+once a target can be checked, so a list of invalid targets needs no network;
+the JSON then says
 `"dnsFilter": "not checked"`.
 
 "Blocked by 4 of 8 filters" counts the filters that answered. When the real
@@ -94,7 +95,7 @@ When it checks targets from arguments or standard input, the exit status is:
 |---|---|
 | 0 | Nothing is blocked |
 | 1 | Something is blocked, even if some filters didn't answer |
-| 2 | Incomplete: nothing is known to be blocked, but a check couldn't tell, for example because a filter, your own DNS or the real answer could not be reached |
+| 2 | Incomplete: nothing is known to be blocked, but a check couldn't tell, for example because a filter, your own DNS or the real answer could not be reached, or a filter failed the self-test |
 | 64 | Usage error, such as a mistyped flag |
 | 74 | The results couldn't be written, for example because the disk is full |
 
@@ -145,6 +146,43 @@ still block some of its URLs.
 The block answers of the public filters come from their documentation and
 haven't all been confirmed on a live network yet. If a result looks wrong,
 please [report it](https://github.com/martinthommesen/nbchecker/issues/new/choose).
+
+### The self-test
+
+Some networks, such as some hotels, routers, workplaces and VPNs, send every
+DNS query to their own resolver, whatever server it was sent to. Every filter
+then seems to give that resolver's answers. So once per run, and once per
+session in the interactive app, nbchecker asks each filter for a test name it
+documents as blocked, such as Cloudflare's `malware.testcategory.com` or
+Telenor's test page, and checks that every address it answers, over IPv4 and
+IPv6, is its block. Only names the
+provider itself gives as a test are used, so an honest filter doesn't fail.
+That is an A and an AAAA query to each of a filter's four servers: up to 40
+small queries per run.
+
+The self-test catches a resolver that doesn't block the test name the way the
+filter does. Plain DNS can't prove where an answer came from, so a resolver
+that happens to block the same name with the same answer, such as `0.0.0.0`,
+would still pass.
+
+- **passed**: the filter's answers count as usual.
+- **no test name**: the provider documents no test name, such as Quad9 and
+  AdGuard, so the filter isn't self-tested. Its answers count as usual,
+  except on a network that seems to intercept DNS, where they don't count
+  either.
+- **no answer**: nothing can be told either way, so its answers count as
+  usual. Telenor's filters don't answer outside Telenor's network.
+- **redirected?**: an address it answered wasn't the filter's block, so its answers seem
+  to come from another resolver. Its row says so, it counts as neither
+  blocked nor not blocked, and the check is incomplete. When at least two
+  fail, and more fail than pass, the result says DNS on this network seems
+  to be intercepted, unless a filter that passed, or your own DNS, blocks
+  the target.
+
+The `c` screen shows each filter's self-test. In the JSON, such a filter
+has `"intercepted": true`, the result's `status` is `"intercepted"` when
+most filters failed and neither a filter that passed nor your own DNS blocks,
+and the top-level `"intercepted"` lists the filters that failed.
 
 ### Things to know
 

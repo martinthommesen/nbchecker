@@ -1,6 +1,5 @@
 /** Everything the interactive screen shows, in one value. */
-import type { Connection } from "../check/connection.ts";
-import type { CheckResult } from "../check/result.ts";
+import type { CheckResult, Network } from "../check/result.ts";
 
 export type Screen = "connection" | "help" | "main";
 
@@ -9,11 +8,14 @@ export interface State {
   readonly cancelled: boolean;
   /** A check is running; `result` holds what has answered so far. */
   readonly checking: boolean;
-  /** Undefined while it is still being detected. */
-  readonly connection: Connection | undefined;
   /** How long the last check took. */
   readonly elapsedMs: number | undefined;
   readonly focus: "input" | "table";
+  /**
+   * The connection and the self-test; undefined while they are still being
+   * detected.
+   */
+  readonly network: Network | undefined;
   readonly result: CheckResult | undefined;
   readonly screen: Screen;
   /** The selected row, counted across all groups. */
@@ -28,9 +30,9 @@ export interface State {
 export const initialState = (version: string): State => ({
   cancelled: false,
   checking: false,
-  connection: undefined,
   elapsedMs: undefined,
   focus: "input",
+  network: undefined,
   result: undefined,
   screen: "main",
   selected: 0,

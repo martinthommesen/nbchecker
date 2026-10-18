@@ -3,11 +3,13 @@ import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import { CheckerOptions, check } from "../check/checker.ts";
 import type { Filter } from "../check/filters.ts";
+import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
 import { type CheckResult, cancelPending } from "../check/result.ts";
 import {
   computer,
   computerWith,
+  fakeCanary,
   fakeFilters,
   fakeTransport,
   publicTestPage,
@@ -18,6 +20,7 @@ import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 
 const ispFilter: Filter = {
+  canary: fakeCanary,
   category: "security",
   name: "ISP filter",
   network: "Telenor",
@@ -58,7 +61,12 @@ describe("exit status", () => {
     const r = await runCheck("bad.example", {
       filters: [
         ...fakeFilters,
-        { category: "ads", name: "Down", servers: ["203.0.113.1"] },
+        {
+          canary: fakeCanary,
+          category: "ads",
+          name: "Down",
+          servers: ["203.0.113.1"],
+        },
       ],
     });
     expect(r.completion).toBe("incomplete");
@@ -97,7 +105,7 @@ describe("exit status: a filter that only answers its own network", () => {
 describe("a cancelled check", () => {
   const firstReport = Effect.gen(function* () {
     const seen: CheckResult[] = [];
-    yield* check("bad.example").pipe(
+    yield* check("bad.example", detectNetwork).pipe(
       Effect.provideService(Progress, (sofar) =>
         Effect.sync(() => {
           seen.push(sofar);

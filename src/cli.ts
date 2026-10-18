@@ -1,11 +1,15 @@
 /** The nbchecker command: the interactive screen, text or JSON output. */
 import { type FileSink, stdout } from "bun";
-import { Console, Effect, Fiber, Stdio, Stream } from "effect";
+import { Console, Effect, Stdio, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { check } from "./check/checker.ts";
-import { connectionText, detectConnection } from "./check/connection.ts";
-import { normalize } from "./check/normalize.ts";
-import type { CheckResult } from "./check/result.ts";
+import { connectionText } from "./check/connection.ts";
+import { detectNetwork } from "./check/network.ts";
+import {
+  type CheckResult,
+  type Network,
+  redirectedFilters,
+} from "./check/result.ts";
 import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
 import { exitCode, toJson } from "./report/json.ts";
 import { renderText } from "./report/text.ts";
@@ -67,35 +71,29 @@ const notChecked = "not checked";
 /**
  * Checks the targets one at a time. Text is printed as each one is
  * checked, so a long list from standard input shows progress; JSON is one
- * document at the end. This computer's DNS filter is only looked up once a
- * target can be checked, so a run of invalid targets needs no network, and
- * the text header comes just before the first such result.
+ * document at the end. The network is found out once, by the first check
+ * that needs it and alongside that check's queries, so a run with no target
+ * that can be checked needs no network, and the text header comes just
+ * before the first such result.
  */
 const report = <E, R>(targets: Stream.Stream<string, E, R>, json: boolean) =>
   Effect.gen(function* () {
     const stdio = yield* Stdio.Stdio;
     const color = yield* stdio.stdoutIsTerminal;
+    const network = yield* Effect.cached(detectNetwork);
     const results: CheckResult[] = [];
-    let detection: Fiber.Fiber<string> | undefined;
-    let headerPrinted = false;
-    const header = Effect.gen(function* () {
-      if (json || headerPrinted || detection === undefined) {
-        return;
-      }
-      headerPrinted = true;
-      const dnsFilter = yield* Fiber.join(detection);
-      yield* print(`DNS filter on this computer: ${dnsFilter}\n`);
-    });
+    let detected: Network | undefined;
     yield* Stream.runForEach(targets, (target) =>
       Effect.gen(function* () {
-        if (detection === undefined && normalize(target).kind !== "invalid") {
-          detection = yield* Effect.forkScoped(
-            Effect.map(detectConnection, connectionText)
-          );
-        }
-        const result = yield* check(target);
+        const result = yield* check(target, network);
         results.push(result);
-        yield* header;
+        if (detected === undefined && result.network !== undefined) {
+          detected = result.network;
+          if (!json) {
+            const dnsFilter = connectionText(detected.connection);
+            yield* print(`DNS filter on this computer: ${dnsFilter}\n`);
+          }
+        }
         if (!json) {
           yield* print(renderText(view(result), color));
         }
@@ -103,17 +101,21 @@ const report = <E, R>(targets: Stream.Stream<string, E, R>, json: boolean) =>
     );
     if (json) {
       let dnsFilter = notChecked;
-      if (detection !== undefined) {
-        dnsFilter = yield* Fiber.join(detection);
+      if (detected !== undefined) {
+        dnsFilter = connectionText(detected.connection);
       }
-      const document = toJson({ dnsFilter, version }, results);
-      yield* print(JSON.stringify(document, null, jsonIndent));
+      const meta = {
+        dnsFilter,
+        intercepted: detected && redirectedFilters(detected),
+        version,
+      };
+      yield* print(JSON.stringify(toJson(meta, results), null, jsonIndent));
     }
     const code = exitCode(results);
     if (code !== 0) {
       return yield* Effect.fail(new ExitStatus({ code }));
     }
-  }).pipe(Effect.scoped);
+  });
 
 const handler = (input: {
   readonly json: boolean;

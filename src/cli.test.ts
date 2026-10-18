@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
-import { argv, file, sleep, spawn, spawnSync } from "bun";
+import { argv, env, file, sleep, spawn, spawnSync } from "bun";
 import { Console, Effect, Exit, Layer, Stdio, Stream } from "effect";
 import { cli } from "./cli.ts";
 import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
 import { exitIncomplete } from "./report/json.ts";
-import { computer, fakeTransport } from "./testing/fake-network.ts";
+import {
+  computer,
+  fakeFilters,
+  fakeTransport,
+} from "./testing/fake-network.ts";
 
 const bun = argv[0] ?? "bun";
 const fakeCli = `${import.meta.dir}/testing/fake-cli.ts`;
@@ -15,6 +19,8 @@ const pipeBuffer = 65_536;
 const jsonTargets = 250;
 const textTargets = 2000;
 const waitMs = 3000;
+/** How the fake network says it was asked a name. */
+const asked = "asked ";
 
 /** Runs nbchecker on the fake network as a real process. */
 const run = (args: readonly string[], stdin = new Blob()) =>
@@ -193,5 +199,80 @@ describe("connection detection", () => {
     expect(parsed.dnsFilter).toBe("Telenor Nettvern+");
     const text = await new Response(run(["good.example"]).stdout).text();
     expect(text).toStartWith("DNS filter on this computer: Telenor Nettvern+");
+  });
+});
+
+/**
+ * Runs nbchecker as a real process and returns its output, its exit status
+ * and the names it asked over the network.
+ */
+const runRecorded = async (args: readonly string[], network = "honest") => {
+  const proc = spawn([bun, fakeCli, ...args], {
+    env: {
+      ...env,
+      ...Object.fromEntries([
+        ["NBCHECKER_FAKE_NETWORK", network],
+        ["NBCHECKER_FAKE_QUERIES", "1"],
+      ]),
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  const queries = err
+    .split("\n")
+    .filter((l) => l.startsWith(asked))
+    .map((l) => l.slice(asked.length));
+  return { code, out, queries };
+};
+
+describe("cli: the network is found out once per run", () => {
+  test("a run with no target that can be checked asks nothing", async () => {
+    const r = await runRecorded(["--json", "not a name!"]);
+    expect(r.queries).toEqual([]);
+    expect(JSON.parse(r.out)).toMatchObject({ dnsFilter: "not checked" });
+    expect(JSON.parse(r.out)).not.toHaveProperty("intercepted");
+    const text = await runRecorded(["not a name!"]);
+    expect(text.queries).toEqual([]);
+    expect(text.out).not.toContain("DNS filter on this computer");
+  });
+
+  test("the self-test and test page are asked once for many targets", async () => {
+    const r = await runRecorded([
+      "good.example",
+      "bad.example",
+      "mail.example",
+    ]);
+    expect(r.out).toStartWith("DNS filter on this computer: Telenor Nettvern+");
+    const canaries = r.queries.filter((q) => q === "canary.example");
+    // An A and an AAAA query to each of the fake filters' servers.
+    const servers = fakeFilters.flatMap((f) => f.servers);
+    expect(canaries).toHaveLength(servers.length * 2);
+    expect(r.queries.filter((q) => q === "nettvern.telenor.net")).toHaveLength(
+      1
+    );
+  });
+});
+
+describe("cli: intercepted DNS", () => {
+  test("an honest network lists no filter as intercepted", async () => {
+    const r = await runRecorded(["--json", "good.example"]);
+    expect(JSON.parse(r.out)).toMatchObject({ intercepted: [] });
+    expect(r.code).toBe(0);
+  });
+
+  test("a redirecting network warns, lists the filters and exits 2", async () => {
+    const r = await runRecorded(["--json", "good.example"], "redirecting");
+    expect(JSON.parse(r.out)).toMatchObject({
+      intercepted: ["Security filter", "Family filter"],
+      results: [{ status: "intercepted" }],
+    });
+    expect(r.code).toBe(exitIncomplete);
+    const text = await runRecorded(["good.example"], "redirecting");
+    expect(text.out).toContain("DNS on this network seems to be intercepted");
   });
 });

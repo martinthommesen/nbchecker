@@ -1,6 +1,12 @@
 /** The --json output and the exit status. */
 import type { Verdict } from "../check/classify.ts";
-import { type CheckResult, isBlocked, type Outcome } from "../check/result.ts";
+import type { Filter } from "../check/filters.ts";
+import {
+  type CheckResult,
+  isBlocked,
+  isRedirected,
+  type Outcome,
+} from "../check/result.ts";
 import { statusOf } from "./status.ts";
 
 interface JsonVerdict {
@@ -10,6 +16,11 @@ interface JsonVerdict {
   readonly error?: string;
   /** Sent through an inspection proxy, which may still block some URLs. */
   readonly inspected?: boolean;
+  /**
+   * It failed the self-test, so its answers seem to come from another
+   * resolver and don't count.
+   */
+  readonly intercepted?: boolean;
   readonly reason?: string;
   readonly server?: string;
 }
@@ -43,6 +54,13 @@ const outcomeJson = (o: Outcome): JsonVerdict => {
   return { ...verdictFields(o.verdict), server: o.exchange.server };
 };
 
+const filterJson = (r: CheckResult, f: Filter, o: Outcome): JsonVerdict => {
+  if (isRedirected(r, f)) {
+    return { ...outcomeJson(o), blocked: false, intercepted: true };
+  }
+  return outcomeJson(o);
+};
+
 const resultJson = (r: CheckResult) => ({
   blocked: isBlocked(r),
   completion: r.completion,
@@ -52,7 +70,7 @@ const resultJson = (r: CheckResult) => ({
   filters: r.filters.map((f) => ({
     category: f.filter.category,
     name: f.filter.name,
-    ...outcomeJson(f.outcome),
+    ...filterJson(r, f.filter, f.outcome),
   })),
   host: r.host,
   isIp: r.isIp,
@@ -82,7 +100,15 @@ export const exitCode = (results: readonly CheckResult[]): number => {
   return 0;
 };
 
+/**
+ * The whole document. `intercepted` lists the filters that failed the
+ * self-test; it is left out when the self-test didn't run.
+ */
 export const toJson = (
-  meta: { readonly dnsFilter: string; readonly version: string },
+  meta: {
+    readonly dnsFilter: string;
+    readonly intercepted?: readonly string[] | undefined;
+    readonly version: string;
+  },
   results: readonly CheckResult[]
 ) => ({ ...meta, results: results.map(resultJson) });

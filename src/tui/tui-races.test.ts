@@ -13,6 +13,8 @@ const slowTransport = slowDesignTransportBy(`${slowMs} millis`);
 const endMs = 1000;
 const firstDetectionMs = 800;
 const laterDetectionMs = 10;
+const detectAgain = 4;
+const settleMs = 100;
 
 let current: TuiSession | undefined;
 
@@ -50,6 +52,73 @@ const changingComputer = Layer.sync(Dns.Dns, () => {
       }
       return Effect.delay(later.lookup(host), laterDetectionMs);
     },
+  });
+});
+
+/** Longer than a test waits for the screen, so only a later lookup helps. */
+const stuckMs = 5000;
+
+/**
+ * A resolver whose first test-page lookup takes `stuckMs` and whose later
+ * ones are quick. `inFlight` counts the test-page lookups still running.
+ */
+const stuckFirstComputer = () => {
+  const counter = { inFlight: 0 };
+  const layer = Layer.sync(Dns.Dns, () => {
+    const zoned = zone("148.123.15.38");
+    let lookups = 0;
+    return Dns.make({
+      lookup: (host, family) => {
+        if (host !== "nettvern.telenor.net") {
+          return zoned.lookup(host, { ...(family && { family }) });
+        }
+        lookups += 1;
+        let delay = laterDetectionMs;
+        if (lookups === 1) {
+          delay = stuckMs;
+        }
+        return Effect.sync(() => {
+          counter.inFlight += 1;
+        }).pipe(
+          Effect.andThen(Effect.delay(zoned.lookup(host), delay)),
+          Effect.ensuring(
+            Effect.sync(() => {
+              counter.inFlight -= 1;
+            })
+          )
+        );
+      },
+    });
+  });
+  return { counter, layer };
+};
+
+describe("tui when detecting again", () => {
+  test("the detection it replaces is stopped", async () => {
+    const { counter, layer } = stuckFirstComputer();
+    const s = await startTui({ computer: layer });
+    current = s;
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    s.input.pressKey("c");
+    for (let i = 0; i < detectAgain; i += 1) {
+      s.input.pressKey("r");
+    }
+    await s.until("get Nettvern's answers");
+    await sleep(settleMs);
+    expect(counter.inFlight).toBe(0);
+  });
+
+  test("a check waiting for the stopped detection still finishes", async () => {
+    const { layer } = stuckFirstComputer();
+    const s = await startTui({ computer: layer });
+    current = s;
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    s.input.pressKey("c");
+    s.input.pressKey("r");
+    s.input.pressEscape();
+    await s.until("BLOCKED");
   });
 });
 

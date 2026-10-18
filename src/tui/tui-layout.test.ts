@@ -35,6 +35,12 @@ const longAnswers = Layer.succeed(DnsTransport, {
   doh: (_url, name, type) => Effect.succeed(answerOf(name, type)),
 });
 
+/**
+ * Shown once a check is done. With every answer the same, the self-test
+ * fails too, so the verdict is "intercepted" rather than "blocked".
+ */
+const checked = "checked 12 resolvers";
+
 let current: TuiSession | undefined;
 
 const start = async (options?: Parameters<typeof startTui>[0]) => {
@@ -72,7 +78,7 @@ const detailsOf = (screen: string): string => {
 describe("tui messages and keys", () => {
   test("the saved message shows on a 120 by 40 terminal", async () => {
     const s = await start({ transport: longAnswers });
-    await check(s, "BLOCKED");
+    await check(s, checked);
     s.input.pressArrow("down");
     s.input.pressKey("e");
     await s.until(`saved nbchecker-${blockedName}.json`);
@@ -120,7 +126,7 @@ describe("tui scrolling", () => {
 
   test("long answers wrap in the details pane", async () => {
     const s = await start({ height: 60, transport: longAnswers });
-    await check(s, "BLOCKED");
+    await check(s, checked);
     s.input.pressArrow("down");
     const screen = await s.until("192.0.2.12");
     expect(detailsOf(screen)).toContain(`AAAA${longAddress}`);

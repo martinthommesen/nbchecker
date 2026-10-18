@@ -6,6 +6,7 @@ import { describe, type Verdict } from "../check/classify.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
+  isRedirected,
   type Outcome,
   shouldAnswer,
   truthCancelled,
@@ -114,6 +115,32 @@ const outcomeRow = (
   return { icon: "✓", name, text: describe(v), tone: "ok" };
 };
 
+/**
+ * The row of a filter that failed the self-test: its answers seem to come
+ * from another resolver, so they say nothing about the filter.
+ */
+const redirectedRow = (name: string, outcome: Outcome): Row => {
+  let detail = "";
+  if (outcome.kind === "answered") {
+    detail = shortList(outcome.verdict.answers, maxAnswers);
+  }
+  return {
+    detail,
+    icon: "?",
+    name,
+    text: `answers don't look like they come from ${name}: DNS may be redirected on this network`,
+    tone: "warn",
+  };
+};
+
+const filterRow = (r: CheckResult, filter: Filter, outcome: Outcome): Row => {
+  // Only an answer can come from another resolver; no answer is just that.
+  if (outcome.kind === "answered" && isRedirected(r, filter)) {
+    return redirectedRow(filter.name, outcome);
+  }
+  return outcomeRow(filter.name, outcome, r, filter);
+};
+
 const summaryLooks: Record<StatusKind, { icon: string; tone: Tone }> = {
   blocked: { icon: "✗", tone: "blocked" },
   "blocked-here": { icon: "✗", tone: "blocked" },
@@ -121,6 +148,7 @@ const summaryLooks: Record<StatusKind, { icon: string; tone: Tone }> = {
   "cant-tell": { icon: "?", tone: "warn" },
   error: { icon: "?", tone: "warn" },
   inspected: { icon: "!", tone: "warn" },
+  intercepted: { icon: "?", tone: "warn" },
   "local-only": { icon: "–", tone: "dim" },
   missing: { icon: "–", tone: "dim" },
   "no-answer": { icon: "?", tone: "warn" },
@@ -175,7 +203,7 @@ const filterSections = (r: CheckResult): Section[] =>
       lines: [],
       rows: r.filters
         .filter((f) => f.filter.category === category)
-        .map((f) => outcomeRow(f.filter.name, f.outcome, r, f.filter)),
+        .map((f) => filterRow(r, f.filter, f.outcome)),
       title: categoryTitles[category],
     }))
     .filter((s) => s.rows.length > 0);

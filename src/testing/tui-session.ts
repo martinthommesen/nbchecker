@@ -28,6 +28,8 @@ interface Options {
 }
 
 interface TuiSession {
+  /** What was last copied to the clipboard. */
+  readonly copied: () => string | undefined;
   /** Resolves when the app has stopped by itself, such as after quitting. */
   readonly ended: Promise<void>;
   readonly frame: () => Promise<string>;
@@ -46,6 +48,11 @@ const startTui = async ({
   width = 120,
 }: Options = {}): Promise<TuiSession> => {
   const setup = await createTestRenderer({ height, width });
+  let copied: string | undefined;
+  setup.renderer.copyToClipboardOSC52 = (text: string) => {
+    copied = text;
+    return true;
+  };
   const fiber = runTui("0.0.0").pipe(
     Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
     Effect.provide(
@@ -72,6 +79,7 @@ const startTui = async ({
     Effect.runPromise(Fiber.interrupt(fiber)).then(() => undefined);
   const ended = Effect.runPromise(Fiber.await(fiber)).then(() => undefined);
   return {
+    copied: () => copied,
     ended,
     frame,
     input: setup.mockInput,
