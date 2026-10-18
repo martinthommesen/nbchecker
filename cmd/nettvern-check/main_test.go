@@ -87,3 +87,12 @@ func TestJSONIncludesTruthError(t *testing.T) {
 		t.Errorf("JSON lacks the truth error: %s", b)
 	}
 }
+
+func TestShortList(t *testing.T) {
+	if got := shortList([]string{"a", "b"}, 4); got != "a, b" {
+		t.Errorf("got %q", got)
+	}
+	if got := shortList([]string{"a", "b", "c", "d", "e", "f"}, 4); got != "a, b, c, d and 2 more" {
+		t.Errorf("got %q", got)
+	}
+}

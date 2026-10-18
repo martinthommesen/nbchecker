@@ -167,11 +167,20 @@ func printResult(w io.Writer, r check.Result) {
 	case !r.Exists:
 		o.f("  %-15s the domain does not exist\n", "Real answer:")
 	default:
-		o.f("  %-15s %s\n", "Real answer:", strings.Join(r.Truth, ", "))
+		o.f("  %-15s %s\n", "Real answer:", shortList(r.Truth, 4))
 	}
 	if allFiltersFailed(r) {
 		o.ln("  Telenor's DNS servers did not answer. They only answer Telenor customers, so run this on a Telenor connection, with any work VPN switched off.")
 	}
+}
+
+// shortList joins the first n items and counts the rest, so big CDN
+// answers stay on one line.
+func shortList(items []string, n int) string {
+	if len(items) <= n {
+		return strings.Join(items, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(items[:n], ", "), len(items)-n)
 }
 
 func filterLine(f check.FilterResult) string {
