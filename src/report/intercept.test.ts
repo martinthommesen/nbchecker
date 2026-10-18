@@ -197,3 +197,28 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
     expect(why).toContain("same block answer as Family filter");
   });
 });
+
+describe("intercepted DNS: filters without a test name", () => {
+  test("don't count on a network that seems intercepted", async () => {
+    const [security] = fakeFilters as [Filter, Filter];
+    const { canary: _, ...untested } = security;
+    const r = await runCheck("bad.example", {
+      dns: redirectedComputer,
+      filters: [...fakeFilters, { ...untested, name: "Untested filter" }],
+      transport: redirectingTransport(),
+    });
+    expect(statusOf(r).kind).toBe("intercepted");
+    const filters = json(r).results[0]?.filters ?? [];
+    expect(filters.map((f) => f.intercepted)).toEqual([true, true, true]);
+    expect(exitCode([r])).toBe(exitIncomplete);
+  });
+
+  test("count as usual where DNS isn't intercepted", async () => {
+    const [security] = fakeFilters as [Filter, Filter];
+    const { canary: _, ...untested } = security;
+    const r = await runCheck("bad.example", {
+      filters: [...fakeFilters, { ...untested, name: "Untested filter" }],
+    });
+    expect(text(r)).toContain("✗ blocked by 3 of 3 filters");
+  });
+});

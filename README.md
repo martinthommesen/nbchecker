@@ -152,7 +152,9 @@ small queries per run.
 
 - **passed**: the filter's answers count as usual.
 - **no test name**: the provider documents no test name, such as Quad9 and
-  AdGuard, so the filter isn't self-tested and its answers count as usual.
+  AdGuard, so the filter isn't self-tested. Its answers count as usual,
+  except on a network that seems to intercept DNS, where they don't count
+  either.
 - **no answer**: nothing can be told either way, so its answers count as
   usual. Telenor's filters don't answer outside Telenor's network.
 - **redirected?**: the answer wasn't the filter's block, so its answers seem

@@ -126,19 +126,6 @@ export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
   return c.network === f.network;
 };
 
-/**
- * Whether a filter failed the self-test, so its answers seem to come from
- * somewhere else and say nothing about the filter.
- */
-export const isRedirected = (r: CheckResult, f: Filter): boolean =>
-  r.network?.selfTests.some(
-    (t) => t.filter === f.name && t.result === "redirected"
-  ) ?? false;
-
-/** The filters whose answers count: all but those that failed the self-test. */
-export const trustedFilters = (r: CheckResult): readonly FilterResult[] =>
-  r.filters.filter((f) => !isRedirected(r, f.filter));
-
 /** The filters that failed the self-test. */
 export const redirectedFilters = (n: Network): readonly string[] =>
   n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
@@ -155,6 +142,23 @@ export const seemsIntercepted = (n: Network | undefined): boolean => {
   const redirected = redirectedFilters(n).length;
   return redirected >= minRedirected && redirected > passed;
 };
+
+/**
+ * Whether a filter's answers seem to come from somewhere else and say
+ * nothing about the filter: it failed the self-test, or it has none on a
+ * network that seems to intercept DNS.
+ */
+export const isRedirected = (r: CheckResult, f: Filter): boolean => {
+  const test = r.network?.selfTests.find((t) => t.filter === f.name);
+  if (test?.result === "redirected") {
+    return true;
+  }
+  return test?.result === "untested" && seemsIntercepted(r.network);
+};
+
+/** The filters whose answers count: all but those that seem redirected. */
+export const trustedFilters = (r: CheckResult): readonly FilterResult[] =>
+  r.filters.filter((f) => !isRedirected(r, f.filter));
 
 /**
  * Works out whether everything that should have answered did, with answers

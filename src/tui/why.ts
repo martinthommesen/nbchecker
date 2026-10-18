@@ -74,8 +74,12 @@ const verdictWhy = (name: string, v: Verdict, r: CheckResult): string => {
 };
 
 /** Why a filter that failed the self-test doesn't count. */
-const redirectedWhy = (f: Filter): string =>
-  `nbchecker asked ${f.name} for its test name ${f.canary?.name ?? ""} and didn't get the answer ${f.name} gives for it. So its answers don't look like they come from ${f.name}: DNS may be redirected on this network, to a resolver of its own. They don't count, and the check is incomplete.`;
+const redirectedWhy = (f: Filter): string => {
+  if (f.canary === undefined) {
+    return `DNS on this network seems to be intercepted, and ${f.name} has no test name to show whether its answers are its own. They don't count, and the check is incomplete.`;
+  }
+  return `nbchecker asked ${f.name} for its test name ${f.canary.name} and didn't get the answer ${f.name} gives for it. So its answers don't look like they come from ${f.name}: DNS may be redirected on this network, to a resolver of its own. They don't count, and the check is incomplete.`;
+};
 
 /** Why a filter's row reads as it does. */
 const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {

@@ -1,6 +1,11 @@
 /** The filtering DNS services nbchecker asks. */
 
 /** What a filter blocks; results are grouped by this, not by provider. */
+/** Umbrella's block pages, 146.112.61.104 to .110, as OpenDNS answers. */
+const umbrellaBlock = ["104", "105", "106", "107", "108", "109", "110"].map(
+  (n) => `146.112.61.${n}`
+);
+
 /** Cloudflare's filters answer a blocked name with these. */
 const cloudflareBlock = ["0.0.0.0", "::"];
 
@@ -100,8 +105,8 @@ export const filters: readonly Filter[] = [
     servers: ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"],
   },
   {
-    // Umbrella's block page for a content category.
-    canary: { answers: ["146.112.61.106"], name: "exampleadultsite.com" },
+    // Any of Umbrella's block pages; a content category usually gets .106.
+    canary: { answers: umbrellaBlock, name: "exampleadultsite.com" },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [
