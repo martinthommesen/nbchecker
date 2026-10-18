@@ -6,6 +6,7 @@ import {
   computer,
   fakeFilters,
   fakeTransport,
+  testPageName,
 } from "../testing/fake-network.ts";
 import { cli } from "./command.ts";
 import {
@@ -255,9 +256,7 @@ describe("the network is found out once per run", () => {
     // An A and an AAAA query to each of the fake filters' servers.
     const servers = fakeFilters.flatMap((f) => f.servers);
     expect(canaries).toHaveLength(servers.length * 2);
-    expect(r.queries.filter((q) => q === "nettvern.telenor.net")).toHaveLength(
-      1
-    );
+    expect(r.queries.filter((q) => q === testPageName)).toHaveLength(1);
   });
 });
 

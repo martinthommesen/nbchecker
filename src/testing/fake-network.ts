@@ -1,4 +1,9 @@
-/** A small fake internet for tests: two filters and an unfiltered resolver. */
+/**
+ * A small fake internet for tests: the zones its resolvers answer from, the
+ * transports that serve them (honest, redirecting or rewriting), filters to
+ * check, unfiltered resolvers for the real answer, the options a check uses,
+ * and computers whose own DNS answers or fails.
+ */
 import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import type { Category, Filter } from "../check/filters.ts";
@@ -29,6 +34,15 @@ const lookup = (zone: Zone, name: string, type: QueryType): DnsAnswer => {
 /** The name the fake filters document as blocked, for the self-test. */
 const canaryName = "canary.example";
 
+/** Telenor's test page, whose answer tells Telenor's filters apart. */
+const testPageName = "nettvern.telenor.net";
+/** Telenor's test page, as Nettvern answers it. */
+const nettvernTestPage = "148.123.15.38";
+/** Telenor's test page, as Nettvern+ answers it. */
+const nettvernPlusTestPage = "148.123.15.1";
+/** Telenor's test page, as every resolver but Telenor's filters answers it. */
+const publicTestPage = "148.123.15.37";
+
 const real: Zone = {
   "adult.example": [a("adult.example", "192.0.2.40")],
   "bad.example": [a("bad.example", "192.0.2.10")],
@@ -37,8 +51,7 @@ const real: Zone = {
   "grey.example": [a("grey.example", "192.0.2.30")],
   // Exists, but with no address, like a name with only TXT or MX records.
   "mail.example": [],
-  // Telenor's test page, as every resolver but Telenor's filters answers it.
-  "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.37")],
+  [testPageName]: [a(testPageName, publicTestPage)],
   "policy.example": [a("policy.example", "192.0.2.50")],
   "refused.example": [a("refused.example", "192.0.2.60")],
   // Only an IPv6 address.
@@ -59,8 +72,7 @@ const security: Zone = {
   ],
   // Cisco's inspection proxy.
   "grey.example": [a("grey.example", "146.112.56.167")],
-  // Telenor's test page, as Nettvern answers it.
-  "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.38")],
+  [testPageName]: [a(testPageName, nettvernTestPage)],
   // Extended DNS Error text that tries to add a line to the output.
   "newline.example": noRecords(Rcode.noError, {
     code: Ede.blocked,
@@ -188,7 +200,7 @@ export const untestedSecurityFilter: Filter = {
  * is Telenor's test page with Nettvern's answer.
  */
 export const ispFilter: Filter = {
-  canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
+  canary: { answers: [nettvernTestPage], name: testPageName },
   category: "security",
   name: "ISP filter",
   onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
@@ -206,7 +218,7 @@ export const fakeOptions: CheckerOptions = {
  * gives `testPage` for Telenor's test page: by default Nettvern+'s answer,
  * so it is on Telenor's network.
  */
-export const computerWith = (testPage = "148.123.15.1") =>
+export const computerWith = (testPage = nettvernPlusTestPage) =>
   Dns.layerStatic({
     hosts: {
       "adult.example": ["94.140.14.35"],
@@ -214,7 +226,7 @@ export const computerWith = (testPage = "148.123.15.1") =>
       "good.example": ["192.0.2.20"],
       "grey.example": ["192.0.2.30"],
       "host.example": ["192.0.2.99"],
-      "nettvern.telenor.net": [testPage],
+      [testPageName]: [testPage],
       "policy.example": ["192.0.2.50"],
       // A name only this computer knows, as with split DNS.
       "private.example": ["192.0.2.77"],
@@ -240,15 +252,16 @@ export const failingComputer = Layer.succeed(
   })
 );
 
-/** Telenor's test page answer away from Telenor's filters. */
-export const publicTestPage = "148.123.15.37";
-
 export {
   downRealAnswerUrl,
   fakeCanary,
   fakeFilter,
   familyFilter,
+  nettvernPlusTestPage,
+  nettvernTestPage,
   noAaaaRealAnswerUrl,
+  publicTestPage,
   realAnswerUrl,
   securityFilter,
+  testPageName,
 };

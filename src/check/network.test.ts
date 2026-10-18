@@ -8,9 +8,11 @@ import {
   fakeOptions,
   fakeTransport,
   familyFilter,
-  ispFilter,
+  nettvernPlusTestPage,
+  nettvernTestPage,
   redirectingTransport,
   securityFilter,
+  testPageName,
   untestedSecurityFilter,
 } from "../testing/fake-network.ts";
 import { a, aaaa, answer } from "../testing/records.ts";
@@ -19,12 +21,15 @@ import type { Filter } from "./filters.ts";
 import { detectNetwork } from "./network.ts";
 import { CheckerOptions } from "./options.ts";
 
-const testPage = "nettvern.telenor.net";
-
-/** A Telenor filter whose server, 192.0.2.53, gives Nettvern's answer. */
+/**
+ * A Telenor filter that expects `ip` for Telenor's test page. Its server,
+ * 192.0.2.53 by default, gives Nettvern's answer.
+ */
 const telenor = (ip: string, servers = ["192.0.2.53"]): Filter => ({
-  ...ispFilter,
-  canary: { answers: [ip], name: testPage },
+  canary: { answers: [ip], name: testPageName },
+  category: "security",
+  name: "Telenor filter",
+  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
   servers,
 });
 
@@ -105,21 +110,21 @@ describe("self-test", () => {
   });
 
   test("Telenor's filters must answer their own test page address", async () => {
-    expect(await results(fakeTransport, [telenor("148.123.15.38")])).toEqual([
-      "passed",
-    ]);
+    const nettvern = telenor(nettvernTestPage);
+    expect(await results(fakeTransport, [nettvern])).toEqual(["passed"]);
     // Nettvern's answer where Nettvern+'s was expected.
-    expect(await results(fakeTransport, [telenor("148.123.15.1")])).toEqual([
+    const nettvernPlus = telenor(nettvernPlusTestPage);
+    expect(await results(fakeTransport, [nettvernPlus])).toEqual([
       "redirected",
     ]);
     // The public answer, as a redirecting network gives it.
-    expect(
-      await results(redirectingTransport(), [telenor("148.123.15.38")])
-    ).toEqual(["redirected"]);
+    expect(await results(redirectingTransport(), [nettvern])).toEqual([
+      "redirected",
+    ]);
   });
 
   test("Telenor's filters not answering off its network is no answer", async () => {
-    const off = telenor("148.123.15.38", ["203.0.113.1"]);
+    const off = telenor(nettvernTestPage, ["203.0.113.1"]);
     expect(await results(fakeTransport, [off])).toEqual(["no-answer"]);
   });
 });
