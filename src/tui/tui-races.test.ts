@@ -6,6 +6,11 @@ import {
   designComputer,
   slowDesignTransportBy,
 } from "../testing/design-network.ts";
+import {
+  nettvernPlusTestPage,
+  nettvernTestPage,
+  testPageName,
+} from "../testing/fake-network.ts";
 import { useTui } from "../testing/tui-session.ts";
 
 const slowMs = 500;
@@ -17,11 +22,6 @@ const laterDetectionMs = 10;
 const stuckMs = 5000;
 const detectAgain = 4;
 const settleMs = 100;
-
-const testPage = "nettvern.telenor.net";
-/** Telenor's test page, as Nettvern and Nettvern+ answer it. */
-const nettvern = "148.123.15.38";
-const nettvernPlus = "148.123.15.1";
 
 const start = useTui();
 
@@ -45,17 +45,17 @@ const testPageComputer = (lookups: {
     Dns.Dns,
     Effect.gen(function* () {
       const design = yield* Dns.Dns;
-      let count = 0;
+      let started = 0;
       const next = () => {
-        count += 1;
-        if (count === 1) {
+        started += 1;
+        if (started === 1) {
           return lookups.first;
         }
         return lookups.later;
       };
       return Dns.make({
         lookup: (host, family) => {
-          if (host !== testPage) {
+          if (host !== testPageName) {
             return design.lookup(host, { ...(family && { family }) });
           }
           const { answer, ms } = next();
@@ -80,8 +80,8 @@ const testPageComputer = (lookups: {
 /** A first detection that never ends in time, then quick ones. */
 const stuckFirstComputer = () =>
   testPageComputer({
-    first: { answer: nettvern, ms: stuckMs },
-    later: { answer: nettvern, ms: laterDetectionMs },
+    first: { answer: nettvernTestPage, ms: stuckMs },
+    later: { answer: nettvernTestPage, ms: laterDetectionMs },
   });
 
 describe("tui when detecting again", () => {
@@ -111,8 +111,7 @@ describe("tui when detecting again", () => {
 describe("tui with work in flight", () => {
   test("checking again during a check shows the new check's verdict", async () => {
     const s = await start({ transport: slowTransport });
-    await s.check();
-    await s.until("answered");
+    await s.check({ until: "answered" });
     s.input.pressKey("r");
     const screen = await s.until("by 8 of 9 filters");
     expect(screen).not.toContain("CANCELLED");
@@ -121,12 +120,11 @@ describe("tui with work in flight", () => {
   test("only the latest connection detection is shown", async () => {
     // The first detection is slow and says Nettvern; later ones say Nettvern+.
     const { layer } = testPageComputer({
-      first: { answer: nettvern, ms: firstDetectionMs },
-      later: { answer: nettvernPlus, ms: laterDetectionMs },
+      first: { answer: nettvernTestPage, ms: firstDetectionMs },
+      later: { answer: nettvernPlusTestPage, ms: laterDetectionMs },
     });
     const s = await start({ computer: layer });
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressKey("c");
     s.input.pressKey("r");
     await s.until("get Nettvern+'s answers");

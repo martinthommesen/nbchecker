@@ -32,9 +32,19 @@ interface Options {
   readonly width?: number;
 }
 
+interface CheckOptions {
+  /** What to type; the blocked name by default. */
+  readonly target?: string;
+  /** Text to wait for once enter is pressed. */
+  readonly until?: string;
+}
+
 interface TuiSession {
-  /** Types a target, the blocked name by default, and presses enter. */
-  readonly check: (target?: string) => Promise<void>;
+  /**
+   * Types a target and presses enter, then waits for `until` if given, and
+   * returns the screen.
+   */
+  readonly check: (options?: CheckOptions) => Promise<string>;
   /** What was last copied to the clipboard. */
   readonly copied: () => string | undefined;
   /** Whether the app stops by itself, as after quitting, within `ms`. */
@@ -100,9 +110,13 @@ const startTui = async ({
   };
   const ended = Effect.runPromise(Fiber.await(fiber)).then(() => undefined);
   return {
-    check: async (target = blockedName) => {
+    check: async ({ target = blockedName, until } = {}) => {
       await input.typeText(target);
       input.pressEnter();
+      if (until === undefined) {
+        return frame();
+      }
+      return waitFor(frame, until);
     },
     copied,
     endsWithin: (ms) =>

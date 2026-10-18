@@ -62,8 +62,7 @@ const detailsOf = (screen: string): string => {
 describe("tui messages and keys", () => {
   test("the saved message shows on a 120 by 40 terminal", async () => {
     const s = await start({ transport: longAnswers });
-    await s.check();
-    await s.until(checked);
+    await s.check({ target: blockedName, until: checked });
     s.input.pressArrow("down");
     s.input.pressKey("e");
     await s.until(`saved nbchecker-${blockedName}.json`);
@@ -72,15 +71,13 @@ describe("tui messages and keys", () => {
   test("the keys stay visible on a 40 by 12 terminal", async () => {
     const s = await start(tiny);
     await s.until("ctrl+c");
-    await s.check();
-    await s.until(quitKey);
+    await s.check({ until: quitKey });
   });
 
   test("the keys stay visible on an 80 by 24 terminal", async () => {
     const s = await start(small);
     await s.until("ctrl+c");
-    await s.check();
-    const screen = await s.until(quitKey);
+    const screen = await s.check({ until: quitKey });
     // The table's column titles aren't drawn over by its rows.
     expect(screen).toContain("resolver");
   });
@@ -89,8 +86,7 @@ describe("tui messages and keys", () => {
 describe("tui scrolling", () => {
   test("help scrolls to its last line on an 80 by 24 terminal", async () => {
     const s = await start(small);
-    await s.check();
-    await s.until(quitKey);
+    await s.check({ until: quitKey });
     s.input.pressKey("?");
     const screen = await s.until("scroll");
     expect(screen).not.toContain("Press esc or ? to go back.");
@@ -100,8 +96,7 @@ describe("tui scrolling", () => {
 
   test("the connection screen scrolls on an 80 by 24 terminal", async () => {
     const s = await start(small);
-    await s.check();
-    await s.until(quitKey);
+    await s.check({ until: quitKey });
     s.input.pressKey("c");
     const screen = await s.until("scroll");
     expect(screen).not.toContain("computer is blocked.");
@@ -115,8 +110,7 @@ describe("tui scrolling", () => {
 
   test("long answers wrap in the details pane", async () => {
     const s = await start({ height: 60, transport: longAnswers });
-    await s.check();
-    await s.until(checked);
+    await s.check({ until: checked });
     s.input.pressArrow("down");
     const screen = await s.until("192.0.2.12");
     expect(detailsOf(screen)).toContain(`AAAA${longAddress}`);

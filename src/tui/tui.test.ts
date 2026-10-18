@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   blockedName,
   designComputerWith,
+  realAddress,
   redirectedDesignTransport,
   slowDesignTransport,
 } from "../testing/design-network.ts";
@@ -18,7 +19,7 @@ const cloudflareRedirected =
   /Cloudflare Family\s+no test page\s+\? redirected\?/u;
 
 /** On Telenor's network with Nettvern, but its DNS doesn't block the name. */
-const unblockedComputer = designComputerWith("203.0.113.42");
+const unblockedComputer = designComputerWith(realAddress);
 
 const start = useTui();
 
@@ -33,18 +34,16 @@ describe("tui", () => {
 
   test("checks a domain and shows each resolver's verdict", async () => {
     const s = await start();
-    await s.check();
-    const screen = await s.until("BLOCKED");
+    const screen = await s.check({ until: "BLOCKED" });
     expect(screen).toContain("by 8 of 9 filters");
     expect(screen).toContain("CNAME nettvern-info.telenor.net");
     expect(screen).toContain("NXDOMAIN · EDE 15");
-    expect(screen).toContain("real answer: 203.0.113.42");
+    expect(screen).toContain(`real answer: ${realAddress}`);
   });
 
   test("the details pane follows the selection", async () => {
     const s = await start();
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressArrow("down");
     const screen = await s.until("cloudflare-dns.com");
     expect(screen).toContain("HTTPS 443");
@@ -52,8 +51,7 @@ describe("tui", () => {
 
   test("a cancelled check shows no verdict", async () => {
     const s = await start({ transport: slowDesignTransport });
-    await s.check();
-    await s.until("answered");
+    await s.check({ until: "answered" });
     s.input.pressEscape();
     const screen = await s.until("CANCELLED");
     expect(screen).not.toContain("NOT BLOCKED");
@@ -62,8 +60,7 @@ describe("tui", () => {
 
   test("shows the connection screen and goes back", async () => {
     const s = await start();
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressKey("c");
     const screen = await s.until("Filters we look for");
     expect(screen).toContain("can't see");
@@ -75,8 +72,7 @@ describe("tui", () => {
 describe("tui while typing a target", () => {
   test("leaving a new check shows the checked domain again", async () => {
     const s = await start();
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ target: blockedName, until: "BLOCKED" });
     s.input.pressKey("/");
     await s.until("a domain, URL or IP address");
     s.input.pressEscape();
@@ -86,12 +82,13 @@ describe("tui while typing a target", () => {
 
   test("the / that starts a new check isn't typed into it", async () => {
     const s = await start();
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressKey("/");
     await s.until("a domain, URL or IP address");
-    await s.check("example.com");
-    const screen = await s.until("A + AAAA example.com");
+    const screen = await s.check({
+      target: "example.com",
+      until: "A + AAAA example.com",
+    });
     expect(screen).not.toContain("/example.com");
     expect(screen).toContain("› example.com");
   });
@@ -101,16 +98,14 @@ describe("tui while typing a target", () => {
     await s.until("Quad9");
     s.input.pressEscape();
     expect(await s.endsWithin(settleMs)).toBe(false);
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
   });
 });
 
 describe("tui: the self-test", () => {
   test("the connection screen lists each filter's self-test", async () => {
     const s = await start();
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressKey("c");
     const screen = await s.until("✓ passed");
     expect(screen).toMatch(cloudflarePassed);
@@ -124,8 +119,7 @@ describe("tui: the self-test", () => {
       computer: unblockedComputer,
       transport: redirectedDesignTransport,
     });
-    await s.check();
-    const screen = await s.until("INTERCEPTED?");
+    const screen = await s.check({ until: "INTERCEPTED?" });
     expect(screen).toContain("results can't be trusted");
     expect(screen).toContain("? DNS intercepted");
     expect(screen).toContain("untrusted");
@@ -137,8 +131,9 @@ describe("tui: the self-test", () => {
 
   test("this computer's block stays the headline", async () => {
     const s = await start({ transport: redirectedDesignTransport });
-    await s.check();
-    const screen = await s.until("by your DNS, but by none of the filters");
+    const screen = await s.check({
+      until: "by your DNS, but by none of the filters",
+    });
     expect(screen).toContain("? DNS intercepted");
     expect(screen).toContain("untrusted");
   });
@@ -148,11 +143,9 @@ describe("tui: copying", () => {
   test("a result that couldn't be checked still names the detected filter", async () => {
     const s = await start();
     // A first check waits for the network to be detected.
-    await s.check();
-    await s.until("BLOCKED");
+    await s.check({ until: "BLOCKED" });
     s.input.pressKey("/");
-    await s.check("not a name!");
-    await s.until("not a name!");
+    await s.check({ target: "not a name!", until: "not a name!" });
     s.input.pressKey("y");
     expect(s.copied()).toStartWith(
       "DNS filter on this computer: Telenor Nettvern"
@@ -166,8 +159,7 @@ describe("tui on a narrow terminal", () => {
       transport: slowDesignTransport,
       width: narrowWidth,
     });
-    await s.check();
-    const screen = await s.until("answered");
+    const screen = await s.check({ until: "answered" });
     const line = screen.split("\n").find((l) => l.includes("answered"));
     expect(line).toContain("Checking");
     expect(screen).toMatch(blockedSoFar);
