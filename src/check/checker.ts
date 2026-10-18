@@ -3,7 +3,7 @@
  * unfiltered resolver.
  */
 import { Context, Duration, Effect, Ref, Result } from "effect";
-import { QueryError } from "../dns/query-error.ts";
+import { timeoutAfter } from "../dns/query-error.ts";
 import {
   classify,
   classifySystem,
@@ -158,18 +158,7 @@ const timedResult = <A, E extends { readonly message: string }, R>(
 const systemTimeout = "5 seconds";
 
 const systemAnswer = (host: string) =>
-  lookupSystem(host).pipe(
-    Effect.timeoutOrElse({
-      duration: systemTimeout,
-      orElse: () =>
-        Effect.fail(
-          new QueryError({
-            reason: "no answer (timed out)",
-            server: systemServer,
-          })
-        ),
-    })
-  );
+  lookupSystem(host).pipe(timeoutAfter(systemTimeout, systemServer));
 
 /**
  * Asks everything about one name at once, reporting each answer. `query` is
