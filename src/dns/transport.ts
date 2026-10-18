@@ -2,9 +2,14 @@
  * Sends DNS queries: plain DNS to a filter's servers, and DNS-over-HTTPS for
  * the real answer.
  */
-import { Context, Effect, Layer } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { Context, Effect, Layer, Stream } from "effect";
+import {
+  HttpClient,
+  HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/http";
 import type { MalformedResponse } from "./malformed.ts";
+import { mismatch } from "./match.ts";
 import { QueryError } from "./query-error.ts";
 import { sendTcp, sendUdp } from "./sockets.ts";
 import {
@@ -16,6 +21,8 @@ import {
 
 const dnsPort = 53;
 const dnsMessage = "application/dns-message";
+/** The largest DNS message, and so the largest DoH body (RFC 8484). */
+const maxMessageBytes = 65_535;
 
 /** A random 16-bit ID; unpredictable IDs make forged answers harder. */
 const randomId = (): number => {
@@ -33,6 +40,33 @@ const failed =
 
 const timedOut = (server: string) => () =>
   Effect.fail(new QueryError({ reason: "no answer (timed out)", server }));
+
+const append = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a);
+  out.set(b, a.length);
+  return out;
+};
+
+/** Reads a DoH body, giving up as soon as it is bigger than a DNS message. */
+const readBody = (
+  response: HttpClientResponse.HttpClientResponse,
+  url: string
+): Effect.Effect<Uint8Array, QueryError> =>
+  response.stream.pipe(
+    Stream.mapError(failed(url)),
+    Stream.runFoldEffect(
+      (): Uint8Array => new Uint8Array(0),
+      (body, chunk): Effect.Effect<Uint8Array, QueryError> => {
+        if (body.length + chunk.length > maxMessageBytes) {
+          return Effect.fail(
+            new QueryError({ reason: "answer is too big", server: url })
+          );
+        }
+        return Effect.succeed(append(body, chunk));
+      }
+    )
+  );
 
 const ask = (port: number) => (server: string, name: string, type: QueryType) =>
   Effect.gen(function* () {
@@ -85,12 +119,23 @@ const doh =
       const response = yield* client
         .execute(request)
         .pipe(Effect.mapError(failed(url)));
-      const body = yield* response.arrayBuffer.pipe(
-        Effect.mapError(failed(url))
-      );
-      return yield* decodeResponse(new Uint8Array(body)).pipe(
+      const body = yield* readBody(response, url);
+      const problem = mismatch(packet, body);
+      if (problem !== undefined) {
+        return yield* Effect.fail(
+          new QueryError({ reason: problem, server: url })
+        );
+      }
+      const answer = yield* decodeResponse(body).pipe(
         Effect.mapError(malformed(url))
       );
+      if (answer.truncated) {
+        // A partial reference answer could make a filter look like it blocks.
+        return yield* Effect.fail(
+          new QueryError({ reason: "answer was truncated", server: url })
+        );
+      }
+      return answer;
     }).pipe(
       Effect.timeoutOrElse({ duration: "5 seconds", orElse: timedOut(url) })
     );
