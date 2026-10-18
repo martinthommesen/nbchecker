@@ -222,3 +222,22 @@ describe("intercepted DNS: filters without a test name", () => {
     expect(text(r)).toContain("✗ blocked by 3 of 3 filters");
   });
 });
+
+describe("intercepted DNS: a filter that still passes", () => {
+  test("its block is the headline", async () => {
+    const [security, family] = fakeFilters as [Filter, Filter];
+    const r = await runCheck("bad.example", {
+      dns: redirectedComputer,
+      filters: [security, { ...security, name: "Other filter" }, family],
+      // Only the family filter's server gives its own answers.
+      transport: redirectingTransport(["203.0.113.1", "192.0.2.53"]),
+    });
+    expect(r.network?.selfTests.map((t) => t.result)).toEqual([
+      "redirected",
+      "redirected",
+      "passed",
+    ]);
+    expect(statusOf(r).kind).toBe("blocked");
+    expect(exitCode([r])).toBe(exitBlocked);
+  });
+});

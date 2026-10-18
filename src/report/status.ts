@@ -40,11 +40,12 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (r.completion === "cancelled") {
     return "cancelled";
   }
-  if (seemsIntercepted(r.network)) {
-    return "intercepted";
-  }
+  // A filter whose own self-test passed is evidence even on such a network.
   if (s.blocked > 0) {
     return "blocked";
+  }
+  if (seemsIntercepted(r.network)) {
+    return "intercepted";
   }
   if (answeredWith(r.system, "blocked")) {
     return "blocked-here";

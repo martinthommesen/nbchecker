@@ -161,11 +161,11 @@ small queries per run.
   to come from another resolver. Its row says so, it counts as neither
   blocked nor not blocked, and the check is incomplete. When at least two
   fail, and more fail than pass, the result says DNS on this network seems
-  to be intercepted.
+  to be intercepted, unless a filter that passed blocks the target.
 
 The `c` screen shows each filter's self-test. In the JSON, such a filter
 has `"intercepted": true`, the result's `status` is `"intercepted"` when
-most filters failed, and the top-level `"intercepted"` lists the filters
+most filters failed and none that passed blocks, and the top-level `"intercepted"` lists the filters
 that failed.
 
 ### Things to know
