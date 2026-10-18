@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { sleep } from "bun";
+import { Dns } from "effect/net";
 import {
   blockedName,
   redirectedDesignTransport,
@@ -16,6 +17,14 @@ const quad9Untested = /· Quad9\s+no test page\s+· no test name/u;
 const cloudflarePassed = /· Cloudflare Family\s+no test page\s+✓ passed/u;
 const cloudflareRedirected =
   /Cloudflare Family\s+no test page\s+\? redirected\?/u;
+
+/** On Telenor's network with Nettvern, but its DNS doesn't block the name. */
+const unblockedComputer = Dns.layerStatic({
+  hosts: {
+    [blockedName]: ["203.0.113.42"],
+    "nettvern.telenor.net": ["148.123.15.38"],
+  },
+});
 
 let current: TuiSession | undefined;
 
@@ -134,7 +143,10 @@ describe("tui: the self-test", () => {
   });
 
   test("a redirecting network is flagged on every screen", async () => {
-    const s = await start({ transport: redirectedDesignTransport });
+    const s = await start({
+      computer: unblockedComputer,
+      transport: redirectedDesignTransport,
+    });
     await s.input.typeText(blockedName);
     s.input.pressEnter();
     const screen = await s.until("INTERCEPTED?");
@@ -145,6 +157,15 @@ describe("tui: the self-test", () => {
     s.input.pressKey("c");
     const connection = await s.until("self-test");
     expect(connection).toMatch(cloudflareRedirected);
+  });
+
+  test("this computer's block stays the headline", async () => {
+    const s = await start({ transport: redirectedDesignTransport });
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("by your DNS, but by none of the filters");
+    expect(screen).toContain("? DNS intercepted");
+    expect(screen).toContain("untrusted");
   });
 });
 

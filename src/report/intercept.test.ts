@@ -247,6 +247,21 @@ describe("intercepted DNS: the self-test count", () => {
   });
 });
 
+describe("intercepted DNS: this computer's block", () => {
+  test("is the headline, as it is what this computer gets", async () => {
+    // This computer sits behind the family filter, which blocks the name.
+    const r = await runCheck("bad.example", {
+      transport: redirectingTransport(),
+    });
+    expect(r.system?.kind === "answered" && r.system.verdict.blocked).toBe(
+      true
+    );
+    expect(statusOf(r).kind).toBe("blocked-here");
+    expect(text(r)).toContain("blocked by your own DNS");
+    expect(exitCode([r])).toBe(exitBlocked);
+  });
+});
+
 describe("intercepted DNS: a filter that still passes", () => {
   test("its block is the headline", async () => {
     const [security, family] = fakeFilters as [Filter, Filter];

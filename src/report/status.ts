@@ -43,11 +43,12 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (s.blocked > 0) {
     return "blocked";
   }
-  if (seemsIntercepted(r.network)) {
-    return "intercepted";
-  }
+  // So is this computer's own block: it is what this computer gets.
   if (answeredWith(r.system, "blocked")) {
     return "blocked-here";
+  }
+  if (seemsIntercepted(r.network)) {
+    return "intercepted";
   }
   const truthKnown = r.truthExchange !== undefined;
   if (truthKnown && !r.exists && resolvesHere(r)) {
