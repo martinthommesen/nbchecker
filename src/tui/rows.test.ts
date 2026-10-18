@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type CheckResult, cancelPending, pending } from "../check/result.ts";
-import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { downRealAnswerUrl } from "../testing/fake-network.ts";
+import { runCheck } from "../testing/run-check.ts";
 import { flatRows, resultGroups, type TableRow } from "./rows.ts";
 
 const row = (r: CheckResult, name: string): TableRow | undefined =>

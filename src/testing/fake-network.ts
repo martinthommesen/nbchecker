@@ -1,7 +1,8 @@
 /** A small fake internet for tests: two filters and an unfiltered resolver. */
 import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
-import type { Filter } from "../check/filters.ts";
+import type { Category, Filter } from "../check/filters.ts";
+import type { CheckerOptions } from "../check/options.ts";
 import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
@@ -80,12 +81,19 @@ const family: Zone = {
 
 type Server = Zone | "down" | "servfail";
 
-const servers: Readonly<Record<string, Server>> = {
+const byServer: Readonly<Record<string, Server>> = {
   "192.0.2.53": security,
   "198.51.100.53": family,
   "203.0.113.1": "down",
   "203.0.113.2": "servfail",
 };
+
+/** An unfiltered resolver that gives the real answer. */
+const realAnswerUrl = "https://unfiltered.example/dns-query";
+/** An unfiltered resolver that never answers. */
+const downRealAnswerUrl = "https://down.example/dns-query";
+/** An unfiltered resolver that fails every AAAA query. */
+const noAaaaRealAnswerUrl = "https://no-aaaa.example/dns-query";
 
 /** A transport whose servers answer from the zone `zoneOf` gives them. */
 const transportWith = (zoneOf: (server: string) => Server | undefined) =>
@@ -101,19 +109,44 @@ const transportWith = (zoneOf: (server: string) => Server | undefined) =>
       return Effect.succeed(lookup(zone, name, type));
     },
     doh: (url, name, type) => {
-      if (url === "https://down.example/dns-query") {
+      if (url === downRealAnswerUrl) {
         return Effect.fail(
           new QueryError({ reason: "timed out", server: url })
         );
       }
-      if (url === "https://no-aaaa.example/dns-query" && type === "AAAA") {
+      if (url === noAaaaRealAnswerUrl && type === "AAAA") {
         return Effect.succeed(noRecords(Rcode.servFail));
       }
       return Effect.succeed(lookup(real, name, type));
     },
   });
 
-export const fakeTransport = transportWith((server) => servers[server]);
+/** The fake filters' self-test: each blocks `canary.example` its own way. */
+const fakeCanary = {
+  answers: ["148.123.15.44", "0.0.0.0"],
+  name: canaryName,
+};
+
+/** A filter on these servers that blocks the fake canary. */
+const fakeFilter = (
+  category: Category,
+  name: string,
+  ...servers: readonly string[]
+): Filter => ({ canary: fakeCanary, category, name, servers });
+
+/** The first is down; the second blocks with Telenor's Nettvern page. */
+const securityServers = ["203.0.113.1", "192.0.2.53"];
+
+const securityFilter = fakeFilter(
+  "security",
+  "Security filter",
+  ...securityServers
+);
+
+/** Blocks with 0.0.0.0, and adult sites with AdGuard Family's block page. */
+const familyFilter = fakeFilter("family", "Family filter", "198.51.100.53");
+
+export const fakeTransport = transportWith((server) => byServer[server]);
 
 /**
  * A network that sends every DNS query to an unfiltered resolver, whatever
@@ -125,14 +158,8 @@ export const redirectingTransport = (only?: readonly string[]) =>
     if (only === undefined || only.includes(server)) {
       return real;
     }
-    return servers[server];
+    return byServer[server];
   });
-
-/** The fake filters' self-test: each blocks `canary.example` its own way. */
-export const fakeCanary = {
-  answers: ["148.123.15.44", "0.0.0.0"],
-  name: canaryName,
-};
 
 /** A resolver the network sends every query to, which blocks names too. */
 export const blockingRedirectTransport = transportWith(() => family);
@@ -146,20 +173,33 @@ export const rewritingTransport = transportWith(() => ({
   "zero.example": noRecords(Rcode.nxDomain),
 }));
 
-export const fakeFilters: readonly Filter[] = [
-  {
-    canary: fakeCanary,
-    category: "security",
-    name: "Security filter",
-    servers: ["203.0.113.1", "192.0.2.53"],
-  },
-  {
-    canary: fakeCanary,
-    category: "family",
-    name: "Family filter",
-    servers: ["198.51.100.53"],
-  },
-];
+export const fakeFilters: readonly Filter[] = [securityFilter, familyFilter];
+
+/** The security filter as if it documented no test name: never self-tested. */
+export const untestedSecurityFilter: Filter = {
+  category: "security",
+  name: "Security filter",
+  servers: securityServers,
+};
+
+/**
+ * A filter that, like Telenor's, only answers on Telenor's network. Its
+ * server is down, as Telenor's are to everyone else, and its canary is
+ * Telenor's test page with Nettvern's answer.
+ */
+export const ispFilter: Filter = {
+  canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
+  category: "security",
+  name: "ISP filter",
+  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
+  servers: ["203.0.113.1"],
+};
+
+/** What a check asks on the fake network: its filters and real answer. */
+export const fakeOptions: CheckerOptions = {
+  filters: fakeFilters,
+  unfilteredResolvers: [realAnswerUrl],
+};
 
 /**
  * This computer sits behind the family filter, and has no IPv6. Its DNS
@@ -185,5 +225,30 @@ export const computerWith = (testPage = "148.123.15.1") =>
 
 export const computer = computerWith();
 
+/** A computer whose resolver fails every lookup. */
+export const failingComputer = Layer.succeed(
+  Dns.Dns,
+  Dns.make({
+    lookup: (hostname) =>
+      Effect.fail(
+        new Dns.DnsError({
+          hostname,
+          method: "lookup",
+          reason: "ServerFailure",
+        })
+      ),
+  })
+);
+
 /** Telenor's test page answer away from Telenor's filters. */
 export const publicTestPage = "148.123.15.37";
+
+export {
+  downRealAnswerUrl,
+  fakeCanary,
+  fakeFilter,
+  familyFilter,
+  noAaaaRealAnswerUrl,
+  realAnswerUrl,
+  securityFilter,
+};

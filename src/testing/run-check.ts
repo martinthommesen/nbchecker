@@ -6,10 +6,7 @@ import { detectNetwork } from "../check/network.ts";
 import { CheckerOptions } from "../check/options.ts";
 import type { CheckResult } from "../check/result.ts";
 import type { DnsTransport } from "../dns/transport.ts";
-import { computer, fakeFilters, fakeTransport } from "./fake-network.ts";
-
-export const realAnswerUrl = "https://unfiltered.example/dns-query";
-export const downRealAnswerUrl = "https://down.example/dns-query";
+import { computer, fakeOptions, fakeTransport } from "./fake-network.ts";
 
 export interface RunOptions extends Partial<CheckerOptions> {
   /** This computer's resolver; the fake network's by default. */
@@ -24,11 +21,7 @@ export const runCheck = (
   { dns = computer, transport = fakeTransport, ...options }: RunOptions = {}
 ): Promise<CheckResult> =>
   check(target, detectNetwork).pipe(
-    Effect.provideService(CheckerOptions, {
-      filters: fakeFilters,
-      unfilteredResolvers: [realAnswerUrl],
-      ...options,
-    }),
+    Effect.provideService(CheckerOptions, { ...fakeOptions, ...options }),
     Effect.provide(transport),
     Effect.provide(dns),
     Effect.orDie,

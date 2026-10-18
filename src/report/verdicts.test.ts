@@ -17,8 +17,8 @@ import {
   exitIncomplete,
   exitNotBlocked,
 } from "../cli/exit-status.ts";
-import { fakeCanary } from "../testing/fake-network.ts";
-import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
+import { downRealAnswerUrl, fakeCanary } from "../testing/fake-network.ts";
+import { runCheck } from "../testing/run-check.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
 import { toJson } from "./json.ts";

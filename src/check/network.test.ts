@@ -5,8 +5,13 @@ import {
   blockingRedirectTransport,
   computer,
   fakeFilters,
+  fakeOptions,
   fakeTransport,
+  familyFilter,
+  ispFilter,
   redirectingTransport,
+  securityFilter,
+  untestedSecurityFilter,
 } from "../testing/fake-network.ts";
 import { a, aaaa, answer } from "../testing/records.ts";
 import { redirectedFilters, seemsIntercepted } from "./evidence.ts";
@@ -18,10 +23,8 @@ const testPage = "nettvern.telenor.net";
 
 /** A Telenor filter whose server, 192.0.2.53, gives Nettvern's answer. */
 const telenor = (ip: string, servers = ["192.0.2.53"]): Filter => ({
+  ...ispFilter,
   canary: { answers: [ip], name: testPage },
-  category: "security",
-  name: "Telenor filter",
-  onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
   servers,
 });
 
@@ -30,7 +33,7 @@ const detect = (
   filters: readonly Filter[] = fakeFilters
 ) =>
   detectNetwork.pipe(
-    Effect.provideService(CheckerOptions, { filters, unfilteredResolvers: [] }),
+    Effect.provideService(CheckerOptions, { ...fakeOptions, filters }),
     Effect.provide(transport),
     Effect.provide(computer),
     Effect.runPromise
@@ -85,15 +88,14 @@ describe("self-test", () => {
   });
 
   test("a canary with no answer is unknown, not failed", async () => {
-    const [security, family] = fakeFilters;
     const quiet = [
       // Its server refuses this name.
       {
-        ...security,
+        ...securityFilter,
         canary: { answers: ["0.0.0.0"], name: "refused.example" },
       },
-      { ...family, servers: ["203.0.113.1"] },
-    ] as Filter[];
+      { ...familyFilter, servers: ["203.0.113.1"] },
+    ];
     const n = await detect(fakeTransport, quiet);
     expect(n.selfTests.map((t) => t.result)).toEqual([
       "no-answer",
@@ -124,12 +126,10 @@ describe("self-test", () => {
 
 describe("self-test without a test name", () => {
   test("a filter with no documented test name isn't self-tested", async () => {
-    const [security, family] = fakeFilters;
-    const { canary: _, ...untested } = security as Filter;
     const n = await detect(redirectingTransport(), [
-      untested,
-      family,
-    ] as Filter[]);
+      untestedSecurityFilter,
+      familyFilter,
+    ]);
     expect(n.selfTests.map((t) => t.result)).toEqual([
       "untested",
       "redirected",
@@ -138,27 +138,24 @@ describe("self-test without a test name", () => {
   });
 
   test("one redirected filter, when the others can't tell, isn't an intercepted network", async () => {
-    const [security, family] = fakeFilters;
-    const { canary: _, ...untested } = security as Filter;
     const n = await detect(redirectingTransport(), [
-      untested,
-      family,
-    ] as Filter[]);
+      untestedSecurityFilter,
+      familyFilter,
+    ]);
     expect(redirectedFilters(n)).toEqual(["Family filter"]);
     expect(seemsIntercepted(n)).toBe(false);
   });
 
   test("a block that isn't the filter's own doesn't pass", async () => {
-    const [security, family] = fakeFilters;
     // The resolver the network uses answers 0.0.0.0, like the family filter;
     // the security filter's own block is a CNAME to its warning page.
     const ownBlocks = [
       {
-        ...security,
+        ...securityFilter,
         canary: { answers: ["148.123.15.44"], name: "canary.example" },
       },
-      family,
-    ] as Filter[];
+      familyFilter,
+    ];
     expect(await results(blockingRedirectTransport, ownBlocks)).toEqual([
       "redirected",
       "passed",

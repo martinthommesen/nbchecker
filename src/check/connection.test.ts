@@ -1,17 +1,21 @@
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, type Layer } from "effect";
 import { Dns } from "effect/net";
+import { failingComputer } from "../testing/fake-network.ts";
 import { connectionText, detectConnection } from "./connection.ts";
 import { telenorTestPage } from "./known-answers.ts";
 
 const testPage = telenorTestPage.name;
 
-const detect = (hosts: Record<string, readonly string[]>) =>
+const detectWith = (computer: Layer.Layer<Dns.Dns, unknown>) =>
   detectConnection.pipe(
-    Effect.provide(Dns.layerStatic({ hosts })),
+    Effect.provide(computer),
     Effect.map(connectionText),
     Effect.runPromise
   );
+
+const detect = (hosts: Record<string, readonly string[]>) =>
+  detectWith(Dns.layerStatic({ hosts }));
 
 test("reads which filter Telenor's test page answers for", async () => {
   expect(await detect({ [testPage]: ["148.123.15.1"] })).toBe(
@@ -33,20 +37,5 @@ test("reports no filter when the test page answers anything else", async () => {
 });
 
 test("reports unknown when the lookup fails", async () => {
-  const failing = Dns.make({
-    lookup: (hostname) =>
-      Effect.fail(
-        new Dns.DnsError({
-          hostname,
-          method: "lookup",
-          reason: "ServerFailure",
-        })
-      ),
-  });
-  const text = await detectConnection.pipe(
-    Effect.provideService(Dns.Dns, failing),
-    Effect.map(connectionText),
-    Effect.runPromise
-  );
-  expect(text).toBe("unknown");
+  expect(await detectWith(failingComputer)).toBe("unknown");
 });
