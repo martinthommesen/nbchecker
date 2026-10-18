@@ -208,6 +208,7 @@ describe("intercepted DNS: filters without a test name", () => {
       transport: redirectingTransport(),
     });
     expect(statusOf(r).kind).toBe("intercepted");
+    expect(text(r)).toContain("2 of 2 filters failed the self-test");
     const filters = json(r).results[0]?.filters ?? [];
     expect(filters.map((f) => f.intercepted)).toEqual([true, true, true]);
     expect(exitCode([r])).toBe(exitIncomplete);

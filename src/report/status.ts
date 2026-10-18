@@ -4,7 +4,6 @@
  */
 import {
   type CheckResult,
-  isRedirected,
   type Outcome,
   seemsIntercepted,
   trustedFilters,
@@ -110,14 +109,17 @@ export interface Status {
   /** This computer's DNS sends it through an inspection proxy. */
   readonly inspectedHere: boolean;
   readonly kind: StatusKind;
-  /** Filters whose answers don't count, as they failed the self-test. */
+  /** Filters that failed the self-test. */
   readonly redirected: number;
+  /** Filters with a self-test, so not those without a test name. */
+  readonly tested: number;
   /** Filters asked. */
   readonly total: number;
 }
 
 /** Works out a check's overall verdict. */
 export const statusOf = (r: CheckResult): Status => {
+  const selfTests = r.network?.selfTests ?? [];
   const answered = trustedFilters(r).filter(
     (f) => f.outcome.kind === "answered"
   );
@@ -127,7 +129,8 @@ export const statusOf = (r: CheckResult): Status => {
     inspected: answered.filter((f) => answeredWith(f.outcome, "inspected"))
       .length,
     inspectedHere: answeredWith(r.system, "inspected"),
-    redirected: r.filters.filter((f) => isRedirected(r, f.filter)).length,
+    redirected: selfTests.filter((t) => t.result === "redirected").length,
+    tested: selfTests.filter((t) => t.result !== "untested").length,
     total: r.filters.length,
   };
   return { ...counts, kind: kindOf(r, counts) };
@@ -152,7 +155,7 @@ export const statusText = (s: Status): string => {
       }
       return `not blocked, but ${s.inspected} of ${s.answered} filters send it through Cisco's inspection proxy`;
     case "intercepted":
-      return `DNS on this network seems to be intercepted: ${s.redirected} of ${s.total} filters failed the self-test, so these results can't be trusted`;
+      return `DNS on this network seems to be intercepted: ${s.redirected} of ${s.tested} filters failed the self-test, so these results can't be trusted`;
     case "local-only":
       return "only resolves on this computer (private or split DNS)";
     case "missing":
