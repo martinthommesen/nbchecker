@@ -1,6 +1,7 @@
 /** Every exit status nbchecker ends with, so scripts can act on the result. */
 import { Console, Data, Effect, Runtime } from "effect";
-import { type CheckResult, isBlocked } from "../check/result.ts";
+import { isBlocked } from "../check/evidence.ts";
+import type { CheckResult } from "../check/result.ts";
 
 /** Nothing was blocked, and every check was complete. */
 export const exitNotBlocked = 0;

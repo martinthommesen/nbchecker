@@ -3,15 +3,14 @@
  * interface and plain text output.
  */
 import { describe, type Verdict } from "../check/classify.ts";
+import { isRedirected, shouldAnswer } from "../check/evidence.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  isRedirected,
   nameExists,
   type Outcome,
   realAddresses,
   realAnswerKnown,
-  shouldAnswer,
 } from "../check/result.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 

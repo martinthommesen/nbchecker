@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
+import { completionOf } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
-import { completionOf } from "../check/result.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
 import {

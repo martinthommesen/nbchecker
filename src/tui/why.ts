@@ -1,17 +1,19 @@
 /** Explains in a sentence or two why a row says what it says. */
 import type { Reason, Verdict } from "../check/classify.ts";
+import {
+  isRedirected,
+  shouldAnswer,
+  trustedFilters,
+} from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  isRedirected,
   nameExists,
   type Outcome,
   realAddresses,
   realAnswerKnown,
   realAnswerPending,
   realAnswerUnavailable,
-  shouldAnswer,
-  trustedFilters,
 } from "../check/result.ts";
 
 /** Why an answer is blocked, or for the inspection proxy, why it isn't. */

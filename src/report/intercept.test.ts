@@ -4,8 +4,9 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
+import { isBlocked } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
-import { type CheckResult, isBlocked } from "../check/result.ts";
+import type { CheckResult } from "../check/result.ts";
 import {
   exitBlocked,
   exitCode,

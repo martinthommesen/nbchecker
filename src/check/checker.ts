@@ -9,6 +9,7 @@ import {
   noReference,
   type Reference,
 } from "./classify.ts";
+import { completionOf } from "./evidence.ts";
 import type { Filter } from "./filters.ts";
 import { normalize } from "./normalize.ts";
 import { CheckerOptions } from "./options.ts";
@@ -16,7 +17,6 @@ import { Progress } from "./progress.ts";
 import { askFilter, askUnfiltered, type ServerAnswer } from "./remote.ts";
 import {
   type CheckResult,
-  completionOf,
   type Network,
   type Outcome,
   pending,

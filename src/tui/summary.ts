@@ -1,14 +1,13 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
+import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
 import {
   type CheckResult,
   nameExists,
   realAddresses,
   realAnswerKnown,
   realAnswerUnavailable,
-  seemsIntercepted,
   settled,
-  trustedFilters,
 } from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";

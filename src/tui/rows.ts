@@ -1,11 +1,11 @@
 /** Turns a check result into the grouped rows of the resolvers table. */
+
+import { isRedirected, shouldAnswer } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  isRedirected,
   type Outcome,
   realAnswerUnavailable,
-  shouldAnswer,
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { categoryOrder, categoryTitles } from "../report/view.ts";

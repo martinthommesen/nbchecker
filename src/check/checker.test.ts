@@ -10,15 +10,11 @@ import {
   fakeFilters as filters,
 } from "../testing/fake-network.ts";
 import { check } from "./checker.ts";
+import { isBlocked } from "./evidence.ts";
 import { detectNetwork } from "./network.ts";
 import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
-import {
-  type CheckResult,
-  isBlocked,
-  nameExists,
-  realAddresses,
-} from "./result.ts";
+import { type CheckResult, nameExists, realAddresses } from "./result.ts";
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, Dns.Dns | DnsTransport>,

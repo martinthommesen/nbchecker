@@ -4,10 +4,10 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
+import { isBlocked } from "../check/evidence.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  isBlocked,
   nameExists,
   realAddresses,
 } from "../check/result.ts";

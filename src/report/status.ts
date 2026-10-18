@@ -3,22 +3,16 @@
  * output, the interactive screen, copied text and JSON, so they agree.
  */
 import {
+  answeredWith,
+  seemsIntercepted,
+  selfTestCounts,
+  trustedFilters,
+} from "../check/evidence.ts";
+import {
   type CheckResult,
   nameExists,
-  type Outcome,
   realAnswerKnown,
-  seemsIntercepted,
-  trustedFilters,
 } from "../check/result.ts";
-
-const answeredWith = (o: Outcome, test: keyof Flags): boolean =>
-  o.kind === "answered" && o.verdict[test];
-
-interface Flags {
-  readonly blocked: boolean;
-  readonly inspected: boolean;
-  readonly missing: boolean;
-}
 
 /** This computer finds addresses for the name, and they aren't a block. */
 const resolvesHere = (r: CheckResult): boolean =>
@@ -122,7 +116,7 @@ export interface Status {
 
 /** Works out a check's overall verdict. */
 export const statusOf = (r: CheckResult): Status => {
-  const selfTests = r.network?.selfTests ?? [];
+  const { passed, redirected } = selfTestCounts(r.network);
   const answered = trustedFilters(r).filter(
     (f) => f.outcome.kind === "answered"
   );
@@ -132,10 +126,8 @@ export const statusOf = (r: CheckResult): Status => {
     inspected: answered.filter((f) => answeredWith(f.outcome, "inspected"))
       .length,
     inspectedHere: answeredWith(r.system, "inspected"),
-    redirected: selfTests.filter((t) => t.result === "redirected").length,
-    tested: selfTests.filter(
-      (t) => t.result === "passed" || t.result === "redirected"
-    ).length,
+    redirected,
+    tested: passed + redirected,
     total: r.filters.length,
   };
   return { ...counts, kind: kindOf(r, counts) };

@@ -1,11 +1,10 @@
 /** The --json output. */
 import type { Verdict } from "../check/classify.ts";
+import { isBlocked, isRedirected } from "../check/evidence.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   type Completion,
-  isBlocked,
-  isRedirected,
   nameExists,
   type Outcome,
   realAddresses,

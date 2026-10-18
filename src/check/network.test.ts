@@ -10,10 +10,10 @@ import {
   fakeTransport,
   redirectingTransport,
 } from "../testing/fake-network.ts";
+import { redirectedFilters, seemsIntercepted } from "./evidence.ts";
 import type { Filter } from "./filters.ts";
 import { detectNetwork } from "./network.ts";
 import { CheckerOptions } from "./options.ts";
-import { redirectedFilters, seemsIntercepted } from "./result.ts";
 
 const testPage = "nettvern.telenor.net";
 

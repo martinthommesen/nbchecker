@@ -1,14 +1,11 @@
 /** What each action does: checks, copying, saving and moving around. */
 import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
+import { redirectedFilters } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
-import {
-  cancelPending,
-  type Network,
-  redirectedFilters,
-} from "../check/result.ts";
+import { cancelPending, type Network } from "../check/result.ts";
 import { toJson } from "../report/json.ts";
 import type { Controller, ControllerDeps } from "./controller-deps.ts";
 import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";

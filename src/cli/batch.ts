@@ -5,12 +5,9 @@
 import { Effect, Stdio, Stream } from "effect";
 import { check } from "../check/checker.ts";
 import { connectionText } from "../check/connection.ts";
+import { redirectedFilters } from "../check/evidence.ts";
 import { detectNetwork } from "../check/network.ts";
-import {
-  type CheckResult,
-  type Network,
-  redirectedFilters,
-} from "../check/result.ts";
+import type { CheckResult, Network } from "../check/result.ts";
 import { toJson } from "../report/json.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";

@@ -1,15 +1,13 @@
 /**
  * What a check finds out, from one answer up to the whole check: a Verdict
  * reads one resolver's answer, an Outcome says how asking one resolver went,
- * and the Completion here and the report's Status sum up the whole check.
+ * and the Completion (see evidence.ts) and the report's Status sum up the
+ * whole check.
  */
 import type { DnsAnswer } from "../dns/wire.ts";
 import type { Reference, Verdict } from "./classify.ts";
 import type { Connection } from "./connection.ts";
 import type { Filter } from "./filters.ts";
-
-const outcomeBlocks = (o: Outcome): boolean =>
-  o.kind === "answered" && o.verdict.blocked;
 
 const cancelled = { kind: "cancelled" } as const;
 
@@ -20,9 +18,6 @@ const settle = <A>(o: Outcome<A>): Outcome<A> => {
   }
   return o;
 };
-
-/** One failed self-test marks that filter, not the whole network. */
-const minRedirected = 2;
 
 /** A filter's or this computer's answer, and what it means for the name. */
 interface Resolved {
@@ -138,85 +133,6 @@ export const realAddresses = (r: CheckResult): readonly string[] => {
   }
   return [];
 };
-
-/**
- * Whether a filter should answer this computer. One that only answers its
- * own network's customers needn't, unless this computer is on that network,
- * or the connection couldn't be detected, so nobody can tell.
- */
-export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
-  const c = r.network?.connection;
-  if (f.onlyAnswers === undefined || c === undefined || c.error !== undefined) {
-    return true;
-  }
-  return c.network === f.onlyAnswers.network;
-};
-
-/** The filters that failed the self-test. */
-export const redirectedFilters = (n: Network): readonly string[] =>
-  n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
-
-/**
- * Whether most filters that answered the self-test failed it, and more than
- * one did, so DNS on this network seems to be intercepted.
- */
-export const seemsIntercepted = (n: Network | undefined): boolean => {
-  if (n === undefined) {
-    return false;
-  }
-  const passed = n.selfTests.filter((t) => t.result === "passed").length;
-  const redirected = redirectedFilters(n).length;
-  return redirected >= minRedirected && redirected > passed;
-};
-
-/**
- * Whether a filter's answers seem to come from somewhere else and say
- * nothing about the filter: it failed the self-test, or it has none on a
- * network that seems to intercept DNS.
- */
-export const isRedirected = (r: CheckResult, f: Filter): boolean => {
-  const test = r.network?.selfTests.find((t) => t.filter === f.name);
-  if (test?.result === "redirected") {
-    return true;
-  }
-  return test?.result === "untested" && seemsIntercepted(r.network);
-};
-
-/** The filters whose answers count: all but those that seem redirected. */
-export const trustedFilters = (r: CheckResult): readonly FilterResult[] =>
-  r.filters.filter((f) => !isRedirected(r, f.filter));
-
-/**
- * Works out whether everything that should have answered did, with answers
- * that can be trusted.
- */
-export const completionOf = (r: CheckResult): Completion => {
-  if (r.lookupError !== undefined) {
-    return "incomplete";
-  }
-  if (!r.checked) {
-    return "complete";
-  }
-  const outcomes = [r.system, ...r.filters.map((f) => f.outcome)];
-  // A lookup cut short by a cancel didn't answer either.
-  const failed = (o: Outcome) => o.kind === "failed" || o.kind === "cancelled";
-  if (
-    r.network === undefined ||
-    !realAnswerKnown(r) ||
-    outcomes.some((o) => o.kind === "pending") ||
-    failed(r.system) ||
-    r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter)) ||
-    r.filters.some((f) => isRedirected(r, f.filter))
-  ) {
-    return "incomplete";
-  }
-  return "complete";
-};
-
-/** Whether any trusted filter, or this computer, blocks the target. */
-export const isBlocked = (r: CheckResult): boolean =>
-  trustedFilters(r).some((f) => outcomeBlocks(f.outcome)) ||
-  outcomeBlocks(r.system);
 
 /**
  * Marks everything that hadn't answered when a check was cancelled. The real
