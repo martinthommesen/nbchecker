@@ -11,6 +11,7 @@ import { cli } from "./command.ts";
 import {
   ExitStatus,
   exitIncomplete,
+  exitNotBlocked,
   exitOutput,
   exitUsage,
 } from "./exit-status.ts";
@@ -186,26 +187,6 @@ describe("usage", () => {
   });
 });
 
-describe("connection detection", () => {
-  test("is skipped when no target can be checked", async () => {
-    const proc = run(["--json", "not a name!"]);
-    const out = await new Response(proc.stdout).text();
-    const parsed = JSON.parse(out) as { dnsFilter: string };
-    expect(parsed.dnsFilter).toBe("not checked");
-    const text = await new Response(run(["not a name!"]).stdout).text();
-    expect(text).not.toContain("DNS filter on this computer");
-  });
-
-  test("runs once a target can be checked", async () => {
-    const proc = run(["--json", "not a name!", "good.example"]);
-    const out = await new Response(proc.stdout).text();
-    const parsed = JSON.parse(out) as { dnsFilter: string };
-    expect(parsed.dnsFilter).toBe("Telenor Nettvern+");
-    const text = await new Response(run(["good.example"]).stdout).text();
-    expect(text).toStartWith("DNS filter on this computer: Telenor Nettvern+");
-  });
-});
-
 /**
  * Runs nbchecker as a real process and returns its output, its exit status
  * and the names it asked over the network.
@@ -234,8 +215,8 @@ const runRecorded = async (args: readonly string[], network = "honest") => {
   return { code, out, queries };
 };
 
-describe("cli: the network is found out once per run", () => {
-  test("a run with no target that can be checked asks nothing", async () => {
+describe("the network is found out once per run", () => {
+  test("and not at all when no target can be checked", async () => {
     const r = await runRecorded(["--json", "not a name!"]);
     expect(r.queries).toEqual([]);
     expect(JSON.parse(r.out)).toMatchObject({ dnsFilter: "not checked" });
@@ -245,7 +226,16 @@ describe("cli: the network is found out once per run", () => {
     expect(text.out).not.toContain("DNS filter on this computer");
   });
 
-  test("the self-test and test page are asked once for many targets", async () => {
+  test("by the first target that can be checked", async () => {
+    const proc = run(["--json", "not a name!", "good.example"]);
+    const out = await new Response(proc.stdout).text();
+    const parsed = JSON.parse(out) as { dnsFilter: string };
+    expect(parsed.dnsFilter).toBe("Telenor Nettvern+");
+    const text = await new Response(run(["good.example"]).stdout).text();
+    expect(text).toStartWith("DNS filter on this computer: Telenor Nettvern+");
+  });
+
+  test("so the self-test and test page are asked once for many targets", async () => {
     const r = await runRecorded([
       "good.example",
       "bad.example",
@@ -262,11 +252,11 @@ describe("cli: the network is found out once per run", () => {
   });
 });
 
-describe("cli: intercepted DNS", () => {
+describe("intercepted DNS", () => {
   test("an honest network lists no filter as intercepted", async () => {
     const r = await runRecorded(["--json", "good.example"]);
     expect(JSON.parse(r.out)).toMatchObject({ intercepted: [] });
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(exitNotBlocked);
   });
 
   test("a redirecting network warns, lists the filters and exits 2", async () => {
