@@ -73,13 +73,16 @@ const incomplete = (r: CheckResult): boolean =>
 export const exitBlocked = 1;
 export const exitIncomplete = 2;
 
-/** 0 if nothing is blocked, 1 if anything is, 2 if a check was incomplete. */
+/**
+ * 1 if anything is blocked, even when some lookups didn't answer; otherwise
+ * 2 if a check was incomplete, and 0 if nothing is blocked.
+ */
 export const exitCode = (results: readonly CheckResult[]): number => {
-  if (results.some(incomplete)) {
-    return exitIncomplete;
-  }
   if (results.some(isBlocked)) {
     return exitBlocked;
+  }
+  if (results.some(incomplete)) {
+    return exitIncomplete;
   }
   return 0;
 };
