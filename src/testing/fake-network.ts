@@ -85,6 +85,14 @@ export const fakeTransport = Layer.succeed(DnsTransport, {
     if (url === "https://down.example/dns-query") {
       return Effect.fail(new QueryError({ reason: "timed out", server: url }));
     }
+    if (url === "https://no-aaaa.example/dns-query" && type === "AAAA") {
+      return Effect.succeed({
+        extendedErrors: [],
+        rcode: Rcode.servFail,
+        records: [],
+        truncated: false,
+      });
+    }
     return Effect.succeed(lookup(real, name, type));
   },
 });

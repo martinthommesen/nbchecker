@@ -53,8 +53,11 @@ export const lookupTruth = (urls: readonly string[], host: string) =>
         { concurrency: "unbounded" }
       ).pipe(
         Effect.flatMap(([a, aaaa]) => {
-          if (isFailure(a)) {
-            return Effect.fail({ message: `${url}: DNS error ${a.rcode}` });
+          const failed = [a, aaaa].find(isFailure);
+          if (failed !== undefined) {
+            return Effect.fail({
+              message: `${url}: DNS error ${failed.rcode}`,
+            });
           }
           const addresses = [...a.records, ...aaaa.records]
             .filter((r) => r.type !== "CNAME")

@@ -88,6 +88,7 @@ export const sendTcp = (
   Effect.callback<Uint8Array, QueryError>((resume) => {
     let close: (() => void) | undefined;
     let received: Uint8Array = new Uint8Array(0);
+    const id = responseId(packet);
     const fail = (error: unknown): void =>
       resume(Effect.fail(new QueryError({ reason: errorText(error), server })));
     connect({
@@ -100,8 +101,13 @@ export const sendTcp = (
         data: (_socket, chunk) => {
           received = append(received, chunk);
           const message = unframe(received);
-          if (message !== undefined) {
+          if (message === undefined) {
+            return;
+          }
+          if (responseId(message) === id) {
             resume(Effect.succeed(message));
+          } else {
+            fail("answer was for a different query");
           }
         },
         error: (_socket, error) => fail(error),

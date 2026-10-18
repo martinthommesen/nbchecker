@@ -88,6 +88,16 @@ describe("check: failures", () => {
     expect(r.exists).toBe(true);
   });
 
+  test("a resolver that fails the AAAA query is skipped", async () => {
+    const r = await run(check("good.example"), {
+      truthUrls: [
+        "https://no-aaaa.example/dns-query",
+        "https://truth.example/dns-query",
+      ],
+    });
+    expect(r.truthExchange?.server).toBe("https://truth.example/dns-query");
+  });
+
   test("reports when no unfiltered resolver answers", async () => {
     const r = await run(check("good.example"), {
       truthUrls: ["https://down.example/dns-query"],
