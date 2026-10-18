@@ -3,10 +3,12 @@ import {
   BoxRenderable,
   type CliRenderer,
   type StyledText,
+  type TextChunk,
 } from "@opentui/core";
+import { seemsIntercepted } from "../check/evidence.ts";
+import { detecting } from "./connection-text.ts";
 import { lines, oneLine, paint } from "./paint.ts";
 import type { State } from "./state.ts";
-import { connectionBadge } from "./summary.ts";
 import { theme } from "./theme.ts";
 import {
   addAll,
@@ -56,6 +58,24 @@ const titleText = (s: State, wide: boolean): StyledText => {
   ]);
 };
 
+/** Which filter this computer's DNS uses, in a word or two. */
+const connectionStatus = (s: State): TextChunk => {
+  const c = s.network?.connection;
+  if (c === undefined) {
+    return detecting(s.tick);
+  }
+  if (seemsIntercepted(s.network)) {
+    return paint("? DNS intercepted", { fg: theme.warn });
+  }
+  if (c.filter !== undefined) {
+    return paint(`✕ ${c.filter}`, { fg: theme.block });
+  }
+  if (c.error !== undefined) {
+    return paint("? unknown", { fg: theme.warn });
+  }
+  return paint("· no filter detected", { fg: theme.dim });
+};
+
 /**
  * This computer's filter, or the way back on the connection screen, which
  * shows the filter in full.
@@ -64,7 +84,9 @@ const badgeText = (s: State): StyledText => {
   if (s.screen === "connection") {
     return oneLine("← esc back to results");
   }
-  return connectionBadge(s);
+  return lines([
+    [paint("your connection  ", { fg: theme.dim }), connectionStatus(s)],
+  ]);
 };
 
 const drawHeader = (parts: HeaderParts, s: State, { wide }: Layout) => {

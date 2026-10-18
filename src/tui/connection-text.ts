@@ -1,6 +1,10 @@
 /** The "your connection" screen: which filter this computer's DNS uses. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import type { Connection } from "../check/connection.ts";
+import {
+  type Connection,
+  type ConnectionState,
+  connectionState,
+} from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
 import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
@@ -72,14 +76,23 @@ const testAnswerText = (c: Connection): string => {
   return c.testAnswers.join(", ");
 };
 
+/** What the test lookup saw. */
+const testMarks: Record<ConnectionState, Mark> = {
+  detected: mark.detected,
+  none: mark.notSeen,
+  unknown: mark.cantSee,
+};
+
 const telenorMark = (c: Connection | undefined, name: string): Mark => {
-  if (c?.filter === name) {
-    return mark.detected;
-  }
-  if (c === undefined || c.error !== undefined) {
+  if (c === undefined) {
     return mark.cantSee;
   }
-  return mark.notSeen;
+  const seen = testMarks[connectionState(c)];
+  // Seeing one of Telenor's filters is not seeing the others.
+  if (seen === mark.detected && c.filter !== name) {
+    return mark.notSeen;
+  }
+  return seen;
 };
 
 /** Whether Telenor's test page can tell that this computer uses `f`. */
@@ -99,10 +112,14 @@ const filterRow = (name: string, m: Mark): TextChunk[] => [
   paint(fit(m.text, markWidth), { fg: m.color }),
 ];
 
+/** What the screen says while the connection is being detected. */
+const detecting = (tick: number): TextChunk =>
+  paint(`${spinner(tick)} detecting…`, { fg: theme.dim });
+
 /** What was detected. */
 const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   if (c === undefined) {
-    return oneLine(`${spinner(tick)} detecting…`, { fg: theme.dim });
+    return lines([[detecting(tick)]]);
   }
   return lines([
     ...detectedLines(c),
@@ -110,29 +127,19 @@ const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   ]);
 };
 
-const testMark = (c: Connection): Mark => {
-  if (c.filter !== undefined) {
-    return mark.detected;
-  }
-  if (c.error !== undefined) {
-    return mark.cantSee;
-  }
-  return mark.notSeen;
-};
-
 /** How it was detected: the test lookup and what its answers mean. */
 const howText = (c: Connection | undefined, width: number): StyledText => {
   if (c === undefined) {
     return lines([]);
   }
-  const glyph = testMark(c);
+  const seen = testMarks[connectionState(c)];
   return lines([
     [
       paint(fit("test lookup", lookupWidth), { fg: theme.dim }),
       paint("this computer got", { fg: theme.dim }),
     ],
     [
-      paint(`${glyph.glyph} `, { fg: glyph.color }),
+      paint(`${seen.glyph} `, { fg: seen.color }),
       paint(fit(telenorTestPage.name, lookupWidth - 2)),
       paint(testAnswerText(c)),
     ],
@@ -227,6 +234,7 @@ export {
   browserText,
   connectionCopy,
   detectedText,
+  detecting,
   filtersText,
   howText,
   safeZoneText,

@@ -1,7 +1,10 @@
-/** The one-line summaries: the verdict, progress, connection and keys. */
+/**
+ * The summary under the input: the verdict, or progress while checking, and
+ * the hint at the end of the input.
+ */
 import type { StyledText, TextChunk } from "@opentui/core";
 import type { Reason } from "../check/classify.ts";
-import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
+import { trustedFilters } from "../check/evidence.ts";
 import {
   type CheckResult,
   type Outcome,
@@ -233,23 +236,6 @@ const cancelledSummary = (r: CheckResult): StyledText =>
     ],
   ]);
 
-const connectionStatus = (s: State): TextChunk => {
-  const c = s.network?.connection;
-  if (c === undefined) {
-    return paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim });
-  }
-  if (seemsIntercepted(s.network)) {
-    return paint("? DNS intercepted", { fg: theme.warn });
-  }
-  if (c.filter !== undefined) {
-    return paint(`✕ ${c.filter}`, { fg: theme.block });
-  }
-  if (c.error !== undefined) {
-    return paint("? unknown", { fg: theme.warn });
-  }
-  return paint("· no filter detected", { fg: theme.dim });
-};
-
 /**
  * The line under the input: the verdict, or progress while checking. On a
  * narrow screen the reference answers, or the blocked count, go on a line of
@@ -285,7 +271,3 @@ export const inputHint = (s: State): StyledText => {
     fg: theme.dim,
   });
 };
-
-/** The box at the top right: which filter this computer's DNS uses. */
-export const connectionBadge = (s: State): StyledText =>
-  lines([[paint("your connection  ", { fg: theme.dim }), connectionStatus(s)]]);

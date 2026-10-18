@@ -5,7 +5,7 @@ import type { CheckResult, Network } from "../check/result.ts";
 import { jsonMeta, jsonText } from "../report/json.ts";
 import { dnsFilterLine, renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
-import { connectionCopy } from "./connection-view.ts";
+import { connectionCopy } from "./connection-text.ts";
 import type { State } from "./state.ts";
 
 /** What the screen calls the DNS filter while the network is being detected. */

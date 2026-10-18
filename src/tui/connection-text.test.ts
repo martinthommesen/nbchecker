@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { Dns } from "effect/net";
 import { type Connection, detectConnection } from "../check/connection.ts";
 import { telenorTestPage } from "../check/known-answers.ts";
-import { detectedText, howText } from "./connection-view.ts";
+import { detectedText, howText } from "./connection-text.ts";
 import { plainText } from "./paint.ts";
 
 const failed: Connection = {
