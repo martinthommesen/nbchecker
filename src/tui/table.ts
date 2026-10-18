@@ -1,15 +1,16 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
+import type { Filter } from "../check/filters.ts";
+import { lines, paint, spinner } from "./paint.ts";
 import {
-  columns,
-  fit,
-  fitRight,
-  lines,
-  paint,
-  spinner,
-  wrap,
-} from "./paint.ts";
-import type { Group, RowState, TableRow } from "./rows.ts";
+  type Group,
+  idleGroups,
+  type RowState,
+  resultGroups,
+  type TableRow,
+} from "./rows.ts";
+import type { State } from "./state.ts";
+import { columns, fit, fitRight, wrap } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const glyphWidth = 2;
@@ -75,6 +76,17 @@ const field = (label: string, value: string): TextChunk[] => [
   paint(fit(label, labelWidth), { fg: theme.dim }),
   paint(value),
 ];
+
+/**
+ * The table's groups of rows: the filters in `items` that will be asked,
+ * until a check has a result. The selection moves through the same rows.
+ */
+export const tableGroups = (s: State, items: readonly Filter[]): Group[] => {
+  if (s.result === undefined) {
+    return idleGroups(items);
+  }
+  return resultGroups(s.result);
+};
 
 /** The column titles above the table. */
 export const tableHeader = (width: number): StyledText =>

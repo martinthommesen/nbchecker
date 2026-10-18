@@ -4,8 +4,6 @@ import type { CheckResult, Network } from "../check/result.ts";
 export type Screen = "connection" | "help" | "main";
 
 export interface State {
-  /** The last check was cancelled, so `result` is only part of an answer. */
-  readonly cancelled: boolean;
   /** A check is running; `result` holds what has answered so far. */
   readonly checking: boolean;
   /** How long the last check took. */
@@ -28,7 +26,6 @@ export interface State {
 }
 
 export const initialState = (version: string): State => ({
-  cancelled: false,
   checking: false,
   elapsedMs: undefined,
   focus: "input",

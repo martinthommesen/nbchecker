@@ -1,9 +1,5 @@
 /** The "your connection" screen's panes. */
-import {
-  BoxRenderable,
-  type CliRenderer,
-  ScrollBoxRenderable,
-} from "@opentui/core";
+import { BoxRenderable, type CliRenderer } from "@opentui/core";
 import type { Filter } from "../check/filters.ts";
 import {
   browserText,
@@ -12,6 +8,8 @@ import {
   howText,
   safeZoneText,
 } from "./connection-view.ts";
+import type { State } from "./state.ts";
+import { theme } from "./theme.ts";
 import {
   addAll,
   bodyOf,
@@ -21,21 +19,17 @@ import {
   pane,
   paneChrome,
   paneGap,
-} from "./panes.ts";
-import type { State } from "./state.ts";
-import { theme } from "./theme.ts";
+  scrollBox,
+} from "./widgets.ts";
 
 /** The two columns share the width equally. */
 const detectionShare = 1;
 
-const buildConnection = (renderer: CliRenderer) => {
+/** `items` are the filters listed, with how each answered the self-test. */
+const buildConnection = (renderer: CliRenderer, items: readonly Filter[]) => {
   // Scrolls, as a short screen can't show every pane at once.
-  const view = new ScrollBoxRenderable(renderer, {
-    flexGrow: 1,
-    flexShrink: 1,
-    minHeight: 0,
-    visible: false,
-  });
+  const view = scrollBox(renderer);
+  view.visible = false;
   // At least as tall as the screen, so the panes reach down to the keys.
   view.content.minHeight = "100%";
   const panes = new BoxRenderable(renderer, {
@@ -77,28 +71,27 @@ const buildConnection = (renderer: CliRenderer) => {
   };
   bodies.safeZone.content = safeZoneText();
   bodies.browser.content = browserText();
-  return { bodies, columns: [left, right], panes, view };
+  return { bodies, columns: [left, right], items, panes, view };
 };
 
 type ConnectionParts = ReturnType<typeof buildConnection>;
 
-const drawConnection = (
-  parts: ConnectionParts,
-  s: State,
-  items: readonly Filter[],
-  { wide, width }: Layout
-) => {
-  let howWidth = inner(width) - paneChrome;
+/** The width inside the "How we know" pane, a column's width when wide. */
+const howWidthOf = ({ wide, width }: Layout): number => {
   if (wide) {
-    howWidth = Math.floor(
+    return Math.floor(
       ((inner(width) - paneGap) * detectionShare) / (detectionShare + 1) -
         paneChrome
     );
   }
+  return inner(width) - paneChrome;
+};
+
+const drawConnection = (parts: ConnectionParts, s: State, layout: Layout) => {
   // Side by side the columns share the width; stacked, each is its own height.
   parts.panes.flexDirection = "column";
   let basis: number | "auto" = "auto";
-  if (wide) {
+  if (layout.wide) {
     parts.panes.flexDirection = "row";
     basis = 0;
   }
@@ -108,8 +101,8 @@ const drawConnection = (
   const { bodies } = parts;
   const c = s.network?.connection;
   bodies.detected.content = detectedText(c, s.tick);
-  bodies.how.content = howText(c, howWidth);
-  bodies.filters.content = filtersText(s.network, items);
+  bodies.how.content = howText(c, howWidthOf(layout));
+  bodies.filters.content = filtersText(s.network, parts.items);
 };
 
 export { buildConnection, drawConnection };

@@ -1,6 +1,7 @@
 /** What each action does: checks, copying, saving and moving around. */
 import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
+import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
 import {
@@ -12,8 +13,9 @@ import { toJson } from "../report/json.ts";
 import type { Controller, ControllerDeps } from "./controller-deps.ts";
 import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
-import { flatRows, resultGroups } from "./rows.ts";
-import type { State } from "./state.ts";
+import { flatRows } from "./rows.ts";
+import type { Screen, State } from "./state.ts";
+import { tableGroups } from "./table.ts";
 
 const pageStep = 5;
 const jsonIndent = 2;
@@ -68,7 +70,6 @@ const checkTarget = (
     });
   return Effect.gen(function* () {
     yield* update(() => ({
-      cancelled: false,
       checking: true,
       elapsedMs: undefined,
       focus: "table",
@@ -87,7 +88,6 @@ const checkTarget = (
       Effect.timed
     );
     yield* update(() => ({
-      cancelled: false,
       checking: false,
       elapsedMs: Duration.toMillis(duration),
       result,
@@ -95,7 +95,6 @@ const checkTarget = (
   }).pipe(
     Effect.onInterrupt(() =>
       update(({ result }) => ({
-        cancelled: true,
         checking: false,
         result: result && cancelPending(result),
       }))
@@ -200,27 +199,25 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
   return { copy, exportJson };
 };
 
+/** `n`, kept between 0 and `most`. */
+const clamp = (n: number, most: number): number =>
+  Math.min(Math.max(n, 0), most);
+
+/** How many rows the selection moves through: those the table shows. */
+const rowCount = (s: State, items: readonly Filter[]): number =>
+  flatRows(tableGroups(s, items)).length;
+
 const moveActions = (
   { filters, input, store }: ControllerDeps,
   session: Session
 ) => {
   const move = (delta: number) => {
     const s = store.get();
-    let count = filters.length;
-    if (s.result !== undefined) {
-      count = flatRows(resultGroups(s.result)).length;
-    }
-    const selected = Math.min(
-      Math.max(s.selected + delta, 0),
-      Math.max(count - 1, 0)
-    );
-    store.set({ selected });
+    const last = Math.max(rowCount(s, filters) - 1, 0);
+    store.set({ selected: clamp(s.selected + delta, last) });
   };
   const recall = (step: number) => {
-    session.recalled = Math.min(
-      Math.max(session.recalled + step, 0),
-      session.history.length
-    );
+    session.recalled = clamp(session.recalled + step, session.history.length);
     input.value = session.history[session.recalled] ?? "";
   };
   const focusInput = () => {
@@ -257,7 +254,7 @@ const makeController = (deps: ControllerDeps): Controller => {
   const checks = checkActions(deps, session, toast);
   const output = outputActions(deps, toast);
   const moves = moveActions(deps, session);
-  const show = (screen: State["screen"]) => () => deps.store.set({ screen });
+  const show = (screen: Screen) => () => deps.store.set({ screen });
   const actions: Record<Action, () => void> = {
     back: show("main"),
     cancel: checks.cancel,

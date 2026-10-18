@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { wrap } from "./paint.ts";
+import { wrap } from "./text-layout.ts";
 
 const address = ["2001:db8:1234:5678", "abcd:ef12:3456:789a"].join(":");
 const width = 30;

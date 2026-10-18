@@ -8,7 +8,8 @@ import {
 import type { Filter } from "../check/filters.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
 import { categoryOrder } from "../report/view.ts";
-import { fit, lines, paint, spinner } from "./paint.ts";
+import { lines, paint, spinner } from "./paint.ts";
+import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const nameWidth = 24;
