@@ -135,10 +135,13 @@ const detailsWidthOf = (width: number): number =>
   );
 
 /** The width inside the resolvers pane, beside the details pane if shown. */
-const tableWidthOf = ({ wide, width }: Layout): number => {
+const tableWidthOf = (
+  { wide, width }: Layout,
+  detailsWidth: number
+): number => {
   let tableWidth = inner(width) - paneChrome - scrollBar;
   if (wide) {
-    tableWidth -= detailsWidthOf(width) + paneGap;
+    tableWidth -= detailsWidth + paneGap;
   }
   return tableWidth;
 };
@@ -151,7 +154,7 @@ const drawResults = (
   const detailsWidth = detailsWidthOf(layout.width);
   results.details.visible = layout.wide;
   results.details.width = detailsWidth;
-  const tableWidth = tableWidthOf(layout);
+  const tableWidth = tableWidthOf(layout, detailsWidth);
   const groups = tableGroups(s, items);
   const table = tableText(groups, s.selected, tableWidth, s.tick);
   results.head.content = tableHeader(tableWidth);
