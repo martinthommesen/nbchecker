@@ -1,23 +1,15 @@
+# Dependencies
+node_modules/
+
 # Binaries
-/nettvern-check
-/nettvern-check.exe
-*.exe
-*.dll
-*.so
-*.dylib
+/nbchecker
 
 # Build and release output
 /bin/
 /dist/
 
 # Test output
-*.test
-*.out
-coverage.*
-
-# Go workspace files
-go.work
-go.work.sum
+coverage/
 
 # Environment and editor files
 .env

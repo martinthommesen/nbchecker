@@ -23,7 +23,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: nettvern-check version
+      label: nbchecker version
       placeholder: v1.0.0
     validations:
       required: true
@@ -32,7 +32,6 @@ body:
     attributes:
       label: Operating system
       options:
-        - Windows
         - macOS
         - Linux
         - Other

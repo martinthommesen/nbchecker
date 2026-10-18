@@ -1,11 +1,11 @@
 version: 2
 updates:
-  - package-ecosystem: gomod
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
     groups:
-      go-dependencies:
+      dependencies:
         patterns: ["*"]
     commit-message:
       prefix: deps

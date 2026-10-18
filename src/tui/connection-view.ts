@@ -1,0 +1,186 @@
+/** The "your connection" screen: which filter this computer's DNS uses. */
+import type { StyledText, TextChunk } from "@opentui/core";
+import {
+  type Connection,
+  testPage,
+  testPageMeaning,
+} from "../check/connection.ts";
+import type { Filter } from "../check/filters.ts";
+import { categoryOrder } from "../report/view.ts";
+import { fit, lines, paint, spinner } from "./paint.ts";
+import { theme } from "./theme.ts";
+
+const nameWidth = 26;
+const lookupWidth = 24;
+const addressWidth = 15;
+
+const groupTitles = {
+  ads: "ADS AND TRACKERS",
+  family: "FAMILY",
+  security: "SECURITY",
+} as const;
+
+const mark = {
+  cantSee: { color: theme.warn, glyph: "?", text: "can't see" },
+  detected: { color: theme.block, glyph: "✕", text: "detected" },
+  noFilter: { color: theme.ok, glyph: "✓", text: "no filter" },
+  noTest: { color: theme.faint, glyph: "·", text: "no test page" },
+  notSeen: { color: theme.dim, glyph: "·", text: "not seen" },
+} as const;
+
+type Mark = (typeof mark)[keyof typeof mark];
+
+const heading = (text: string): TextChunk[] => [
+  paint(text, { bold: true, fg: theme.accent }),
+];
+
+const prose = (text: string): TextChunk[] => [paint(text)];
+
+const detectedLines = (c: Connection): TextChunk[][] => {
+  if (c.filter !== undefined) {
+    const short = c.filter.replace("Telenor ", "");
+    return [
+      [paint(`✕ ${c.filter}`, { bold: true, fg: theme.block })],
+      prose(
+        `Lookups from this computer get ${short}'s answers. Sites ${short} blocks show Telenor's warning page instead.`
+      ),
+    ];
+  }
+  if (c.network !== undefined) {
+    return [
+      [paint(`✓ ${c.network} DNS, no filter`, { bold: true, fg: theme.ok })],
+      prose(
+        "This computer uses Telenor's DNS with no filter turned on. Telenor still blocks some domains for every customer on legal grounds."
+      ),
+    ];
+  }
+  if (c.error !== undefined) {
+    return [
+      [paint("? Unknown", { bold: true, fg: theme.warn })],
+      prose(`The test lookup failed: ${c.error}`),
+    ];
+  }
+  return [
+    [paint("· No filter detected", { bold: true, fg: theme.dim })],
+    prose(
+      "nbchecker didn't recognise a filter on this computer's DNS. Only Telenor publishes a test page, so a public filter set up on this computer or router isn't detected here. The Your DNS row of each check shows what this computer really gets."
+    ),
+  ];
+};
+
+const testAnswerText = (c: Connection): string => {
+  if (c.error !== undefined) {
+    return "lookup failed";
+  }
+  if (c.testAnswers.length === 0) {
+    return "doesn't exist";
+  }
+  return c.testAnswers.join(", ");
+};
+
+const telenorMark = (c: Connection | undefined, name: string): Mark => {
+  if (c?.filter === name) {
+    return mark.detected;
+  }
+  if (c === undefined || c.error !== undefined) {
+    return mark.cantSee;
+  }
+  return mark.notSeen;
+};
+
+const markOf = (c: Connection | undefined, f: Filter): Mark => {
+  if (f.onlyAnswers !== undefined) {
+    return telenorMark(c, f.name);
+  }
+  return mark.noTest;
+};
+
+const filterRow = (name: string, m: Mark): TextChunk[] => [
+  paint(`${m.glyph} `, { fg: m.color }),
+  paint(fit(name, nameWidth)),
+  paint(m.text, { fg: m.color }),
+];
+
+/** The left pane: what was detected and how. */
+export const detectionText = (
+  c: Connection | undefined,
+  tick: number
+): StyledText => {
+  if (c === undefined) {
+    return lines([
+      heading("Detected filter"),
+      [paint(`${spinner(tick)} detecting…`, { fg: theme.dim })],
+    ]);
+  }
+  let glyph: Mark = mark.notSeen;
+  if (c.filter !== undefined) {
+    glyph = mark.detected;
+  } else if (c.network !== undefined) {
+    glyph = mark.noFilter;
+  }
+  return lines([
+    heading("Detected filter"),
+    ...detectedLines(c),
+    [paint("Checked against Telenor's test page.", { fg: theme.dim })],
+    [],
+    heading("How we know"),
+    [
+      paint(fit("test lookup", lookupWidth), { fg: theme.faint }),
+      paint("this computer got", { fg: theme.faint }),
+    ],
+    [
+      paint(`${glyph.glyph} `, { fg: glyph.color }),
+      paint(fit(testPage, lookupWidth - 2)),
+      paint(testAnswerText(c)),
+    ],
+    [],
+    [
+      paint("Telenor's test page answers differently per filter:", {
+        fg: theme.dim,
+      }),
+    ],
+    ...testPageMeaning.map(([ip, meaning]) => [
+      paint(`  ${fit(ip, addressWidth)}${meaning}`, { fg: theme.dim }),
+    ]),
+  ]);
+};
+
+/** The right pane: every filter, whether it was seen, and the caveats. */
+export const filtersText = (
+  c: Connection | undefined,
+  items: readonly Filter[]
+): StyledText => {
+  const out: TextChunk[][] = [heading("Filters we look for")];
+  for (const category of categoryOrder) {
+    out.push([], [paint(groupTitles[category], { fg: theme.faint })]);
+    for (const f of items.filter((x) => x.category === category)) {
+      out.push(filterRow(f.name, markOf(c, f)));
+      // SafeZone has no server to ask, so it is only listed here.
+      if (f.name === "Telenor Nettvern") {
+        out.push(filterRow("Telenor SafeZone", mark.cantSee));
+      }
+    }
+  }
+  out.push(
+    [],
+    heading("About SafeZone"),
+    prose(
+      "SafeZone filters inside Telenor's mobile network and has no public server to ask. nbchecker can only see it when this computer is online through a SafeZone phone hotspot or VPN, as the Your DNS row."
+    ),
+    [],
+    heading("Your browser may differ"),
+    prose(
+      "Browsers with secure DNS turned on ask their own server, so a site can open there even when this computer is blocked."
+    )
+  );
+  return lines(out);
+};
+
+/** The connection screen as plain text, for copying. */
+export const connectionCopy = (
+  c: Connection | undefined,
+  items: readonly Filter[]
+): string =>
+  [detectionText(c, 0), filtersText(c, items)]
+    .map((t) => t.chunks.map((ch) => ch.text).join(""))
+    .join("\n\n");
