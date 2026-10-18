@@ -15,7 +15,7 @@ CleanBrowsing, and your own computer's DNS.
 With [Homebrew](https://brew.sh) on macOS or Linux:
 
 ```sh
-brew install martinthommesen/tap/nbchecker
+brew install --cask martinthommesen/tap/nbchecker
 ```
 
 Or download the archive for your computer from the
@@ -78,10 +78,12 @@ SECURITY · MALWARE, PHISHING
 Without arguments, and when standard input isn't a terminal, nbchecker reads
 targets from it, one per line.
 
-The exit status is 0 if nothing is blocked, 1 if anything is blocked and 2 if
-a check was incomplete, for example because a filter, your own DNS or the real
+When it checks targets from arguments or standard input, the exit status is 0
+if nothing is blocked, 1 if anything is blocked and 2 if a check was
+incomplete, for example because a filter, your own DNS or the real
 answer could not be reached. A filter that only answers some networks, such as Telenor's,
-doesn't make a check incomplete when you are elsewhere.
+doesn't make a check incomplete when you are elsewhere. The interactive app
+always exits with 0, since one session can check many targets.
 
 ## What it checks
 

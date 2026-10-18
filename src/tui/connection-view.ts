@@ -23,6 +23,7 @@ const groupTitles = {
 const mark = {
   cantSee: { color: theme.warn, glyph: "?", text: "can't see" },
   detected: { color: theme.block, glyph: "✕", text: "detected" },
+  noFilter: { color: theme.ok, glyph: "✓", text: "no filter" },
   noTest: { color: theme.faint, glyph: "·", text: "no test page" },
   notSeen: { color: theme.dim, glyph: "·", text: "not seen" },
 } as const;
@@ -112,8 +113,10 @@ export const detectionText = (
     ]);
   }
   let glyph: Mark = mark.notSeen;
-  if (c.network !== undefined) {
+  if (c.filter !== undefined) {
     glyph = mark.detected;
+  } else if (c.network !== undefined) {
+    glyph = mark.noFilter;
   }
   return lines([
     heading("Detected filter"),

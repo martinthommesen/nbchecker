@@ -1,7 +1,11 @@
 /** Explains in a sentence or two why a row says what it says. */
 import type { Reason, Verdict } from "../check/classify.ts";
 import type { Filter } from "../check/filters.ts";
-import type { CheckResult, Outcome } from "../check/result.ts";
+import {
+  type CheckResult,
+  type Outcome,
+  truthPending,
+} from "../check/result.ts";
 
 const blockWhy: Record<Reason, (name: string, detail: string) => string> = {
   ede: (name, detail) =>
@@ -24,7 +28,12 @@ const blockWhy: Record<Reason, (name: string, detail: string) => string> = {
     "The answer points to Cisco Umbrella's inspection proxy, which checks a site it is unsure about before letting it through.",
 };
 
+const waitingForTruth = "Waiting for the real answer to compare it with.";
+
 const missingWhy = (r: CheckResult): string => {
+  if (truthPending(r)) {
+    return `It says the domain doesn't exist. ${waitingForTruth}`;
+  }
   if (r.truthError !== undefined) {
     return "It says the domain doesn't exist. The real answer couldn't be fetched, so nbchecker can't tell whether that is a block.";
   }
@@ -32,6 +41,12 @@ const missingWhy = (r: CheckResult): string => {
 };
 
 const resolvesWhy = (name: string, v: Verdict, r: CheckResult): string => {
+  if (truthPending(r)) {
+    return `${name} resolves the domain. ${waitingForTruth}`;
+  }
+  if (r.truthError !== undefined) {
+    return `${name} resolves the domain. The real answer couldn't be fetched, so nbchecker can't compare the addresses.`;
+  }
   if (v.answers.some((a) => r.truth.includes(a))) {
     return `Same as the real answer, so ${name} does not block this domain.`;
   }
@@ -99,6 +114,9 @@ const systemWhy = (o: Outcome, r: CheckResult): string => {
 const truthWhy = (r: CheckResult): string => {
   if (r.truthError !== undefined) {
     return `No unfiltered resolver could be reached: ${r.truthError}. Without it, a filter that says a domain doesn't exist can't be told apart from a domain that really doesn't.`;
+  }
+  if (truthPending(r)) {
+    return "Waiting for the real answer, fetched over encrypted DNS so no filter on your network can change it.";
   }
   return "The real answer, fetched over encrypted DNS so no filter on your network can change it. Every other row is compared with this.";
 };
