@@ -9,9 +9,13 @@ const nul = "\u0000";
 
 describe("printable", () => {
   test("leaves ordinary text alone", () => {
-    expect(printable("blokkert.example → 0.0.0.0\tok\n")).toBe(
-      "blokkert.example → 0.0.0.0\tok\n"
+    expect(printable("blokkert.example → 0.0.0.0\tok")).toBe(
+      "blokkert.example → 0.0.0.0\tok"
     );
+  });
+
+  test("replaces newlines, so text can't add lines of its own", () => {
+    expect(printable("a\nb\r\nc")).toBe(`a${mark}b${mark}${mark}c`);
   });
 
   test("replaces escape sequences and other control characters", () => {
