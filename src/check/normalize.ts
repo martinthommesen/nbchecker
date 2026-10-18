@@ -1,26 +1,38 @@
 import { Result } from "effect";
 import { Host, NetAddress } from "effect/net";
 
-const pathStart = /[/?#]/;
+/** A URL scheme such as "https://", only at the very start. */
+const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+/**
+ * "http:" or "https:" with any number of slashes or backslashes, even none,
+ * which a browser still opens as a URL, unless what follows is a port, as
+ * in "http:8080".
+ */
+const webScheme = /^https?:(?:[/\\]|(?!\d*(?:[/?#\\]|$)))/i;
+/** Where the host of a schemeless input ends, as in a browser's address bar. */
+const pathStart = /[/?#\\]/;
 const trailingDot = /\.$/;
 
-const schemeSeparator = "://";
-
-const stripUrl = (input: string): string => {
-  let s = input.trim();
-  const scheme = s.indexOf(schemeSeparator);
-  if (scheme !== -1) {
-    s = s.slice(scheme + schemeSeparator.length);
+/**
+ * The host of an input with a scheme, read by the standard URL parser so it
+ * is the host a browser would open. Undefined for an input without a scheme,
+ * and "" for a URL that doesn't parse.
+ */
+const urlHost = (input: string): string | undefined => {
+  let url = input;
+  if (input.startsWith("//")) {
+    url = `https:${input}`;
+  } else if (!(scheme.test(input) || webScheme.test(input))) {
+    return;
   }
-  const path = s.search(pathStart);
-  if (path !== -1) {
-    s = s.slice(0, path);
+  if (!URL.canParse(url)) {
+    return "";
   }
-  const at = s.lastIndexOf("@");
-  if (at !== -1) {
-    s = s.slice(at + 1);
+  const { hostname } = new URL(url);
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    return hostname.slice(1, -1);
   }
-  return s;
+  return hostname;
 };
 
 const stripPort = (s: string): string => {
@@ -38,22 +50,54 @@ const stripPort = (s: string): string => {
   return s;
 };
 
+/** The host of a schemeless input: everything before the first / ? # or \. */
+const bareHost = (input: string): string => {
+  let s = input;
+  const path = s.search(pathStart);
+  if (path !== -1) {
+    s = s.slice(0, path);
+  }
+  const at = s.lastIndexOf("@");
+  if (at !== -1) {
+    s = s.slice(at + 1);
+  }
+  return stripPort(s);
+};
+
 export interface Target {
-  /** The name to look up, in its ASCII (xn--) form, or the IP address. */
+  /** The name to show, in its ASCII (xn--) form, or the IP address. */
   readonly host: string;
   readonly kind: "domain" | "invalid" | "ip";
+  /**
+   * The name to look up: the host, with the trailing dot kept when the input
+   * had one, so this computer's resolver doesn't add a search domain.
+   */
+  readonly query: string;
 }
 
 /** Accepts a domain, a URL or an IP address. */
 export const normalize = (input: string): Target => {
-  const s = stripPort(stripUrl(input)).replace(trailingDot, "");
+  const trimmed = input.trim();
+  const host = urlHost(trimmed) ?? bareHost(trimmed);
+  const absolute = host.length > 1 && trailingDot.test(host);
+  const s = host.replace(trailingDot, "");
   const ip = NetAddress.ipFromString(s);
   if (Result.isSuccess(ip)) {
-    return { host: NetAddress.formatIp(ip.success), kind: "ip" };
+    const address = NetAddress.formatIp(ip.success);
+    return { host: address, kind: "ip", query: address };
   }
   const name = Host.domainNameFromString(s);
-  if (Result.isSuccess(name)) {
-    return { host: Host.toRelative(name.success), kind: "domain" };
+  if (s !== "" && Result.isSuccess(name)) {
+    const relative = Host.toRelative(name.success);
+    let query: string = relative;
+    if (absolute) {
+      query = `${relative}.`;
+    }
+    return { host: relative, kind: "domain", query };
   }
-  return { host: s, kind: "invalid" };
+  let shown = s;
+  if (shown === "") {
+    shown = trimmed;
+  }
+  return { host: shown, kind: "invalid", query: shown };
 };

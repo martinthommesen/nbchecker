@@ -1,29 +1,7 @@
 /** Short and long forms of a resolver's raw answer, for display. */
 import type { Reason, Verdict } from "../check/classify.ts";
-import { type DnsAnswer, type DnsRecord, Rcode } from "../dns/wire.ts";
-
-const formErr = 1;
-const notImp = 4;
-const rcodeNames = new Map<number, string>([
-  [Rcode.noError, "NOERROR"],
-  [formErr, "FORMERR"],
-  [Rcode.servFail, "SERVFAIL"],
-  [Rcode.nxDomain, "NXDOMAIN"],
-  [notImp, "NOTIMP"],
-  [Rcode.refused, "REFUSED"],
-]);
-
-/** Extended DNS Error codes (RFC 8914) that filters use. */
-const edeBlocked = 15;
-const edeCensored = 16;
-const edeFiltered = 17;
-const edeProhibited = 18;
-const extendedErrorNames = new Map<number, string>([
-  [edeBlocked, "Blocked"],
-  [edeCensored, "Censored"],
-  [edeFiltered, "Filtered"],
-  [edeProhibited, "Prohibited"],
-]);
+import { extendedErrorName, rcodeName } from "../check/codes.ts";
+import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 
 /** Blocks that answer with a CNAME to a block page. */
 const cnameReasons = new Set<Reason>([
@@ -32,9 +10,6 @@ const cnameReasons = new Set<Reason>([
   "nettvern",
   "nettvern+",
 ]);
-
-const rcodeName = (code: number): string =>
-  rcodeNames.get(code) ?? `RCODE ${code}`;
 
 const unique = (answers: readonly DnsAnswer[]): DnsRecord[] => {
   const seen = new Set<string>();
@@ -97,7 +72,7 @@ export const responseLines = (answers: readonly DnsAnswer[]): string[] => {
     lines.push(`status: ${rcodeName(failed.rcode)}`);
   }
   for (const e of answers.flatMap((a) => a.extendedErrors)) {
-    const name = extendedErrorNames.get(e.code) ?? "Extended DNS Error";
+    const name = extendedErrorName(e.code) ?? "Extended DNS Error";
     lines.push([`EDE ${e.code} (${name})`, e.text].filter(Boolean).join(": "));
   }
   const records = unique(answers);

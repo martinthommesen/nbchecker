@@ -1,6 +1,7 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
 import type { CheckResult, Outcome } from "../check/result.ts";
+import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
@@ -14,20 +15,6 @@ const extraResolvers = 2;
 
 const badge = (text: string, color: string): TextChunk =>
   paint(` ${text} `, { bg: color, bold: true, fg: theme.badgeText });
-
-const tally = (r: CheckResult) => {
-  let answered = 0;
-  let blocked = 0;
-  for (const { outcome } of r.filters) {
-    if (outcome.kind === "answered") {
-      answered += 1;
-      if (outcome.verdict.blocked) {
-        blocked += 1;
-      }
-    }
-  }
-  return { answered, blocked };
-};
 
 const done = (o: Outcome | undefined): boolean =>
   o !== undefined && o.kind !== "pending";
@@ -65,8 +52,11 @@ const systemPhrase = (r: CheckResult): TextChunk => {
     }
     return paint(text, { fg: theme.block });
   }
+  if (o.verdict.inspected) {
+    return paint("inspected", { fg: theme.warn });
+  }
   if (o.verdict.missing) {
-    return paint("not found", { fg: theme.dim });
+    return paint("no address", { fg: theme.dim });
   }
   return paint("resolves", { fg: theme.ok });
 };
@@ -81,42 +71,68 @@ const truthPhrase = (r: CheckResult): TextChunk => {
   if (!r.exists) {
     return paint("doesn't exist", { fg: theme.dim });
   }
+  if (r.truth.length === 0) {
+    return paint("no addresses", { fg: theme.ok });
+  }
   return paint(shortList(r.truth, truthShown), { fg: theme.ok });
 };
 
-const verdictBadge = (r: CheckResult): TextChunk[] => {
-  const { answered, blocked } = tally(r);
-  const systemBlocked =
-    r.system?.kind === "answered" && r.system.verdict.blocked;
-  if (blocked > 0) {
-    return [
-      badge("BLOCKED", theme.block),
-      paint("  by "),
-      paint(`${blocked} of ${r.filters.length}`, {
-        bold: true,
-        fg: theme.block,
-      }),
-      paint(" filters"),
-    ];
+const counted = (n: number, of: number, color: string): TextChunk =>
+  paint(`${n} of ${of}`, { bold: true, fg: color });
+
+/** The verdict's badge and the words after it. */
+const verdictBadge = (status: Status): TextChunk[] => {
+  switch (status.kind) {
+    case "blocked":
+      return [
+        badge("BLOCKED", theme.block),
+        paint("  by "),
+        counted(status.blocked, status.answered, theme.block),
+        paint(" filters"),
+      ];
+    case "blocked-here":
+      return [
+        badge("BLOCKED", theme.block),
+        paint("  by your DNS, but by none of the filters"),
+      ];
+    case "cant-tell":
+      return [
+        badge("COULDN'T TELL", theme.warn),
+        paint("  the real answer is unavailable"),
+      ];
+    case "inspected":
+      if (status.inspected === 0) {
+        return [
+          badge("INSPECTED", theme.warn),
+          paint("  your DNS sends it through Cisco's proxy, not blocked"),
+        ];
+      }
+      return [
+        badge("INSPECTED", theme.warn),
+        paint("  "),
+        counted(status.inspected, status.answered, theme.warn),
+        paint(" filters send it through Cisco's proxy"),
+      ];
+    case "local-only":
+      return [
+        badge("ONLY HERE", theme.dim),
+        paint("  only resolves on this computer (private or split DNS)"),
+      ];
+    case "missing":
+      return [
+        badge("DOESN'T EXIST", theme.dim),
+        paint("  the real answer says so"),
+      ];
+    case "no-answer":
+      return [badge("NO ANSWER", theme.warn), paint("  no filter answered")];
+    default:
+      return [
+        badge("NOT BLOCKED", theme.ok),
+        paint("  by any of "),
+        paint(String(status.answered), { bold: true, fg: theme.ok }),
+        paint(" filters"),
+      ];
   }
-  if (systemBlocked) {
-    return [
-      badge("BLOCKED", theme.block),
-      paint("  by your DNS, but by none of the filters"),
-    ];
-  }
-  if (r.truthError === undefined && !r.exists) {
-    return [badge("DOESN'T EXIST", theme.dim), paint("  no resolver found it")];
-  }
-  if (answered === 0) {
-    return [badge("NO ANSWER", theme.warn), paint("  no filter answered")];
-  }
-  return [
-    badge("NOT BLOCKED", theme.ok),
-    paint("  by any of "),
-    paint(String(answered), { bold: true, fg: theme.ok }),
-    paint(" filters"),
-  ];
 };
 
 const notesLines = (r: CheckResult): TextChunk[][] =>
@@ -137,13 +153,11 @@ const resultSummary = (r: CheckResult, wide: boolean): StyledText => {
     paint("    real answer: ", { fg: theme.dim }),
     truthPhrase(r),
   ];
+  const verdict = verdictBadge(statusOf(r));
   if (wide) {
-    return lines([
-      [...verdictBadge(r), paint("   "), ...references],
-      ...notesLines(r),
-    ]);
+    return lines([[...verdict, paint("   "), ...references], ...notesLines(r)]);
   }
-  return lines([verdictBadge(r), references, ...notesLines(r)]);
+  return lines([verdict, references, ...notesLines(r)]);
 };
 
 const checkingSummary = (
@@ -169,7 +183,7 @@ const checkingSummary = (
   ];
   const blocked = [
     paint("blocked so far: ", { fg: theme.dim }),
-    paint(String(tally(r).blocked), { fg: theme.block }),
+    paint(String(statusOf(r).blocked), { fg: theme.block }),
   ];
   if (wide) {
     return lines([[...bar, paint("    "), ...blocked]]);
@@ -179,12 +193,12 @@ const checkingSummary = (
 
 /** A cancelled check has no verdict, only what answered before. */
 const cancelledSummary = (r: CheckResult): StyledText => {
-  const { answered, blocked } = tally(r);
+  const { answered, blocked, total } = statusOf(r);
   return lines([
     [
       badge("CANCELLED", theme.warn),
       paint(
-        `  ${answered} of ${r.filters.length} filters answered first, ${blocked} of them blocking`
+        `  ${answered} of ${total} filters answered first, ${blocked} of them blocking`
       ),
     ],
   ]);
@@ -197,9 +211,6 @@ const connectionStatus = (s: State): TextChunk => {
   }
   if (c.filter !== undefined) {
     return paint(`✕ ${c.filter}`, { fg: theme.block });
-  }
-  if (c.network !== undefined) {
-    return paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok });
   }
   if (c.error !== undefined) {
     return paint("? unknown", { fg: theme.warn });
@@ -216,7 +227,7 @@ export const summaryText = (s: State, wide: boolean): StyledText => {
   if (s.checking) {
     return checkingSummary(s.result, s.tick, wide);
   }
-  if (s.cancelled && s.result?.checked === true) {
+  if (s.result?.checked === true && s.result.completion === "cancelled") {
     return cancelledSummary(s.result);
   }
   if (s.result === undefined) {

@@ -11,6 +11,11 @@ export type Category = "ads" | "family" | "security";
 export interface Filter {
   readonly category: Category;
   readonly name: string;
+  /**
+   * The network whose customers it answers, as connection detection names
+   * it. Set along with `onlyAnswers`.
+   */
+  readonly network?: string;
   /** Set when the servers only answer some networks, such as one ISP's. */
   readonly onlyAnswers?: string;
   readonly servers: readonly string[];
@@ -20,6 +25,7 @@ export const filters: readonly Filter[] = [
   {
     category: "security",
     name: "Telenor Nettvern",
+    network: "Telenor",
     onlyAnswers: "Telenor customers",
     servers: [
       "148.122.16.253",
@@ -31,6 +37,7 @@ export const filters: readonly Filter[] = [
   {
     category: "family",
     name: "Telenor Nettvern+",
+    network: "Telenor",
     onlyAnswers: "Telenor customers",
     servers: [
       "148.122.16.252",

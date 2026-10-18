@@ -3,13 +3,20 @@ import { type DnsAnswer, type DnsRecord, Rcode } from "../dns/wire.ts";
 import {
   canonicalAddress,
   classify,
+  classifySystem,
   describe as describeVerdict,
   merge,
   type Reason,
+  type Reference,
 } from "./classify.ts";
 
+const edeBlocked = 15;
 const edeFiltered = 17;
 const edeStale = 3;
+
+/** The real answer for a name that exists, with an address of its own. */
+const exists: Reference = { addresses: ["192.0.2.20"], exists: true };
+const missing: Reference = { addresses: [], exists: false };
 
 const answer = (
   records: readonly DnsRecord[],
@@ -41,9 +48,10 @@ const aaaa = (name: string, value: string): DnsRecord => ({
 interface Case {
   readonly answer: DnsAnswer;
   readonly detail?: string;
-  readonly exists?: boolean;
   readonly name: string;
   readonly reason: Reason | undefined;
+  /** The real answer; by default, the name exists. */
+  readonly reference?: Reference;
 }
 
 // Block answers follow the shapes the filters send. Names and addresses are
@@ -83,9 +91,27 @@ const cases: readonly Case[] = [
     reason: "umbrella",
   },
   {
-    answer: answer([a("grey.example", "146.112.56.167")]),
-    name: "Umbrella proxy",
-    reason: "umbrella-proxy",
+    answer: answer([a("adult.example", "94.140.14.35")]),
+    name: "AdGuard Family's block page",
+    reason: "adguard",
+  },
+  {
+    answer: answer([], {
+      extendedErrors: [{ code: edeBlocked, text: "" }],
+      rcode: Rcode.servFail,
+    }),
+    detail: "Blocked",
+    name: "SERVFAIL with Extended DNS Error 15",
+    reason: "ede",
+  },
+  {
+    answer: answer([], {
+      extendedErrors: [{ code: edeBlocked, text: "policy" }],
+      rcode: Rcode.refused,
+    }),
+    detail: "Blocked: policy",
+    name: "REFUSED with Extended DNS Error 15",
+    reason: "ede",
   },
   {
     answer: answer([a("blocked.example", "0.0.0.0")]),
@@ -119,9 +145,9 @@ const cases: readonly Case[] = [
   },
   {
     answer: answer([], { rcode: Rcode.nxDomain }),
-    exists: false,
     name: "NXDOMAIN for a name that doesn't exist",
     reason: undefined,
+    reference: missing,
   },
   {
     answer: answer([
@@ -135,7 +161,7 @@ const cases: readonly Case[] = [
 
 describe("classify", () => {
   test.each(cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
-    const v = classify(c.answer, c.exists ?? true);
+    const v = classify(c.answer, c.reference ?? exists);
     expect(v.reason).toBe(c.reason);
     expect(v.blocked).toBe(c.reason !== undefined);
     expect(v.detail).toBe(c.detail ?? "");
@@ -144,20 +170,20 @@ describe("classify", () => {
   test("CNAME targets match without case or trailing dot differences", () => {
     const v = classify(
       answer([cname("x.example", "nettvern-info.telenor.net")]),
-      true
+      exists
     );
     expect(v.reason).toBe("nettvern");
   });
 });
 
 test("merge keeps the block and removes duplicate answers", () => {
-  const plain = classify(answer([a("x.example", "192.0.2.1")]), true);
+  const plain = classify(answer([a("x.example", "192.0.2.1")]), exists);
   const blocked = classify(
     answer([
       cname("x.example", "nettvern-info.telenor.net"),
       a("nettvern-info.telenor.net", "192.0.2.1"),
     ]),
-    true
+    exists
   );
   const merged = merge(plain, blocked);
   expect(merged.reason).toBe("nettvern");
@@ -171,10 +197,92 @@ test("canonicalAddress unmaps IPv4-mapped IPv6 and shortens IPv6", () => {
 });
 
 test("describe", () => {
-  const missing = classify(answer([], { rcode: Rcode.nxDomain }), false);
-  expect(describeVerdict(missing)).toBe("not found (the domain doesn't exist)");
-  const umbrella = classify(answer([a("x.example", "146.112.61.108")]), true);
+  const absent = classify(answer([], { rcode: Rcode.nxDomain }), missing);
+  expect(describeVerdict(absent)).toBe("not found (the domain doesn't exist)");
+  const umbrella = classify(answer([a("x.example", "146.112.61.108")]), exists);
   expect(describeVerdict(umbrella)).toBe(
     "blocked by Cisco Umbrella (phishing)"
   );
+});
+
+describe("classify: compared with the real answer", () => {
+  const zero: Reference = { addresses: ["0.0.0.0"], exists: true };
+
+  test("a domain whose own record is 0.0.0.0 is not blocked", () => {
+    const v = classify(answer([a("zero.example", "0.0.0.0")]), zero);
+    expect(v.blocked).toBe(false);
+    expect(v.answers).toEqual(["0.0.0.0"]);
+  });
+
+  test("an Extended DNS Error still counts", () => {
+    const v = classify(
+      answer([a("zero.example", "0.0.0.0")], {
+        extendedErrors: [{ code: edeFiltered, text: "" }],
+      }),
+      zero
+    );
+    expect(v.reason).toBe("ede");
+  });
+
+  test("an Umbrella block page the real answer also has is not a block", () => {
+    const page: Reference = { addresses: ["146.112.61.108"], exists: true };
+    const v = classify(answer([a("x.example", "146.112.61.108")]), page);
+    expect(v.blocked).toBe(false);
+  });
+});
+
+describe("classify: Cisco's inspection proxy", () => {
+  const proxied = answer([a("grey.example", "146.112.56.167")]);
+
+  test("is inspected, not blocked", () => {
+    const v = classify(proxied, exists);
+    expect(v).toMatchObject({
+      blocked: false,
+      inspected: true,
+      reason: "umbrella-proxy",
+    });
+    expect(describeVerdict(v)).toBe(
+      "sent through Cisco's inspection proxy; the site may still be blocked by URL"
+    );
+  });
+
+  test("a block in the other answer wins", () => {
+    const blocked = classify(answer([aaaa("grey.example", "::")]), exists);
+    const v = merge(classify(proxied, exists), blocked);
+    expect(v).toMatchObject({
+      blocked: true,
+      inspected: false,
+      reason: "null-ip",
+    });
+  });
+});
+
+describe("classifySystem", () => {
+  const noAddress = answer([]);
+  const v6: Reference = { addresses: ["2001:db8::6"], exists: true };
+  const none: Reference = { addresses: [], exists: true };
+
+  test("no address for a name with an IPv4 address is a block", () => {
+    const v = classifySystem(noAddress, true, exists);
+    expect(v).toMatchObject({
+      blocked: true,
+      missing: true,
+      reason: "no-address",
+    });
+  });
+
+  test("no address for a name without one, or only IPv6, is not", () => {
+    expect(classifySystem(noAddress, true, none).blocked).toBe(false);
+    expect(classifySystem(noAddress, true, v6).blocked).toBe(false);
+    expect(classifySystem(noAddress, true, missing).missing).toBe(true);
+  });
+
+  test("an address is read like a filter's answer", () => {
+    const v = classifySystem(
+      answer([a("x.example", "0.0.0.0")]),
+      false,
+      exists
+    );
+    expect(v.reason).toBe("null-ip");
+  });
 });

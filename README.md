@@ -55,15 +55,15 @@ Pass targets as arguments to print the result instead. For example:
 $ nbchecker blocked.example
 DNS filter on this computer: none detected
 
-blocked.example  ✗ blocked by 4 of 10 filters
+blocked.example  ✗ blocked by 4 of 8 filters
 
 REFERENCE
   ✓ Your DNS                not blocked
   ✓ Real answer             203.0.113.42
 
 SECURITY · MALWARE, PHISHING
-  · Telenor Nettvern        no answer (it only answers Telenor customers)
-  ✗ Cloudflare Security     blocked: answers 0.0.0.0
+  ? Telenor Nettvern        no answer (it only answers Telenor customers)
+  ✗ Cloudflare Security     blocked with an Extended DNS Error (Censored)
   ✗ Quad9                   blocked: says the domain doesn't exist
   ✓ CleanBrowsing Security  not blocked
   ...
@@ -84,6 +84,10 @@ It only looks up which DNS filter your computer uses once a target can be
 checked, so a list of invalid targets needs no network; the JSON then says
 `"dnsFilter": "not checked"`.
 
+"Blocked by 4 of 8 filters" counts the filters that answered. When the real
+answer can't be fetched, a filter saying the domain doesn't exist could be a
+block or not, so the result says it couldn't tell.
+
 When it checks targets from arguments or standard input, the exit status is:
 
 | Status | |
@@ -95,8 +99,9 @@ When it checks targets from arguments or standard input, the exit status is:
 | 74 | The results couldn't be written, for example because the disk is full |
 
 A filter that only answers some networks, such as Telenor's, doesn't make a
-check incomplete when you are elsewhere. The interactive app always exits
-with 0, since one session can check many targets.
+check incomplete when you are elsewhere; when nbchecker detects Nettvern or
+Nettvern+ on your DNS, it expects them to answer. The interactive app always
+exits with 0, since one session can check many targets.
 
 ## What it checks
 
@@ -122,9 +127,20 @@ known to give:
   (blocked for every Telenor customer on legal grounds, such as a court order)
   or `kid.telenor.net` (the police's child sexual abuse block list)
 - `0.0.0.0` or `::`
-- a Cisco Umbrella block page, or its inspection proxy
-- an Extended DNS Error saying the name was blocked, censored or filtered
+- a Cisco Umbrella block page, or AdGuard Family's block page `94.140.14.35`
+- an Extended DNS Error saying the name was blocked, censored or filtered,
+  whatever the response code
 - "this domain doesn't exist" while the real answer says it does
+
+An address the real answer also has is the domain's own, so it never counts
+as a block, even when it is `0.0.0.0`. Your own computer's resolver can't
+tell a name that doesn't exist from one without an address it can use, so the
+Your DNS row only counts "no address on this computer" as a block when the
+real answer has an IPv4 address.
+
+An answer pointing to Cisco Umbrella's inspection proxy is shown as
+**inspected**, not blocked: the site is sent through Cisco's proxy, which may
+still block some of its URLs.
 
 The block answers of the public filters come from their documentation and
 haven't all been confirmed on a live network yet. If a result looks wrong,

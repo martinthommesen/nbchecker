@@ -86,14 +86,17 @@ export const wrap = (s: string, n: number, hang = 0): string[] => {
 export const fitRight = (s: string, n: number): string =>
   " ".repeat(Math.max(n - columns(s), 0)) + s;
 
-/** Joins lines of chunks into one text, a newline between each. */
+/**
+ * Joins lines of chunks into one text, a newline between each. The newline
+ * is built here, since `paint` replaces newlines in the text it is given.
+ */
 export const lines = (rows: readonly (readonly TextChunk[])[]): StyledText =>
   new StyledText(
     rows.flatMap((row, i) => {
       if (i === 0) {
         return [...row];
       }
-      return [paint("\n"), ...row];
+      return [{ __isChunk: true, text: "\n" } satisfies TextChunk, ...row];
     })
   );
 

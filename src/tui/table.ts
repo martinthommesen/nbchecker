@@ -29,10 +29,12 @@ const looks: Record<
   blocked: { color: theme.block, glyph: "✕" },
   failed: { color: theme.warn, glyph: "?" },
   idle: { color: theme.faint, glyph: "·" },
+  inspected: { color: theme.warn, glyph: "!" },
   missing: { color: theme.dim, glyph: "–" },
   pending: { color: theme.dim, glyph: "" },
   resolves: { color: theme.ok, glyph: "✓" },
   unavailable: { color: theme.faint, glyph: "·" },
+  unsure: { color: theme.warn, glyph: "?" },
 };
 
 const answerWidth = (width: number): number =>

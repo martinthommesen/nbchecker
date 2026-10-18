@@ -2,10 +2,17 @@
 import { Effect } from "effect";
 import { DnsTransport } from "../dns/transport.ts";
 import { type DnsAnswer, Rcode } from "../dns/wire.ts";
+import { hasBlockingError } from "./classify.ts";
+import { rcodeName } from "./codes.ts";
 import type { Filter } from "./filters.ts";
 
 const isFailure = (a: DnsAnswer): boolean =>
   a.rcode !== Rcode.noError && a.rcode !== Rcode.nxDomain;
+
+/** Says which server failed and how, such as "192.0.2.1: REFUSED". */
+const failure = (server: string, a: DnsAnswer) => ({
+  message: `${server}: ${rcodeName(a.rcode)}`,
+});
 
 export interface FilterAnswer {
   readonly answers: readonly DnsAnswer[];
@@ -20,7 +27,8 @@ export interface Truth extends FilterAnswer {
 /**
  * Sends A and AAAA queries to every server of a filter at once and keeps
  * the first server that answers both. An error rcode counts as no answer,
- * so the next server is used.
+ * so the next server is used, unless an Extended DNS Error says the name
+ * was blocked: a SERVFAIL or REFUSED can carry one.
  */
 export const askFilter = (filter: Filter, host: string) =>
   Effect.gen(function* () {
@@ -32,12 +40,10 @@ export const askFilter = (filter: Filter, host: string) =>
       ).pipe(
         Effect.flatMap((answers) => {
           const failed = answers.find(isFailure);
-          if (failed === undefined) {
+          if (failed === undefined || answers.some(hasBlockingError)) {
             return Effect.succeed<FilterAnswer>({ answers, server });
           }
-          return Effect.fail({
-            message: `${server}: DNS error ${failed.rcode}`,
-          });
+          return Effect.fail(failure(server, failed));
         })
       );
     return yield* Effect.raceAll(filter.servers.map(askServer));
@@ -55,9 +61,7 @@ export const lookupTruth = (urls: readonly string[], host: string) =>
         Effect.flatMap(([a, aaaa]) => {
           const failed = [a, aaaa].find(isFailure);
           if (failed !== undefined) {
-            return Effect.fail({
-              message: `${url}: DNS error ${failed.rcode}`,
-            });
+            return Effect.fail(failure(url, failed));
           }
           const addresses = [...a.records, ...aaaa.records]
             .filter((r) => r.type !== "CNAME")

@@ -30,7 +30,16 @@ const glyphs: readonly (readonly [string, string, string])[] = [
     theme.dim,
     "not found: the domain doesn't exist, and the real answer agrees",
   ],
-  ["?", theme.warn, "no answer: the resolver couldn't be reached"],
+  [
+    "!",
+    theme.warn,
+    "inspected: sent through Cisco's inspection proxy, which may still block some URLs",
+  ],
+  [
+    "?",
+    theme.warn,
+    "no answer, or can't tell: the resolver couldn't be reached, or the real answer is needed",
+  ],
   ["·", theme.faint, "no answer, as expected: it only answers some networks"],
 ];
 

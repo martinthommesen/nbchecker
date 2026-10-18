@@ -39,7 +39,7 @@ describe("tui", () => {
   test("checks a domain and shows each resolver's verdict", async () => {
     const s = await start();
     const screen = await checkBlocked(s);
-    expect(screen).toContain("by 8 of 10 filters");
+    expect(screen).toContain("by 8 of 9 filters");
     expect(screen).toContain("CNAME nettvern-info.telenor.net");
     expect(screen).toContain("NXDOMAIN · EDE 15");
     expect(screen).toContain("real answer: 203.0.113.42");

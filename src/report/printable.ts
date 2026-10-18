@@ -5,7 +5,6 @@
  */
 
 const replacement = "�";
-const newline = 0x0a;
 const tab = 0x09;
 const lastC0 = 0x1f;
 const firstC1 = 0x7f;
@@ -18,9 +17,12 @@ const lastIsolate = 0x20_69;
 const between = (code: number, low: number, high: number): boolean =>
   code >= low && code <= high;
 
-/** Control characters, and the bidi controls that can reorder what is shown. */
+/**
+ * Control characters, newlines included so text can't add lines of its own,
+ * and the bidi controls that can reorder what is shown.
+ */
 const unsafe = (code: number): boolean => {
-  if (code === newline || code === tab) {
+  if (code === tab) {
     return false;
   }
   return (

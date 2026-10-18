@@ -4,17 +4,17 @@
  */
 import { describe, type Verdict } from "../check/classify.ts";
 import type { Category, Filter } from "../check/filters.ts";
-import type { CheckResult, Outcome } from "../check/result.ts";
+import {
+  type CheckResult,
+  type Outcome,
+  shouldAnswer,
+  truthCancelled,
+  wasCancelled,
+} from "../check/result.ts";
+import { type StatusKind, statusOf, statusText } from "./status.ts";
 
 const maxAnswers = 2;
 const maxTruth = 4;
-
-const failedText = (filter: Filter | undefined): string => {
-  if (filter?.onlyAnswers === undefined) {
-    return "no answer";
-  }
-  return `no answer (it only answers ${filter.onlyAnswers})`;
-};
 
 /** The answers worth showing next to a block, such as the block page. */
 const blockDetail = (v: Verdict): string => {
@@ -24,16 +24,70 @@ const blockDetail = (v: Verdict): string => {
   return shortList(v.answers, maxAnswers);
 };
 
-const outcomeRow = (name: string, outcome: Outcome, filter?: Filter): Row => {
+type Failed = Extract<Outcome, { readonly kind: "failed" }>;
+
+const failedRow = (
+  name: string,
+  o: Failed,
+  r: CheckResult,
+  filter: Filter | undefined
+): Row => {
+  if (wasCancelled(o)) {
+    return {
+      icon: "–",
+      name,
+      text: "cancelled before it answered",
+      tone: "dim",
+    };
+  }
+  if (filter?.onlyAnswers !== undefined && !shouldAnswer(r, filter)) {
+    return {
+      icon: "?",
+      name,
+      text: `no answer (it only answers ${filter.onlyAnswers})`,
+      tone: "dim",
+    };
+  }
+  return { detail: o.error, icon: "?", name, text: "no answer", tone: "warn" };
+};
+
+/** The row for an answer that says the name doesn't exist. */
+const missingRow = (
+  name: string,
+  v: Verdict,
+  r: CheckResult,
+  system: boolean
+): Row => {
+  if (system) {
+    return {
+      icon: "–",
+      name,
+      text: "no address on this computer",
+      tone: "dim",
+    };
+  }
+  if (r.truthExchange === undefined) {
+    return {
+      icon: "?",
+      name,
+      text: "says the domain doesn't exist; can't tell without the real answer",
+      tone: "warn",
+    };
+  }
+  return { icon: "–", name, text: describe(v), tone: "dim" };
+};
+
+const outcomeRow = (
+  name: string,
+  outcome: Outcome,
+  r: CheckResult,
+  filter?: Filter
+): Row => {
   if (outcome.kind === "pending") {
     return { icon: "…", name, text: "asking…", tone: "dim" };
   }
   if (outcome.kind === "failed") {
-    let tone: Tone = "warn";
-    if (filter?.onlyAnswers !== undefined) {
-      tone = "dim";
-    }
-    return { icon: "?", name, text: failedText(filter), tone };
+    return failedRow(name, outcome, r, filter);
   }
   const v = outcome.verdict;
   if (v.blocked) {
@@ -45,60 +99,51 @@ const outcomeRow = (name: string, outcome: Outcome, filter?: Filter): Row => {
       tone: "blocked",
     };
   }
+  if (v.inspected) {
+    return {
+      detail: shortList(v.answers, maxAnswers),
+      icon: "!",
+      name,
+      text: describe(v),
+      tone: "warn",
+    };
+  }
   if (v.missing) {
-    return { icon: "–", name, text: describe(v), tone: "dim" };
+    return missingRow(name, v, r, filter === undefined);
   }
   return { icon: "✓", name, text: describe(v), tone: "ok" };
 };
 
-const counts = (r: CheckResult) => {
-  let blocked = 0;
-  let answered = 0;
-  for (const f of r.filters) {
-    if (f.outcome.kind === "answered") {
-      answered += 1;
-      if (f.outcome.verdict.blocked) {
-        blocked += 1;
-      }
-    }
-  }
-  return { answered, blocked };
+const summaryLooks: Record<StatusKind, { icon: string; tone: Tone }> = {
+  blocked: { icon: "✗", tone: "blocked" },
+  "blocked-here": { icon: "✗", tone: "blocked" },
+  cancelled: { icon: "?", tone: "warn" },
+  "cant-tell": { icon: "?", tone: "warn" },
+  error: { icon: "?", tone: "warn" },
+  inspected: { icon: "!", tone: "warn" },
+  "local-only": { icon: "–", tone: "dim" },
+  missing: { icon: "–", tone: "dim" },
+  "no-answer": { icon: "?", tone: "warn" },
+  "not-blocked": { icon: "✓", tone: "ok" },
+  unchecked: { icon: "", tone: "dim" },
 };
 
-const systemBlocks = (r: CheckResult): boolean =>
-  r.system?.kind === "answered" && r.system.verdict.blocked;
-
 const summaryOf = (r: CheckResult): Line => {
-  if (r.lookupError !== undefined) {
-    return { text: "? could not check", tone: "warn" };
-  }
-  if (!r.checked) {
-    return { text: "nothing to check", tone: "dim" };
-  }
-  const { answered, blocked } = counts(r);
-  if (blocked > 0) {
-    return {
-      text: `✗ blocked by ${blocked} of ${r.filters.length} filters`,
-      tone: "blocked",
-    };
-  }
-  if (systemBlocks(r)) {
-    return {
-      text: "✗ blocked by your own DNS, but by none of the filters",
-      tone: "blocked",
-    };
-  }
-  if (r.truthError === undefined && !r.exists) {
-    return { text: "– the domain doesn't exist", tone: "dim" };
-  }
-  if (answered === 0) {
-    return { text: "? no filter answered", tone: "warn" };
-  }
-  return { text: `✓ not blocked by any of ${answered} filters`, tone: "ok" };
+  const status = statusOf(r);
+  const { icon, tone } = summaryLooks[status.kind];
+  return { text: [icon, statusText(status)].filter(Boolean).join(" "), tone };
 };
 
 const truthRow = (r: CheckResult): Row => {
   const name = "Real answer";
+  if (truthCancelled(r)) {
+    return {
+      icon: "–",
+      name,
+      text: "cancelled before it answered",
+      tone: "dim",
+    };
+  }
   if (r.truthError !== undefined) {
     return {
       icon: "?",
@@ -107,8 +152,19 @@ const truthRow = (r: CheckResult): Row => {
       tone: "warn",
     };
   }
+  if (r.truthExchange === undefined) {
+    return { icon: "…", name, text: "asking…", tone: "dim" };
+  }
   if (!r.exists) {
     return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
+  }
+  if (r.truth.length === 0) {
+    return {
+      icon: "✓",
+      name,
+      text: "the domain exists, but has no addresses",
+      tone: "plain",
+    };
   }
   return { icon: "✓", name, text: shortList(r.truth, maxTruth), tone: "plain" };
 };
@@ -119,7 +175,7 @@ const filterSections = (r: CheckResult): Section[] =>
       lines: [],
       rows: r.filters
         .filter((f) => f.filter.category === category)
-        .map((f) => outcomeRow(f.filter.name, f.outcome, f.filter)),
+        .map((f) => outcomeRow(f.filter.name, f.outcome, r, f.filter)),
       title: categoryTitles[category],
     }))
     .filter((s) => s.rows.length > 0);
@@ -176,7 +232,7 @@ export const view = (r: CheckResult): View => {
   }
   const reference: Row[] = [];
   if (r.system !== undefined) {
-    reference.push(outcomeRow("Your DNS", r.system));
+    reference.push(outcomeRow("Your DNS", r.system, r));
   }
   reference.push(truthRow(r));
   return {

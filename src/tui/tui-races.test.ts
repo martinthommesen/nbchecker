@@ -61,7 +61,7 @@ describe("tui with work in flight", () => {
     s.input.pressEnter();
     await s.until("answered");
     s.input.pressKey("r");
-    const screen = await s.until("by 8 of 10 filters");
+    const screen = await s.until("by 8 of 9 filters");
     expect(screen).not.toContain("CANCELLED");
   });
 

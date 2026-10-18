@@ -11,11 +11,19 @@ import {
   Rcode,
 } from "../dns/wire.ts";
 
-type Zone = Readonly<Record<string, readonly DnsRecord[]>>;
+/** A name's records, or a whole answer for one that answers oddly. */
+type Zone = Readonly<Record<string, readonly DnsRecord[] | DnsAnswer>>;
+
+const edeBlocked = 15;
 
 const a = (name: string, value: string): DnsRecord => ({
   name,
   type: "A",
+  value,
+});
+const aaaa = (name: string, value: string): DnsRecord => ({
+  name,
+  type: "AAAA",
   value,
 });
 const cname = (name: string, value: string): DnsRecord => ({
@@ -23,10 +31,21 @@ const cname = (name: string, value: string): DnsRecord => ({
   type: "CNAME",
   value,
 });
+const failure = (rcode: number, ...edes: readonly number[]): DnsAnswer => ({
+  extendedErrors: edes.map((code) => ({ code, text: "" })),
+  rcode,
+  records: [],
+  truncated: false,
+});
+
+const trailingDot = /\.$/;
 
 /** Answers like a resolver serving `zone`: NXDOMAIN for unknown names. */
 const lookup = (zone: Zone, name: string, type: QueryType): DnsAnswer => {
-  const records = zone[name];
+  const records = zone[name.replace(trailingDot, "")];
+  if (records !== undefined && "rcode" in records) {
+    return records;
+  }
   if (records === undefined) {
     return {
       extendedErrors: [],
@@ -44,8 +63,18 @@ const lookup = (zone: Zone, name: string, type: QueryType): DnsAnswer => {
 };
 
 const real: Zone = {
+  "adult.example": [a("adult.example", "192.0.2.40")],
   "bad.example": [a("bad.example", "192.0.2.10")],
   "good.example": [a("good.example", "192.0.2.20")],
+  "grey.example": [a("grey.example", "192.0.2.30")],
+  // Exists, but with no address, like a name with only TXT or MX records.
+  "mail.example": [],
+  "policy.example": [a("policy.example", "192.0.2.50")],
+  "refused.example": [a("refused.example", "192.0.2.60")],
+  // Only an IPv6 address.
+  "v6.example": [aaaa("v6.example", "2001:db8::6")],
+  // The domain's own record really is 0.0.0.0, as with wildcard DNS services.
+  "zero.example": [a("zero.example", "0.0.0.0")],
 };
 
 const security: Zone = {
@@ -54,9 +83,28 @@ const security: Zone = {
     cname("bad.example", "nettvern-info.telenor.net"),
     a("nettvern-info.telenor.net", "148.123.15.44"),
   ],
+  // Cisco's inspection proxy.
+  "grey.example": [a("grey.example", "146.112.56.167")],
+  // Extended DNS Error text that tries to add a line to the output.
+  "newline.example": {
+    extendedErrors: [
+      { code: edeBlocked, text: "policy\n  ✓ Fake  not blocked" },
+    ],
+    rcode: Rcode.noError,
+    records: [],
+    truncated: false,
+  },
+  // A block said with an Extended DNS Error on a SERVFAIL.
+  "policy.example": failure(Rcode.servFail, edeBlocked),
+  "refused.example": failure(Rcode.refused),
 };
 
-const family: Zone = { ...real, "bad.example": [a("bad.example", "0.0.0.0")] };
+const family: Zone = {
+  ...real,
+  // AdGuard Family's block page.
+  "adult.example": [a("adult.example", "94.140.14.35")],
+  "bad.example": [a("bad.example", "0.0.0.0")],
+};
 
 const servers: Readonly<Record<string, Zone | "down" | "servfail">> = {
   "192.0.2.53": security,
@@ -106,12 +154,29 @@ export const fakeFilters: readonly Filter[] = [
   { category: "family", name: "Family filter", servers: ["198.51.100.53"] },
 ];
 
-/** This computer sits behind the family filter. */
-export const computer = Dns.layerStatic({
-  hosts: {
-    "bad.example": ["0.0.0.0"],
-    "good.example": ["192.0.2.20"],
-    "host.example": ["192.0.2.99"],
-    "nettvern.telenor.net": ["148.123.15.1"],
-  },
-});
+/**
+ * This computer sits behind the family filter, and has no IPv6. Its DNS
+ * gives `testPage` for Telenor's test page: by default Nettvern+'s answer,
+ * so it is on Telenor's network.
+ */
+export const computerWith = (testPage = "148.123.15.1") =>
+  Dns.layerStatic({
+    hosts: {
+      "adult.example": ["94.140.14.35"],
+      "bad.example": ["0.0.0.0"],
+      "good.example": ["192.0.2.20"],
+      "grey.example": ["192.0.2.30"],
+      "host.example": ["192.0.2.99"],
+      "nettvern.telenor.net": [testPage],
+      "policy.example": ["192.0.2.50"],
+      // A name only this computer knows, as with split DNS.
+      "private.example": ["192.0.2.77"],
+      "refused.example": ["192.0.2.60"],
+      "zero.example": ["0.0.0.0"],
+    },
+  });
+
+export const computer = computerWith();
+
+/** Telenor's test page answer away from Telenor's filters. */
+export const publicTestPage = "148.123.15.37";
