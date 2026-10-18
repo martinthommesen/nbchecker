@@ -39,13 +39,6 @@ const lookupError = (
   return String(failure.message);
 };
 
-/** What the text output says for each state; a detected filter by name. */
-const stateText: Record<ConnectionState, (c: Connection) => string> = {
-  detected: (c) => c.filter ?? "",
-  none: () => "none detected",
-  unknown: () => "unknown",
-};
-
 export interface Connection extends Detected {
   /** Why the test lookup failed, if it did. */
   readonly error: string | undefined;
@@ -74,7 +67,7 @@ export const detectConnection = Effect.gen(function* () {
   const testAnswers = addresses.success.map(NetAddress.formatIp);
   const detected = testAnswers.map(detectedBy).find((d) => d !== undefined);
   return {
-    ...nothingDetected,
+    error: undefined,
     filter: detected?.filter,
     network: detected?.network,
     testAnswers,
@@ -93,5 +86,12 @@ export const connectionState = (c: Connection): ConnectionState => {
 };
 
 /** One phrase for the filter on this computer, as the text output shows it. */
-export const connectionText = (c: Connection): string =>
-  stateText[connectionState(c)](c);
+export const connectionText = (c: Connection): string => {
+  if (c.filter !== undefined) {
+    return c.filter;
+  }
+  if (c.error !== undefined) {
+    return "unknown";
+  }
+  return "none detected";
+};
