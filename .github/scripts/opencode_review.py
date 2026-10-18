@@ -50,21 +50,17 @@ def prepare(source, destination, base, head):
         files.append((path, oid.decode()))
 
     comparison = f"{base}...{head}"
-    # Filter both sides of the diff, including deleted files. Literal pathspecs
-    # prevent a tracked filename from being interpreted as a wildcard/exclusion.
-    changed = git(
-        source, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
-        "--name-only", "-z", comparison,
+    # Filter both sides, including deletions, with a fixed number of pathspecs.
+    # A separate pass restores safe examples without exposing other .env files.
+    diff_args = (
+        "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+        "--unified=40", comparison, "--",
     )
-    paths = [
-        ":(literal)" + os.fsdecode(path)
-        for path in changed.split(b"\0")
-        if path and not is_private_env(PurePosixPath(os.fsdecode(path)))
-    ]
     diff = git(
-        source, "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
-        "--unified=40", comparison, "--", *paths,
-    ) if paths else b""
+        source, *diff_args, ".", ":(glob,exclude)**/.env*",
+    ) + git(
+        source, *diff_args, ":(glob)**/.env.example",
+    )
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     for path, oid in files:
