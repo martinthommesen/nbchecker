@@ -76,20 +76,32 @@ SECURITY · MALWARE, PHISHING
 | `--help` | Show all options |
 
 Without arguments, and when standard input isn't a terminal, nbchecker reads
-targets from it, one per line.
+targets from it, one per line, and prints each result as soon as it's
+checked. With `--json`, it prints one JSON document at the end. Without
+arguments and with standard input a terminal, it opens the interactive app, or
+prints a usage error if `--json` is given or the output isn't a terminal.
+It only looks up which DNS filter your computer uses once a target can be
+checked, so a list of invalid targets needs no network; the JSON then says
+`"dnsFilter": "not checked"`.
 
 "Blocked by 4 of 8 filters" counts the filters that answered. When the real
 answer can't be fetched, a filter saying the domain doesn't exist could be a
 block or not, so the result says it couldn't tell.
 
-When it checks targets from arguments or standard input, the exit status is 1
-if anything is blocked, even when a check was incomplete. Otherwise it is 2 if
-a check was incomplete, for example because a filter, your own DNS or the real
-answer could not be reached, and 0 if nothing is blocked. A filter that only
-answers some networks, such as Telenor's, doesn't make a check incomplete when
-you are elsewhere; when nbchecker detects Nettvern or Nettvern+ on your DNS,
-it expects them to answer. The interactive app always exits with 0, since one
-session can check many targets.
+When it checks targets from arguments or standard input, the exit status is:
+
+| Status | |
+|---|---|
+| 0 | Nothing is blocked |
+| 1 | Something is blocked, even if some filters didn't answer |
+| 2 | Incomplete: nothing is known to be blocked, but a check couldn't tell, for example because a filter, your own DNS or the real answer could not be reached |
+| 64 | Usage error, such as a mistyped flag |
+| 74 | The results couldn't be written, for example because the disk is full |
+
+A filter that only answers some networks, such as Telenor's, doesn't make a
+check incomplete when you are elsewhere; when nbchecker detects Nettvern or
+Nettvern+ on your DNS, it expects them to answer. The interactive app always
+exits with 0, since one session can check many targets.
 
 ## What it checks
 
