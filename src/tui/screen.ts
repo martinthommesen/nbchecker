@@ -90,7 +90,10 @@ export interface MountedScreen {
   readonly scroll: (delta: number, unit: ScrollUnit) => void;
 }
 
-/** Builds the screen on `renderer`, listing `items` until a check is done. */
+/**
+ * Builds the screen on `renderer`. `items` are the filters the table lists
+ * until a check has a result, and the connection screen's filter list.
+ */
 export const mountScreen = (
   renderer: CliRenderer,
   items: readonly Filter[]
