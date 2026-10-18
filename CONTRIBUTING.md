@@ -40,7 +40,9 @@ The code is TypeScript with [Effect](https://effect.website) and
 
 Tests don't touch the network. The DNS transport and this computer's resolver
 are Effect services, so tests swap in the fakes in `src/testing`, and the
-screen is tested in OpenTUI's virtual terminal. If you verified a change on a
+screen is tested in OpenTUI's virtual terminal. `src/testing/fake-cli.ts` runs
+the command on the fake network, so tests can run it as a real process with
+real pipes. If you verified a change on a
 real network with a filter, say which filter in the pull request.
 
 ## Pull requests
@@ -61,7 +63,9 @@ builder, signs and notarizes the macOS ones, publishes them with checksums and b
 updates the Homebrew cask in
 [martinthommesen/homebrew-tap](https://github.com/martinthommesen/homebrew-tap),
 and writes the release notes from merged pull requests. It stops before
-publishing anything if the macOS signing secrets are missing.
+publishing anything if the tagged commit isn't on `main`, if CI hasn't passed
+on it, if types, lint or tests fail, or if the macOS signing secrets are
+missing.
 
 To try the release build locally, run
 `goreleaser release --snapshot --clean --skip=publish`. Without the signing

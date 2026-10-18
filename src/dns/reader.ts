@@ -5,7 +5,12 @@ const uint32Bytes = 4;
 /** A length byte at or above this starts a compression pointer. */
 const pointerTag = 0xc0;
 const byteValues = 256;
-const maxPointerJumps = 32;
+/** Labels are at most 63 bytes; length bytes 0x40 to 0xbf are reserved. */
+const maxLabelLength = 63;
+/** A name is at most 255 bytes on the wire, length bytes included. */
+const maxNameBytes = 255;
+/** A name has at most 127 labels, so more jumps than that is a loop. */
+const maxPointerJumps = 128;
 
 const decoder = new TextDecoder();
 
@@ -50,21 +55,37 @@ export class Reader {
     const labels: string[] = [];
     let at = this.offset;
     let resumeAt: number | undefined;
-    for (let jumps = 0; jumps <= maxPointerJumps; jumps += 1) {
+    let jumps = 0;
+    let size = 1;
+    for (;;) {
       const len = this.byteAt(at);
       if (len === 0) {
         this.offset = resumeAt ?? at + 1;
         return labels.join(".").toLowerCase();
       }
       if (len >= pointerTag) {
+        jumps += 1;
+        if (jumps > maxPointerJumps) {
+          throw new MalformedResponse({ reason: "name compression loop" });
+        }
         resumeAt ??= at + uint16Bytes;
         at = (len - pointerTag) * byteValues + this.byteAt(at + 1);
       } else {
+        size += len + 1;
+        this.checkLabel(len, size);
         labels.push(decoder.decode(this.slice(at + 1, len)));
         at += len + 1;
       }
     }
-    throw new MalformedResponse({ reason: "name compression loop" });
+  }
+
+  private checkLabel(len: number, size: number): void {
+    if (len > maxLabelLength) {
+      throw new MalformedResponse({ reason: "bad label length" });
+    }
+    if (size > maxNameBytes) {
+      throw new MalformedResponse({ reason: "name is too long" });
+    }
   }
 
   private need(n: number): void {

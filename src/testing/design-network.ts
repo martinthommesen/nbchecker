@@ -1,5 +1,5 @@
 /** A fake internet shaped like the design's example, for screen tests. */
-import { Effect, Layer } from "effect";
+import { type Duration, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import { type Filter, filters } from "../check/filters.ts";
 import { QueryError } from "../dns/query-error.ts";
@@ -97,29 +97,32 @@ export const designTransport = Layer.succeed(DnsTransport, {
   },
 });
 
-/** The same, with some filters slow to answer, to show progress. */
-export const slowDesignTransport = Layer.effect(
-  DnsTransport,
-  Effect.gen(function* () {
-    const fast = yield* DnsTransport;
-    const slow = new Set([
-      "9.9.9.9",
-      "208.67.222.123",
-      "94.140.14.14",
-      "185.228.168.168",
-      "185.228.168.9",
-    ]);
-    return {
-      ask: (server, name, type) => {
-        if (slow.has(server)) {
-          return Effect.delay(fast.ask(server, name, type), "10 seconds");
-        }
-        return fast.ask(server, name, type);
-      },
-      doh: fast.doh,
-    };
-  })
-).pipe(Layer.provide(designTransport));
+/** The same, with some filters `delay` slow to answer, to show progress. */
+export const slowDesignTransportBy = (delay: Duration.Input) =>
+  Layer.effect(
+    DnsTransport,
+    Effect.gen(function* () {
+      const fast = yield* DnsTransport;
+      const slow = new Set([
+        "9.9.9.9",
+        "208.67.222.123",
+        "94.140.14.14",
+        "185.228.168.168",
+        "185.228.168.9",
+      ]);
+      return {
+        ask: (server, name, type) => {
+          if (slow.has(server)) {
+            return Effect.delay(fast.ask(server, name, type), delay);
+          }
+          return fast.ask(server, name, type);
+        },
+        doh: fast.doh,
+      };
+    })
+  ).pipe(Layer.provide(designTransport));
+
+export const slowDesignTransport = slowDesignTransportBy("10 seconds");
 
 /**
  * A network that sends every DNS query to an unfiltered resolver, so every

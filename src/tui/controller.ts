@@ -1,8 +1,6 @@
 /** What each action does: checks, copying, saving and moving around. */
-import type { CliRenderer, InputRenderable } from "@opentui/core";
 import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
-import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
 import {
@@ -11,6 +9,7 @@ import {
   redirectedFilters,
 } from "../check/result.ts";
 import { toJson } from "../report/json.ts";
+import type { Controller, ControllerDeps } from "./controller-deps.ts";
 import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
 import { flatRows, resultGroups } from "./rows.ts";
@@ -21,6 +20,10 @@ const jsonIndent = 2;
 
 /** What the controller remembers between key presses. */
 interface Session {
+  /** Counts checks, so only the latest one updates the screen. */
+  checks: number;
+  /** Counts connection detections, for the same reason. */
+  detections: number;
   readonly history: string[];
   lastTarget: string | undefined;
   /**
@@ -44,13 +47,25 @@ const toaster =
       })
     );
 
+/**
+ * Checks `target`. A check that has been replaced by a newer one leaves the
+ * screen alone, even when its last progress or its cancellation comes late.
+ */
 const checkTarget = (
   { store }: ControllerDeps,
-  target: string,
-  network: Deferred.Deferred<Network>
-) =>
-  Effect.gen(function* () {
-    store.set({
+  session: Session,
+  target: string
+) => {
+  session.checks += 1;
+  const generation = session.checks;
+  const update = (patch: (s: State) => Partial<State>) =>
+    Effect.sync(() => {
+      if (session.checks === generation) {
+        store.set(patch(store.get()));
+      }
+    });
+  return Effect.gen(function* () {
+    yield* update(() => ({
       cancelled: false,
       checking: true,
       elapsedMs: undefined,
@@ -58,33 +73,33 @@ const checkTarget = (
       result: undefined,
       screen: "main",
       selected: 0,
-    });
+    }));
+    const { network } = session;
     const [duration, result] = yield* check(
       target,
       Deferred.await(network)
     ).pipe(
       Effect.provideService(Progress, (sofar) =>
-        Effect.sync(() => store.set({ result: sofar }))
+        update(() => ({ result: sofar }))
       ),
       Effect.timed
     );
-    store.set({
+    yield* update(() => ({
+      cancelled: false,
       checking: false,
       elapsedMs: Duration.toMillis(duration),
       result,
-    });
+    }));
   }).pipe(
     Effect.onInterrupt(() =>
-      Effect.sync(() => {
-        const { result } = store.get();
-        store.set({
-          cancelled: true,
-          checking: false,
-          result: result && cancelPending(result),
-        });
-      })
+      update(({ result }) => ({
+        cancelled: true,
+        checking: false,
+        result: result && cancelPending(result),
+      }))
     )
   );
+};
 
 const checkActions = (
   deps: ControllerDeps,
@@ -99,11 +114,11 @@ const checkActions = (
     session.lastTarget = target;
     deps.input.value = target;
     deps.input.blur();
-    deps.run.check(checkTarget(deps, target, session.network));
+    deps.run.check(checkTarget(deps, session, target));
   };
   const recheck = () => {
     if (session.lastTarget !== undefined) {
-      deps.run.check(checkTarget(deps, session.lastTarget, session.network));
+      deps.run.check(checkTarget(deps, session, session.lastTarget));
     }
   };
   const cancel = () => {
@@ -112,15 +127,17 @@ const checkActions = (
       toast("cancelled");
     }
   };
+  // Only the latest detection may show its answer.
   const detect = () => {
+    session.detections += 1;
+    const generation = session.detections;
     const network = Deferred.makeUnsafe<Network>();
     session.network = network;
+    deps.store.set({ network: undefined });
     deps.run.background(
       Effect.gen(function* () {
-        deps.store.set({ network: undefined });
         const found = yield* detectNetwork;
-        // A detection started later has the say.
-        if (session.network === network) {
+        if (session.detections === generation) {
           deps.store.set({ network: found });
         }
         yield* Deferred.succeed(network, found);
@@ -174,7 +191,7 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
 };
 
 const moveActions = (
-  { filters, input, quit, store }: ControllerDeps,
+  { filters, input, store }: ControllerDeps,
   session: Session
 ) => {
   const move = (delta: number) => {
@@ -201,11 +218,11 @@ const moveActions = (
     input.value = "";
     input.focus();
   };
-  // Leaving the input goes back to the results, or quits if there are none.
+  // Leaving the input goes back to the results, if there are any.
   const leaveInput = () => {
     const s = store.get();
     if (s.result === undefined && !s.checking) {
-      return quit();
+      return;
     }
     // Show what the results are for, not a half-typed new target.
     input.value = session.lastTarget ?? "";
@@ -217,6 +234,8 @@ const moveActions = (
 
 const makeController = (deps: ControllerDeps): Controller => {
   const session: Session = {
+    checks: 0,
+    detections: 0,
     history: [],
     lastTarget: undefined,
     network: Deferred.makeUnsafe(),
@@ -244,6 +263,10 @@ const makeController = (deps: ControllerDeps): Controller => {
     pageUp: () => moves.move(-pageStep),
     quit: deps.quit,
     recheck: checks.recheck,
+    scrollDown: () => deps.scroll(1, "line"),
+    scrollPageDown: () => deps.scroll(1, "page"),
+    scrollPageUp: () => deps.scroll(-1, "page"),
+    scrollUp: () => deps.scroll(-1, "line"),
     up: () => moves.move(-1),
   };
   return {
@@ -252,37 +275,5 @@ const makeController = (deps: ControllerDeps): Controller => {
     submit: checks.submit,
   };
 };
-
-export interface Store {
-  readonly get: () => State;
-  readonly set: (patch: Partial<State>) => void;
-}
-
-/** Checks ask the same resolvers as the network detection. */
-export type Needs =
-  | FileSystem.FileSystem
-  | Effect.Services<typeof detectNetwork>;
-
-/** Runs effects from key handlers: one for checks, one for the rest. */
-export interface Runners {
-  readonly background: (effect: Effect.Effect<void, never, Needs>) => void;
-  readonly cancel: () => void;
-  readonly check: (effect: Effect.Effect<void, never, Needs>) => void;
-}
-
-export interface Controller {
-  readonly detect: () => void;
-  readonly handle: (action: Action) => void;
-  readonly submit: (target: string) => void;
-}
-
-export interface ControllerDeps {
-  readonly filters: readonly Filter[];
-  readonly input: InputRenderable;
-  readonly quit: () => void;
-  readonly renderer: CliRenderer;
-  readonly run: Runners;
-  readonly store: Store;
-}
 
 export { makeController };

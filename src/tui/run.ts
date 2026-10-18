@@ -13,7 +13,8 @@ import {
   Schedule,
 } from "effect";
 import { CheckerOptions } from "../check/checker.ts";
-import { makeController, type Needs, type Store } from "./controller.ts";
+import { makeController } from "./controller.ts";
+import type { Needs, Store } from "./controller-deps.ts";
 import { actionFor } from "./keys.ts";
 import { mountScreen } from "./screen.ts";
 import { initialState, type State } from "./state.ts";
@@ -74,8 +75,12 @@ const runTui = (version: string, first?: string) =>
         cancel: () => runBackground(FiberHandle.clear(checks)),
         check: (effect) => runCheck(effect),
       },
+      scroll: screen.scroll,
       store,
     });
+    // OpenTUI closes the renderer itself on SIGHUP and the other signals that
+    // end a terminal; quit with it rather than run on without a screen.
+    renderer.on("destroy", () => Deferred.doneUnsafe(quit, Effect.void));
     screen.input.on("enter", () => {
       const target = screen.input.value.trim();
       if (target !== "") {

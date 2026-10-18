@@ -1,5 +1,9 @@
 /** The "your connection" screen's panes. */
-import { BoxRenderable, type CliRenderer } from "@opentui/core";
+import {
+  BoxRenderable,
+  type CliRenderer,
+  ScrollBoxRenderable,
+} from "@opentui/core";
 import type { Filter } from "../check/filters.ts";
 import {
   browserText,
@@ -25,12 +29,20 @@ import { theme } from "./theme.ts";
 const detectionShare = 1;
 
 const buildConnection = (renderer: CliRenderer) => {
-  const view = new BoxRenderable(renderer, {
+  // Scrolls, as a short screen can't show every pane at once.
+  const view = new ScrollBoxRenderable(renderer, {
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    visible: false,
+  });
+  // At least as tall as the screen, so the panes reach down to the keys.
+  view.content.minHeight = "100%";
+  const panes = new BoxRenderable(renderer, {
     columnGap: paneGap,
     flexDirection: "row",
     flexGrow: 1,
     rowGap: 1,
-    visible: false,
   });
   const left = column(renderer, detectionShare);
   const detected = pane(renderer, {
@@ -42,9 +54,6 @@ const buildConnection = (renderer: CliRenderer) => {
   const how = pane(renderer, { title: "How we know" });
   addAll(left, [detected, how]);
   const right = column(renderer, 1);
-  // On a short screen the notes at the bottom are cut, not drawn over the keys.
-  right.overflow = "hidden";
-  left.overflow = "hidden";
   const filters = pane(renderer, { flexGrow: 0, title: "Filters we look for" });
   const safeZone = pane(renderer, {
     color: theme.warn,
@@ -57,7 +66,8 @@ const buildConnection = (renderer: CliRenderer) => {
     title: "Your browser may differ",
   });
   addAll(right, [filters, safeZone, browser]);
-  addAll(view, [left, right]);
+  addAll(panes, [left, right]);
+  view.add(panes);
   const bodies = {
     browser: bodyOf(renderer, browser),
     detected: bodyOf(renderer, detected),
@@ -67,7 +77,7 @@ const buildConnection = (renderer: CliRenderer) => {
   };
   bodies.safeZone.content = safeZoneText();
   bodies.browser.content = browserText();
-  return { bodies, view };
+  return { bodies, columns: [left, right], panes, view };
 };
 
 type ConnectionParts = ReturnType<typeof buildConnection>;
@@ -84,6 +94,16 @@ const drawConnection = (
       ((inner(width) - paneGap) * detectionShare) / (detectionShare + 1) -
         paneChrome
     );
+  }
+  // Side by side the columns share the width; stacked, each is its own height.
+  parts.panes.flexDirection = "column";
+  let basis: number | "auto" = "auto";
+  if (wide) {
+    parts.panes.flexDirection = "row";
+    basis = 0;
+  }
+  for (const c of parts.columns) {
+    c.flexBasis = basis;
   }
   const { bodies } = parts;
   const c = s.network?.connection;

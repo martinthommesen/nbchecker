@@ -1,90 +1,30 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { BunServices } from "@effect/platform-bun";
-import {
-  createTestRenderer,
-  type TestRendererSetup,
-} from "@opentui/core/testing";
 import { sleep } from "bun";
-import { Effect, Fiber, Layer } from "effect";
 import {
   blockedName,
-  designComputer,
-  designTransport,
   redirectedDesignTransport,
   slowDesignTransport,
 } from "../testing/design-network.ts";
-import { OpenRenderer, runTui } from "./run.ts";
+import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
-const width = 120;
 /** The narrowest terminal the README promises to fit. */
 const narrowWidth = 80;
 /** The blocked count, unbroken by wrapping. */
 const blockedSoFar = /blocked so far: \d/u;
+const settleMs = 100;
 const quad9Untested = /· Quad9\s+no test page\s+· no test name/u;
 const cloudflarePassed = /· Cloudflare Family\s+no test page\s+✓ passed/u;
 const cloudflareRedirected =
   /Cloudflare Family\s+no test page\s+\? redirected\?/u;
-const height = 40;
-const pollMs = 10;
-const pollTries = 200;
 
-interface Session {
-  /** What was last copied to the clipboard. */
-  readonly copied: () => string | undefined;
-  readonly frame: () => Promise<string>;
-  readonly input: TestRendererSetup["mockInput"];
-  readonly stop: () => Promise<void>;
-  /** Waits until the screen contains `text`, and returns the screen. */
-  readonly until: (text: string) => Promise<string>;
-}
+let current: TuiSession | undefined;
 
-let current: Session | undefined;
-
-const start = async (
-  transport = designTransport,
-  columns = width
-): Promise<Session> => {
-  const setup = await createTestRenderer({ height, width: columns });
-  let copied: string | undefined;
-  setup.renderer.copyToClipboardOSC52 = (text: string) => {
-    copied = text;
-    return true;
-  };
-  const fiber = runTui("0.0.0").pipe(
-    Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
-    Effect.provide(
-      Layer.mergeAll(BunServices.layer, transport, designComputer)
-    ),
-    Effect.runFork
-  );
-  const frame = async () => {
-    await setup.renderOnce();
-    return setup.captureCharFrame();
-  };
-  const until = async (text: string, tries = pollTries): Promise<string> => {
-    const screen = await frame();
-    if (screen.includes(text)) {
-      return screen;
-    }
-    if (tries === 0) {
-      throw new Error(`the screen never showed "${text}":\n${screen}`);
-    }
-    await sleep(pollMs);
-    return until(text, tries - 1);
-  };
-  const stop = () =>
-    Effect.runPromise(Fiber.interrupt(fiber)).then(() => undefined);
-  current = {
-    copied: () => copied,
-    frame,
-    input: setup.mockInput,
-    stop,
-    until,
-  };
+const start = async (options?: Parameters<typeof startTui>[0]) => {
+  current = await startTui(options);
   return current;
 };
 
-const checkBlocked = async (s: Session) => {
+const checkBlocked = async (s: TuiSession) => {
   await s.input.typeText(blockedName);
   s.input.pressEnter();
   return await s.until("BLOCKED");
@@ -122,7 +62,7 @@ describe("tui", () => {
   });
 
   test("a cancelled check shows no verdict", async () => {
-    const s = await start(slowDesignTransport);
+    const s = await start({ transport: slowDesignTransport });
     await s.input.typeText(blockedName);
     s.input.pressEnter();
     await s.until("answered");
@@ -132,6 +72,18 @@ describe("tui", () => {
     expect(screen).toContain("cancelled");
   });
 
+  test("shows the connection screen and goes back", async () => {
+    const s = await start();
+    await checkBlocked(s);
+    s.input.pressKey("c");
+    const screen = await s.until("Filters we look for");
+    expect(screen).toContain("can't see");
+    s.input.pressEscape();
+    await s.until("BLOCKED");
+  });
+});
+
+describe("tui while typing a target", () => {
   test("leaving a new check shows the checked domain again", async () => {
     const s = await start();
     await checkBlocked(s);
@@ -142,13 +94,29 @@ describe("tui", () => {
     expect(screen).not.toContain("a domain, URL or IP address");
   });
 
-  test("shows the connection screen and goes back", async () => {
+  test("the / that starts a new check isn't typed into it", async () => {
     const s = await start();
     await checkBlocked(s);
-    s.input.pressKey("c");
-    const screen = await s.until("Filters we look for");
-    expect(screen).toContain("can't see");
+    s.input.pressKey("/");
+    await s.until("a domain, URL or IP address");
+    await s.input.typeText("example.com");
+    s.input.pressEnter();
+    const screen = await s.until("A + AAAA example.com");
+    expect(screen).not.toContain("/example.com");
+    expect(screen).toContain("› example.com");
+  });
+
+  test("esc on the start screen doesn't quit", async () => {
+    const s = await start();
+    await s.until("Quad9");
     s.input.pressEscape();
+    const ended = await Promise.race([
+      s.ended.then(() => true),
+      sleep(settleMs).then(() => false),
+    ]);
+    expect(ended).toBe(false);
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
     await s.until("BLOCKED");
   });
 });
@@ -166,7 +134,7 @@ describe("tui: the self-test", () => {
   });
 
   test("a redirecting network is flagged on every screen", async () => {
-    const s = await start(redirectedDesignTransport);
+    const s = await start({ transport: redirectedDesignTransport });
     await s.input.typeText(blockedName);
     s.input.pressEnter();
     const screen = await s.until("INTERCEPTED?");
@@ -177,18 +145,6 @@ describe("tui: the self-test", () => {
     s.input.pressKey("c");
     const connection = await s.until("self-test");
     expect(connection).toMatch(cloudflareRedirected);
-  });
-});
-
-describe("tui on a narrow terminal", () => {
-  test("the checking line fits a narrow terminal", async () => {
-    const s = await start(slowDesignTransport, narrowWidth);
-    await s.input.typeText(blockedName);
-    s.input.pressEnter();
-    const screen = await s.until("answered");
-    const line = screen.split("\n").find((l) => l.includes("answered"));
-    expect(line).toContain("Checking");
-    expect(screen).toMatch(blockedSoFar);
   });
 });
 
@@ -205,5 +161,20 @@ describe("tui: copying", () => {
     expect(s.copied()).toStartWith(
       "DNS filter on this computer: Telenor Nettvern"
     );
+  });
+});
+
+describe("tui on a narrow terminal", () => {
+  test("the checking line fits a narrow terminal", async () => {
+    const s = await start({
+      transport: slowDesignTransport,
+      width: narrowWidth,
+    });
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("answered");
+    const line = screen.split("\n").find((l) => l.includes("answered"));
+    expect(line).toContain("Checking");
+    expect(screen).toMatch(blockedSoFar);
   });
 });
