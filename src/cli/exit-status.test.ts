@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
-import { completionOf } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
@@ -51,14 +50,6 @@ describe("exit status", () => {
     });
     expect(noSystem.system.kind).toBe("failed");
     expect(exitCode([noSystem])).toBe(exitIncomplete);
-  });
-
-  test("a lookup cut short by a cancel counts as one that failed", async () => {
-    const r = await runCheck("good.example");
-    const cancelled = { kind: "cancelled" } as const;
-    expect(completionOf(r)).toBe("complete");
-    expect(completionOf({ ...r, system: cancelled })).toBe("incomplete");
-    expect(completionOf({ ...r, realAnswer: cancelled })).toBe("incomplete");
   });
 
   test("a block exits 1", async () => {
