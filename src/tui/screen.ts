@@ -7,7 +7,7 @@ import {
 } from "@opentui/core";
 import type { Filter } from "../check/filters.ts";
 import { buildConnection, drawConnection } from "./connection-screen.ts";
-import { footerText } from "./keys.ts";
+import { footerText } from "./footer.ts";
 import {
   buildHeader,
   buildHelp,
