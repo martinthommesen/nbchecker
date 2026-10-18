@@ -1,13 +1,15 @@
 module github.com/martinthommesen/nettvern-check
 
-go 1.24
+go 1.24.0
 
-require github.com/miekg/dns v1.1.62
+toolchain go1.24.7
+
+require github.com/miekg/dns v1.1.70
 
 require (
-	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/tools v0.22.0 // indirect
+	golang.org/x/mod v0.31.0 // indirect
+	golang.org/x/net v0.50.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/tools v0.40.0 // indirect
 )
