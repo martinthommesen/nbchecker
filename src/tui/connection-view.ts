@@ -4,7 +4,7 @@ import type { Connection } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
 import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
-import { categoryOrder } from "../report/view.ts";
+import { categoryLabels, categoryOrder } from "../report/categories.ts";
 import { lines, paint, spinner } from "./paint.ts";
 import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
@@ -13,12 +13,6 @@ const nameWidth = 24;
 const markWidth = 14;
 const lookupWidth = 24;
 const addressWidth = 15;
-
-const groupTitles = {
-  ads: "ADS AND TRACKERS",
-  family: "FAMILY",
-  security: "SECURITY",
-} as const;
 
 const mark = {
   cantSee: { color: theme.warn, glyph: "?", text: "can't see" },
@@ -206,7 +200,9 @@ const filtersText = (
     ],
   ];
   for (const category of categoryOrder) {
-    out.push([paint(groupTitles[category], { fg: theme.faint })]);
+    out.push([
+      paint(categoryLabels[category].shortHeading, { fg: theme.faint }),
+    ]);
     for (const f of items.filter((x) => x.category === category)) {
       out.push([...filterRow(f.name, markOf(c, f)), selfTestChunk(n, f)]);
       if (f.name === safeZoneFollows) {

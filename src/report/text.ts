@@ -1,6 +1,6 @@
 /** Renders a result view as text, with ANSI colors for terminals. */
 import { printable } from "./printable.ts";
-import type { Line, Row, Tone, View } from "./view.ts";
+import type { Row, Tone, View } from "./view.ts";
 
 const csi = "\u001B[";
 const reset = `${csi}0m`;
@@ -35,9 +35,6 @@ const rowText = (color: boolean, width: number, r: Row): string => {
   return `${indent}${paint(color, tone, r.icon)} ${printable(r.name).padEnd(width)}  ${text}`;
 };
 
-const lineText = (color: boolean, l: Line): string =>
-  indent + paint(color, toneCodes[l.tone], l.text);
-
 /** Renders one result. `color` turns ANSI colors on. */
 export const renderText = (v: View, color: boolean): string => {
   const width = nameWidth(v);
@@ -49,8 +46,7 @@ export const renderText = (v: View, color: boolean): string => {
     out.push(
       "",
       paint(color, headingCode, s.title),
-      ...s.rows.map((r) => rowText(color, width, r)),
-      ...s.lines.map((l) => lineText(color, l))
+      ...s.rows.map((r) => rowText(color, width, r))
     );
   }
   return `${out.join("\n")}\n`;

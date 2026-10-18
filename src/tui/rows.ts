@@ -8,14 +8,8 @@ import {
   realAnswerUnavailable,
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
-import { categoryOrder, categoryTitles } from "../report/view.ts";
+import { byCategory, categoryLabels } from "../report/categories.ts";
 import { filterWhy, realAnswerWhy, systemWhy } from "./why.ts";
-
-const categoryNames = {
-  ads: "ads and trackers",
-  family: "family",
-  security: "security",
-} as const;
 
 const verdictWords: Record<RowState, string> = {
   blocked: "blocked",
@@ -172,7 +166,7 @@ const realAnswerRow = (r: CheckResult): TableRow => {
 };
 
 const filterBase = (f: Filter): RowBase => ({
-  category: categoryNames[f.category],
+  category: categoryLabels[f.category].name,
   name: f.name,
   server: f.servers[0] ?? "",
   transport: "UDP 53",
@@ -187,22 +181,6 @@ const idleRow = (f: Filter): TableRow => ({
   verdict: "",
   why: "Not checked yet. Type a domain, URL or IP address and press enter.",
 });
-
-const byCategory = (
-  items: readonly Filter[],
-  row: (f: Filter, i: number) => TableRow
-): Group[] =>
-  categoryOrder
-    .map((category) => ({
-      rows: items.flatMap((f, i) => {
-        if (f.category !== category) {
-          return [];
-        }
-        return [row(f, i)];
-      }),
-      title: categoryTitles[category],
-    }))
-    .filter((g) => g.rows.length > 0);
 
 export type RowState =
   | "blocked"
@@ -235,7 +213,7 @@ export interface Group {
 
 /** The table before anything is checked: the filters that will be asked. */
 export const idleGroups = (items: readonly Filter[]): Group[] =>
-  byCategory(items, idleRow);
+  byCategory(items, (f) => f.category, idleRow);
 
 /** The table for a result, complete or still arriving. */
 export const resultGroups = (r: CheckResult): Group[] => {
@@ -259,18 +237,19 @@ export const resultGroups = (r: CheckResult): Group[] => {
     ],
     title: "REFERENCE",
   };
-  const filters = r.filters.map((f) => f.filter);
   return [
     reference,
-    ...byCategory(filters, (f, i) => {
-      const o = r.filters[i]?.outcome ?? { kind: "pending" };
-      return outcomeRow(filterBase(f), o, filterWhy(f, o, r), {
-        optional: !shouldAnswer(r, f),
-        redirected: isRedirected(r, f),
-        result: r,
-        system: false,
-      });
-    }),
+    ...byCategory(
+      r.filters,
+      (f) => f.filter.category,
+      ({ filter: f, outcome: o }) =>
+        outcomeRow(filterBase(f), o, filterWhy(f, o, r), {
+          optional: !shouldAnswer(r, f),
+          redirected: isRedirected(r, f),
+          result: r,
+          system: false,
+        })
+    ),
   ];
 };
 

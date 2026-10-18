@@ -4,12 +4,13 @@
  */
 import { describe, type Verdict } from "../check/classify.ts";
 import { isRedirected, shouldAnswer } from "../check/evidence.ts";
-import type { Category, Filter } from "../check/filters.ts";
+import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   type Outcome,
   realAnswerKnown,
 } from "../check/result.ts";
+import { byCategory } from "./categories.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 
 const maxAnswers = 2;
@@ -202,23 +203,11 @@ const realAnswerRow = (r: CheckResult): Row => {
 };
 
 const filterSections = (r: CheckResult): Section[] =>
-  categoryOrder
-    .map((category) => ({
-      lines: [],
-      rows: r.filters
-        .filter((f) => f.filter.category === category)
-        .map((f) => filterRow(r, f.filter, f.outcome)),
-      title: categoryTitles[category],
-    }))
-    .filter((s) => s.rows.length > 0);
-
-export const categoryTitles: Record<Category, string> = {
-  ads: "ADS AND TRACKERS",
-  family: "FAMILY · SECURITY + ADULT CONTENT",
-  security: "SECURITY · MALWARE, PHISHING",
-};
-
-export const categoryOrder: readonly Category[] = ["security", "family", "ads"];
+  byCategory(
+    r.filters,
+    (f) => f.filter.category,
+    (f) => filterRow(r, f.filter, f.outcome)
+  );
 
 export type Tone = "blocked" | "dim" | "ok" | "plain" | "warn";
 
@@ -237,7 +226,6 @@ export interface Row {
 }
 
 export interface Section {
-  readonly lines: readonly Line[];
   readonly rows: readonly Row[];
   readonly title: string;
 }
@@ -265,9 +253,6 @@ export const view = (r: CheckResult): View => {
   const reference = [outcomeRow("Your DNS", r.system, r), realAnswerRow(r)];
   return {
     ...base,
-    sections: [
-      { lines: [], rows: reference, title: "REFERENCE" },
-      ...filterSections(r),
-    ],
+    sections: [{ rows: reference, title: "REFERENCE" }, ...filterSections(r)],
   };
 };
