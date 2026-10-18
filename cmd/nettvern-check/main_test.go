@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -27,9 +28,9 @@ func TestBadFlag(t *testing.T) {
 }
 
 func TestExitCode(t *testing.T) {
-	ok := check.Result{Filters: []check.FilterResult{{Filter: "Nettvern"}}}
-	blocked := check.Result{Filters: []check.FilterResult{{Filter: "Nettvern", Verdict: check.Verdict{Blocked: true, Reason: check.ReasonNettvern}}}}
-	unreachable := check.Result{Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}}}
+	ok := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern"}}}
+	blocked := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Verdict: check.Verdict{Blocked: true, Reason: check.ReasonNettvern}}}}
+	unreachable := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}}}
 	ip := check.Result{IsIP: true}
 
 	for name, tt := range map[string]struct {
@@ -49,9 +50,10 @@ func TestExitCode(t *testing.T) {
 func TestPrintResult(t *testing.T) {
 	var out bytes.Buffer
 	printResult(&out, check.Result{
-		Host:   "bad.example",
-		Exists: true,
-		Truth:  []string{"192.0.2.10"},
+		Host:    "bad.example",
+		Checked: true,
+		Exists:  true,
+		Truth:   []string{"192.0.2.10"},
 		Filters: []check.FilterResult{
 			{Filter: "Nettvern"},
 			{Filter: "Nettvern+", Verdict: check.Verdict{Blocked: true, Reason: check.ReasonNettvernPl, Answers: []string{"nettvernpluss-info.telenor.net", "148.123.15.2"}}},
@@ -65,5 +67,23 @@ func TestPrintResult(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestPrintIPWithoutReverseName(t *testing.T) {
+	var out bytes.Buffer
+	printResult(&out, check.Result{Target: "http://192.0.2.1:8080/", Host: "192.0.2.1", IsIP: true, Notes: []string{"note"}})
+	if strings.Contains(out.String(), "Real answer") || strings.Contains(out.String(), "This computer") {
+		t.Errorf("printed DNS sections for an unchecked IP:\n%s", out.String())
+	}
+}
+
+func TestJSONIncludesTruthError(t *testing.T) {
+	b, err := json.Marshal(toJSON("Nettvern", []check.Result{{Host: "x.example", Checked: true, TruthErr: errors.New("doh down")}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"real_answer_error":"doh down"`) {
+		t.Errorf("JSON lacks the truth error: %s", b)
 	}
 }

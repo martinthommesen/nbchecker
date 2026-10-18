@@ -48,6 +48,7 @@ type Result struct {
 	Target   string
 	Host     string // the name looked up (from a URL, or a PTR for an IP)
 	IsIP     bool
+	Checked  bool     // DNS was checked; false for an IP with no reverse name
 	Exists   bool     // an unfiltered resolver found the name
 	Truth    []string // unfiltered answers
 	TruthErr error
@@ -124,6 +125,7 @@ func (c *Checker) Check(ctx context.Context, target string) Result {
 		r.Notes = append(r.Notes, fmt.Sprintf("Checking its reverse DNS name %s instead.", r.Host))
 	}
 
+	r.Checked = true
 	var wg sync.WaitGroup
 	wg.Add(2 + len(c.Filters))
 	go func() { defer wg.Done(); r.Truth, r.Exists, r.TruthErr = c.truth(ctx, r.Host) }()
@@ -195,7 +197,19 @@ func (c *Checker) udp(ctx context.Context, addr, host string, qt uint16) (*dns.M
 		cl.Net = "tcp"
 		resp, _, err = cl.ExchangeContext(ctx, m, addr)
 	}
+	if err == nil {
+		err = rcodeErr(resp)
+	}
 	return resp, err
+}
+
+// rcodeErr turns a server failure (SERVFAIL, REFUSED, ...) into an error,
+// so the next server is tried. NXDOMAIN is an answer, not a failure.
+func rcodeErr(m *dns.Msg) error {
+	if m.Rcode == dns.RcodeSuccess || m.Rcode == dns.RcodeNameError {
+		return nil
+	}
+	return fmt.Errorf("server answered %s", dns.RcodeToString[m.Rcode])
 }
 
 // truth asks the DoH resolvers, returning the first good answer.
@@ -207,6 +221,9 @@ func (c *Checker) truth(ctx context.Context, host string) ([]string, bool, error
 		ok := true
 		for _, qt := range []uint16{dns.TypeA, dns.TypeAAAA} {
 			m, err := c.doh(ctx, u, host, qt)
+			if err == nil {
+				err = rcodeErr(m)
+			}
 			if err != nil {
 				lastErr, ok = err, false
 				break

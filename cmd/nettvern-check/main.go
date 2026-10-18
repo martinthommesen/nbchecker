@@ -37,7 +37,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer) int {
 Checks whether Telenor's Nettvern or Nettvern+ blocks each target, by asking
 their DNS servers directly. Run it on a Telenor connection.
 
-Run without arguments to type targets one at a time.
+Run without arguments to type targets one at a time. With --json and no
+arguments, targets are read from standard input, one per line.
 
 Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 on errors.
 
@@ -56,12 +57,23 @@ Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 on errors.
 	ctx := context.Background()
 	c := check.New()
 
-	if fs.NArg() == 0 {
-		return interactive(ctx, c, stdin, stdout)
+	targets := fs.Args()
+	if len(targets) == 0 {
+		if !*asJSON {
+			return interactive(ctx, c, stdin, stdout)
+		}
+		// With --json and no arguments, read targets from stdin, one per
+		// line, so the output stays machine-readable.
+		sc := bufio.NewScanner(stdin)
+		for sc.Scan() {
+			if t := strings.TrimSpace(sc.Text()); t != "" {
+				targets = append(targets, t)
+			}
+		}
 	}
 
 	var results []check.Result
-	for _, t := range fs.Args() {
+	for _, t := range targets {
 		results = append(results, c.Check(ctx, t))
 	}
 	if *asJSON {
@@ -109,7 +121,7 @@ func exitCode(results []check.Result) int {
 		}
 	}
 	for _, r := range results {
-		if !r.IsIP && allFiltersFailed(r) {
+		if r.Checked && allFiltersFailed(r) {
 			return 2
 		}
 	}
@@ -138,7 +150,7 @@ func printResult(w io.Writer, r check.Result) {
 	for _, n := range r.Notes {
 		o.ln("  " + n)
 	}
-	if r.IsIP && r.Host == strings.Trim(r.Target, "[] ") {
+	if !r.Checked {
 		return
 	}
 	for _, f := range r.Filters {
@@ -187,15 +199,16 @@ type jsonFilter struct {
 }
 
 type jsonResult struct {
-	Target  string       `json:"target"`
-	Host    string       `json:"host"`
-	IsIP    bool         `json:"is_ip"`
-	Blocked bool         `json:"blocked"`
-	Exists  bool         `json:"exists"`
-	Truth   []string     `json:"real_answer,omitempty"`
-	Filters []jsonFilter `json:"filters,omitempty"`
-	System  jsonFilter   `json:"this_computer"`
-	Notes   []string     `json:"notes,omitempty"`
+	Target   string       `json:"target"`
+	Host     string       `json:"host"`
+	IsIP     bool         `json:"is_ip"`
+	Blocked  bool         `json:"blocked"`
+	Exists   bool         `json:"exists"`
+	Truth    []string     `json:"real_answer,omitempty"`
+	TruthErr string       `json:"real_answer_error,omitempty"`
+	Filters  []jsonFilter `json:"filters,omitempty"`
+	System   jsonFilter   `json:"this_computer"`
+	Notes    []string     `json:"notes,omitempty"`
 }
 
 func toJSON(status string, rs []check.Result) any {
@@ -207,6 +220,9 @@ func toJSON(status string, rs []check.Result) any {
 	}{Version: version, OS: runtime.GOOS + "/" + runtime.GOARCH, Status: status}
 	for _, r := range rs {
 		jr := jsonResult{Target: r.Target, Host: r.Host, IsIP: r.IsIP, Blocked: r.Blocked(), Exists: r.Exists, Truth: r.Truth, Notes: r.Notes}
+		if r.TruthErr != nil {
+			jr.TruthErr = r.TruthErr.Error()
+		}
 		for _, f := range r.Filters {
 			jr.Filters = append(jr.Filters, verdictJSON(f.Filter, f.Server, f.Verdict, f.Err))
 		}

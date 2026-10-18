@@ -50,7 +50,7 @@ donutbasefinder.com
 
 | Flag | |
 |---|---|
-| `--json` | Print the results as JSON |
+| `--json` | Print the results as JSON. With no arguments, read targets from standard input, one per line |
 | `--version` | Print the version |
 
 The exit status is 0 if nothing is blocked, 1 if anything is blocked and 2 if

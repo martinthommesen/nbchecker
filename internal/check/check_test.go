@@ -15,6 +15,13 @@ import (
 // fakeDNS serves canned answers, keyed by query name, on 127.0.0.1.
 func fakeDNS(t *testing.T, answers map[string][]string) (port string) {
 	t.Helper()
+	return fakeDNSRcode(t, answers, -1)
+}
+
+// fakeDNSRcode is fakeDNS, but answers every query with rcode when it is
+// not -1.
+func fakeDNSRcode(t *testing.T, answers map[string][]string, rcode int) (port string) {
+	t.Helper()
 	pc, err := (&net.ListenConfig{}).ListenPacket(context.Background(), "udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -26,6 +33,9 @@ func fakeDNS(t *testing.T, answers map[string][]string) (port string) {
 		rrs, ok := answers[q.Name]
 		if !ok {
 			m.Rcode = dns.RcodeNameError
+		}
+		if rcode >= 0 {
+			m.Rcode, rrs = rcode, nil
 		}
 		for _, s := range rrs {
 			rr, err := dns.NewRR(s)
@@ -175,5 +185,18 @@ func TestStatus(t *testing.T) {
 		if got := c.Status(context.Background()); got != want {
 			t.Errorf("%s: Status() = %q, want %q", addr, got, want)
 		}
+	}
+}
+
+func TestFilterServfailIsAnError(t *testing.T) {
+	c := New()
+	c.Timeout = time.Second
+	c.Port = fakeDNSRcode(t, nil, dns.RcodeServerFailure)
+	c.Filters = []Filter{{"Nettvern", []string{"127.0.0.1"}}}
+	c.TruthURLs = []string{fakeDoH(t, map[string][]string{"x.example.": {"x.example. 300 IN A 192.0.2.1"}})}
+	c.Resolver = resolverAt(fakeDNS(t, nil))
+	r := c.Check(context.Background(), "x.example")
+	if r.Filters[0].Err == nil {
+		t.Fatalf("SERVFAIL from every server should be an error, got verdict %+v", r.Filters[0].Verdict)
 	}
 }
