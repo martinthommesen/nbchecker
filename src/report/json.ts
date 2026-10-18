@@ -7,8 +7,8 @@ import {
   type Completion,
   nameExists,
   type Outcome,
+  type RealAnswer,
   realAddresses,
-  realAnswerUnavailable,
 } from "../check/result.ts";
 import { type StatusKind, statusOf } from "./status.ts";
 
@@ -94,14 +94,14 @@ const filterJson = (r: CheckResult, f: Filter, o: Outcome): JsonVerdict => {
 };
 
 /** Why there is no real answer: its error, or that the check was cancelled. */
-const realAnswerError = (r: CheckResult): string | undefined => {
-  if (!realAnswerUnavailable(r)) {
-    return;
+const realAnswerError = (o: Outcome<RealAnswer>): string | undefined => {
+  if (o.kind === "failed") {
+    return o.error;
   }
-  if (r.realAnswer.kind === "failed") {
-    return r.realAnswer.error;
+  if (o.kind === "cancelled") {
+    return cancelledError;
   }
-  return cancelledError;
+  return undefined;
 };
 
 /** This computer's answer, left out when nothing was checked. */
@@ -127,7 +127,7 @@ const resultJson = (r: CheckResult): JsonResult => ({
   isIp: r.isIp,
   notes: r.notes,
   realAnswer: realAddresses(r),
-  realAnswerError: realAnswerError(r),
+  realAnswerError: realAnswerError(r.realAnswer),
   status: statusOf(r).kind,
   target: r.target,
   thisComputer: thisComputerJson(r),

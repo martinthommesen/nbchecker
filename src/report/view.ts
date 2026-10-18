@@ -7,9 +7,7 @@ import { isRedirected, shouldAnswer } from "../check/evidence.ts";
 import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  nameExists,
   type Outcome,
-  realAddresses,
   realAnswerKnown,
 } from "../check/result.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
@@ -181,14 +179,13 @@ const realAnswerRow = (r: CheckResult): Row => {
       tone: "warn",
     };
   }
-  if (!realAnswerKnown(r)) {
+  if (o.kind === "pending") {
     return { icon: "…", name, text: "asking…", tone: "dim" };
   }
-  if (!nameExists(r)) {
+  if (!o.exists) {
     return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
   }
-  const addresses = realAddresses(r);
-  if (addresses.length === 0) {
+  if (o.addresses.length === 0) {
     return {
       icon: "✓",
       name,
@@ -199,7 +196,7 @@ const realAnswerRow = (r: CheckResult): Row => {
   return {
     icon: "✓",
     name,
-    text: shortList(addresses, maxRealAddresses),
+    text: shortList(o.addresses, maxRealAddresses),
     tone: "plain",
   };
 };

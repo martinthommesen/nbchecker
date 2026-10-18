@@ -1,14 +1,7 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
 import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
-import {
-  type CheckResult,
-  nameExists,
-  realAddresses,
-  realAnswerKnown,
-  realAnswerUnavailable,
-  settled,
-} from "../check/result.ts";
+import { type CheckResult, settled } from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
@@ -67,20 +60,20 @@ const systemPhrase = (r: CheckResult): TextChunk => {
 };
 
 const realAnswerPhrase = (r: CheckResult): TextChunk => {
-  if (realAnswerUnavailable(r)) {
+  const o = r.realAnswer;
+  if (o.kind === "failed" || o.kind === "cancelled") {
     return paint("unavailable", { fg: theme.warn });
   }
-  if (!realAnswerKnown(r)) {
+  if (o.kind === "pending") {
     return paint("asking…", { fg: theme.dim });
   }
-  if (!nameExists(r)) {
+  if (!o.exists) {
     return paint("doesn't exist", { fg: theme.dim });
   }
-  const addresses = realAddresses(r);
-  if (addresses.length === 0) {
+  if (o.addresses.length === 0) {
     return paint("no addresses", { fg: theme.ok });
   }
-  return paint(shortList(addresses, realAddressesShown), { fg: theme.ok });
+  return paint(shortList(o.addresses, realAddressesShown), { fg: theme.ok });
 };
 
 const counted = (n: number, of: number, color: string): TextChunk =>

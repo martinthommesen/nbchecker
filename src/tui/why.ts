@@ -178,7 +178,7 @@ const realAnswerWhy = (r: CheckResult): string => {
   if (o.kind === "failed") {
     return `No unfiltered resolver could be reached: ${o.error}. Without it, a filter that says a domain doesn't exist can't be told apart from a domain that really doesn't.`;
   }
-  if (realAnswerPending(r)) {
+  if (o.kind === "pending") {
     return "Waiting for the real answer, fetched over encrypted DNS so no filter on your network can change it.";
   }
   return "The real answer, fetched over encrypted DNS so no filter on your network can change it. Every other row is compared with this.";
