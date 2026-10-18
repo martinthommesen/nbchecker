@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { Ede, Rcode } from "../dns/codes.ts";
-import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
+import { a, aaaa, answer, cname, noRecords } from "../testing/records.ts";
 import {
   classify,
   classifySystem,
@@ -15,33 +16,6 @@ const edeStale = 3;
 /** The real answer for a name that exists, with an address of its own. */
 const exists: Reference = { addresses: ["192.0.2.20"], exists: true };
 const missing: Reference = { addresses: [], exists: false };
-
-const answer = (
-  records: readonly DnsRecord[],
-  extra: Partial<DnsAnswer> = {}
-): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records,
-  truncated: false,
-  ...extra,
-});
-
-const cname = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "CNAME",
-  value,
-});
-const a = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "A",
-  value,
-});
-const aaaa = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "AAAA",
-  value,
-});
 
 interface Case {
   readonly answer: DnsAnswer;
@@ -94,19 +68,13 @@ const cases: readonly Case[] = [
     reason: "adguard",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: Ede.blocked, text: "" }],
-      rcode: Rcode.servFail,
-    }),
+    answer: noRecords(Rcode.servFail, Ede.blocked),
     detail: "Blocked",
     name: "SERVFAIL with Extended DNS Error 15",
     reason: "ede",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: Ede.blocked, text: "policy" }],
-      rcode: Rcode.refused,
-    }),
+    answer: noRecords(Rcode.refused, { code: Ede.blocked, text: "policy" }),
     detail: "Blocked: policy",
     name: "REFUSED with Extended DNS Error 15",
     reason: "ede",
@@ -122,9 +90,7 @@ const cases: readonly Case[] = [
     reason: "null-ip",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: Ede.filtered, text: "malware" }],
-    }),
+    answer: noRecords(Rcode.noError, { code: Ede.filtered, text: "malware" }),
     detail: "Filtered: malware",
     name: "Extended DNS Error",
     reason: "ede",
@@ -137,12 +103,12 @@ const cases: readonly Case[] = [
     reason: undefined,
   },
   {
-    answer: answer([], { rcode: Rcode.nxDomain }),
+    answer: noRecords(Rcode.nxDomain),
     name: "filter-only NXDOMAIN (Quad9)",
     reason: "nxdomain",
   },
   {
-    answer: answer([], { rcode: Rcode.nxDomain }),
+    answer: noRecords(Rcode.nxDomain),
     name: "NXDOMAIN for a name that doesn't exist",
     reason: undefined,
     reference: missing,
@@ -189,7 +155,7 @@ test("merge keeps the block and removes duplicate answers", () => {
 });
 
 test("describe", () => {
-  const absent = classify(answer([], { rcode: Rcode.nxDomain }), missing);
+  const absent = classify(noRecords(Rcode.nxDomain), missing);
   expect(describeVerdict(absent)).toBe("not found (the domain doesn't exist)");
   const umbrella = classify(answer([a("x.example", "146.112.61.108")]), exists);
   expect(describeVerdict(umbrella)).toBe(

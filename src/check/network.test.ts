@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import {
   blockingRedirectTransport,
   computer,
@@ -10,6 +8,7 @@ import {
   fakeTransport,
   redirectingTransport,
 } from "../testing/fake-network.ts";
+import { a, aaaa, answer } from "../testing/records.ts";
 import { redirectedFilters, seemsIntercepted } from "./evidence.ts";
 import type { Filter } from "./filters.ts";
 import { detectNetwork } from "./network.ts";
@@ -18,8 +17,8 @@ import { CheckerOptions } from "./options.ts";
 const testPage = "nettvern.telenor.net";
 
 /** A Telenor filter whose server, 192.0.2.53, gives Nettvern's answer. */
-const telenor = (answer: string, servers = ["192.0.2.53"]): Filter => ({
-  canary: { answers: [answer], name: testPage },
+const telenor = (ip: string, servers = ["192.0.2.53"]): Filter => ({
+  canary: { answers: [ip], name: testPage },
   category: "security",
   name: "Telenor filter",
   onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
@@ -37,26 +36,15 @@ const detect = (
     Effect.runPromise
   );
 
-const dnsAnswer = (
-  name: string,
-  type: QueryType,
-  value: string
-): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records: [{ name, type, value }],
-  truncated: false,
-});
-
 /** Every filter blocks the canary over IPv4, but IPv6 queries go elsewhere. */
 const redirectedIpv6 = Layer.succeed(DnsTransport, {
   ask: (_server, name, type) => {
     if (type === "A") {
-      return Effect.succeed(dnsAnswer(name, type, "0.0.0.0"));
+      return Effect.succeed(answer([a(name, "0.0.0.0")]));
     }
-    return Effect.succeed(dnsAnswer(name, type, "2001:db8::5"));
+    return Effect.succeed(answer([aaaa(name, "2001:db8::5")]));
   },
-  doh: (_url, name, type) => Effect.succeed(dnsAnswer(name, type, "192.0.2.5")),
+  doh: (_url, name) => Effect.succeed(answer([a(name, "192.0.2.5")])),
 });
 
 const results = async (...args: Parameters<typeof detect>) =>

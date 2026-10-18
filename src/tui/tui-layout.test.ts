@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import { blockedName } from "../testing/design-network.ts";
+import { answer } from "../testing/records.ts";
 import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
 const tiny = { height: 12, width: 40 };
@@ -23,12 +23,8 @@ const addresses = new Map([
   ["AAAA", [longAddress]],
 ]);
 
-const answerOf = (name: string, type: QueryType): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records: (addresses.get(type) ?? []).map((value) => ({ name, type, value })),
-  truncated: false,
-});
+const answerOf = (name: string, type: QueryType): DnsAnswer =>
+  answer((addresses.get(type) ?? []).map((value) => ({ name, type, value })));
 
 /** Every resolver answers with many addresses, so the details are long. */
 const longAnswers = Layer.succeed(DnsTransport, {

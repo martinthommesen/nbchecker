@@ -30,21 +30,21 @@ export const cname = (name: string, value: string): DnsRecord => ({
   value,
 });
 
-/** A NOERROR answer with these records. */
-export const answer = (records: readonly DnsRecord[]): DnsAnswer => ({
+/** A NOERROR answer with these records, unless `extra` says otherwise. */
+export const answer = (
+  records: readonly DnsRecord[],
+  extra: Partial<DnsAnswer> = {}
+): DnsAnswer => ({
   extendedErrors: [],
   rcode: Rcode.noError,
   records,
   truncated: false,
+  ...extra,
 });
 
 /** An answer without records: an rcode and any Extended DNS Errors. */
 export const noRecords = (
   rcode: number,
   ...errors: readonly ErrorSpec[]
-): DnsAnswer => ({
-  extendedErrors: errors.map(extendedError),
-  rcode,
-  records: [],
-  truncated: false,
-});
+): DnsAnswer =>
+  answer([], { extendedErrors: errors.map(extendedError), rcode });
