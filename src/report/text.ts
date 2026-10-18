@@ -1,0 +1,55 @@
+/** Renders a result view as text, with ANSI colors for terminals. */
+import type { Line, Row, Tone, View } from "./view.ts";
+
+const csi = "\u001B[";
+const reset = `${csi}0m`;
+const toneCodes: Record<Tone, string> = {
+  blocked: "1;31",
+  dim: "2",
+  ok: "32",
+  plain: "",
+  warn: "33",
+};
+const headingCode = "1;36";
+const hostCode = "1";
+const indent = "  ";
+
+const paint = (color: boolean, code: string, s: string): string => {
+  if (!color || code === "") {
+    return s;
+  }
+  return `${csi}${code}m${s}${reset}`;
+};
+
+const nameWidth = (v: View): number =>
+  Math.max(0, ...v.sections.flatMap((s) => s.rows.map((r) => r.name.length)));
+
+const rowText = (color: boolean, width: number, r: Row): string => {
+  const tone = toneCodes[r.tone];
+  let text = paint(color, tone, r.text);
+  if (r.detail !== undefined && r.detail !== "") {
+    text += paint(color, toneCodes.dim, ` → ${r.detail}`);
+  }
+  return `${indent}${paint(color, tone, r.icon)} ${r.name.padEnd(width)}  ${text}`;
+};
+
+const lineText = (color: boolean, l: Line): string =>
+  indent + paint(color, toneCodes[l.tone], l.text);
+
+/** Renders one result. `color` turns ANSI colors on. */
+export const renderText = (v: View, color: boolean): string => {
+  const width = nameWidth(v);
+  const out = [
+    `${paint(color, hostCode, v.host)}  ${paint(color, toneCodes[v.summary.tone], v.summary.text)}`,
+    ...v.notes.map((n) => paint(color, toneCodes.dim, n)),
+  ];
+  for (const s of v.sections) {
+    out.push(
+      "",
+      paint(color, headingCode, s.title),
+      ...s.rows.map((r) => rowText(color, width, r)),
+      ...s.lines.map((l) => lineText(color, l))
+    );
+  }
+  return `${out.join("\n")}\n`;
+};

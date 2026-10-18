@@ -12,7 +12,7 @@ export interface FilterAnswer {
   readonly server: string;
 }
 
-export interface Truth {
+export interface Truth extends FilterAnswer {
   readonly addresses: readonly string[];
   readonly exists: boolean;
 }
@@ -61,7 +61,9 @@ export const lookupTruth = (urls: readonly string[], host: string) =>
             .map((r) => r.value);
           return Effect.succeed<Truth>({
             addresses,
+            answers: [a, aaaa],
             exists: a.rcode !== Rcode.nxDomain,
+            server: url,
           });
         })
       );

@@ -75,6 +75,26 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    category: "family",
+    name: "AdGuard Family",
+    servers: [
+      "94.140.14.15",
+      "94.140.15.16",
+      "2a10:50c0::bad1:ff",
+      "2a10:50c0::bad2:ff",
+    ],
+  },
+  {
+    category: "family",
+    name: "CleanBrowsing Family",
+    servers: [
+      "185.228.168.168",
+      "185.228.169.168",
+      "2a0d:2a00:1::",
+      "2a0d:2a00:2::",
+    ],
+  },
+  {
     category: "ads",
     name: "AdGuard DNS",
     servers: [
