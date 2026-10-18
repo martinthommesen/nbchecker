@@ -7,6 +7,7 @@ import { Dns } from "effect/net";
 import type { Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
 import {
+  blockingRedirectTransport,
   computerWith,
   fakeFilters,
   publicTestPage,
@@ -14,6 +15,7 @@ import {
   rewritingTransport,
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
+import { systemWhy } from "../tui/why.ts";
 import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
 import { statusOf } from "./status.ts";
 import { renderText } from "./text.ts";
@@ -154,5 +156,44 @@ describe("intercepted DNS: self-tests that get no answer", () => {
     expect(text(r)).toContain("✓ not blocked by any of 2 filters");
     expect(r.completion).toBe("complete");
     expect(exitCode([r])).toBe(0);
+  });
+});
+
+describe("intercepted DNS: what an untrusted filter is said to do", () => {
+  test("a cancelled check says so, not that answers were redirected", async () => {
+    const r = await runCheck("bad.example", {
+      dns: redirectedComputer,
+      transport: redirectingTransport(),
+    });
+    const cancelled: CheckResult = {
+      ...r,
+      filters: r.filters.map((f) => ({
+        ...f,
+        outcome: { error: "cancelled", kind: "failed", ms: 0 },
+      })),
+    };
+    expect(text(cancelled)).not.toContain("don't look like they come from");
+  });
+
+  test("this computer's block isn't put down to an untrusted filter", async () => {
+    // Both filters answer AdGuard's block page; only the family filter's
+    // self-test passes.
+    const [security, family] = fakeFilters as [Filter, Filter];
+    const r = await runCheck("adult.example", {
+      filters: [
+        {
+          ...security,
+          canary: { answers: ["148.123.15.44"], name: "canary.example" },
+        },
+        family,
+      ],
+      transport: blockingRedirectTransport,
+    });
+    expect(r.network?.selfTests.map((t) => t.result)).toEqual([
+      "redirected",
+      "passed",
+    ]);
+    const why = r.system && systemWhy(r.system, r);
+    expect(why).toContain("same block answer as Family filter");
   });
 });

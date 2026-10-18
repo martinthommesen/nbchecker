@@ -6,6 +6,7 @@ import {
   isRedirected,
   type Outcome,
   shouldAnswer,
+  trustedFilters,
   truthCancelled,
   truthPending,
   wasCancelled,
@@ -81,7 +82,7 @@ const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
   if (o.kind === "pending") {
     return "Waiting for an answer.";
   }
-  if (isRedirected(r, f)) {
+  if (o.kind === "answered" && isRedirected(r, f)) {
     return redirectedWhy(f);
   }
   if (o.kind === "failed" && wasCancelled(o)) {
@@ -100,7 +101,7 @@ const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
 };
 
 const systemBlockWhy = (v: Verdict, r: CheckResult): string => {
-  const same = r.filters.find(
+  const same = trustedFilters(r).find(
     (f) =>
       f.outcome.kind === "answered" && f.outcome.verdict.reason === v.reason
   );

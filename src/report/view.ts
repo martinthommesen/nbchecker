@@ -134,7 +134,8 @@ const redirectedRow = (name: string, outcome: Outcome): Row => {
 };
 
 const filterRow = (r: CheckResult, filter: Filter, outcome: Outcome): Row => {
-  if (outcome.kind !== "pending" && isRedirected(r, filter)) {
+  // Only an answer can come from another resolver; no answer is just that.
+  if (outcome.kind === "answered" && isRedirected(r, filter)) {
     return redirectedRow(filter.name, outcome);
   }
   return outcomeRow(filter.name, outcome, r, filter);

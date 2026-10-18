@@ -147,7 +147,7 @@ session in the interactive app, nbchecker asks each filter for a test name it
 documents as blocked, such as Cloudflare's `malware.testcategory.com` or
 Telenor's test page, and checks that the answer is its block. Only names the
 provider itself gives as a test are used, so an honest filter doesn't fail.
-That is an A and an AAAA query to each of a filter's four servers: up to 80
+That is an A and an AAAA query to each of a filter's four servers: up to 40
 small queries per run.
 
 - **passed**: the filter's answers count as usual.

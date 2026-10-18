@@ -57,7 +57,7 @@ const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.kind === "pending") {
     return "pending";
   }
-  if (c.redirected) {
+  if (c.redirected && o.kind === "answered") {
     return "redirected";
   }
   if (o.kind === "failed" && (c.optional || wasCancelled(o))) {

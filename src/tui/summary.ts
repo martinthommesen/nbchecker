@@ -4,6 +4,7 @@ import {
   type CheckResult,
   type Outcome,
   seemsIntercepted,
+  trustedFilters,
 } from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
@@ -44,7 +45,7 @@ const systemPhrase = (r: CheckResult): TextChunk => {
     return paint("no answer", { fg: theme.warn });
   }
   if (o.verdict.blocked) {
-    const same = r.filters.find(
+    const same = trustedFilters(r).find(
       (f) =>
         f.outcome.kind === "answered" &&
         f.outcome.verdict.reason === o.verdict.reason &&
