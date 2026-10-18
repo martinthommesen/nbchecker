@@ -78,8 +78,8 @@ Without arguments, and when standard input isn't a terminal, nbchecker reads
 targets from it, one per line.
 
 The exit status is 0 if nothing is blocked, 1 if anything is blocked and 2 if
-a check was incomplete, for example because a filter or the real answer could
-not be reached. A filter that only answers some networks, such as Telenor's,
+a check was incomplete, for example because a filter, your own DNS or the real
+answer could not be reached. A filter that only answers some networks, such as Telenor's,
 doesn't make a check incomplete when you are elsewhere.
 
 ## What it checks

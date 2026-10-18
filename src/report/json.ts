@@ -57,13 +57,15 @@ const resultJson = (r: CheckResult) => ({
 });
 
 /**
- * A check is incomplete when something that should have answered didn't. A
+ * A check is incomplete when something that should have answered didn't:
+ * the real answer, this computer's resolver or a filter. A
  * filter that only answers some networks, such as an ISP's, doesn't count.
  */
 const incomplete = (r: CheckResult): boolean =>
   r.lookupError !== undefined ||
   (r.checked &&
     (r.truthError !== undefined ||
+      r.system?.kind === "failed" ||
       r.filters.some(
         (f) => f.outcome.kind === "failed" && f.filter.onlyAnswers === undefined
       )));
