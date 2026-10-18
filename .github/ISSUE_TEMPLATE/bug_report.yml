@@ -1,0 +1,40 @@
+name: Bug report
+description: The program crashes, hangs or behaves wrongly in a way that isn't a wrong block result.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include the command you ran.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Program output
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: nettvern-check version
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
