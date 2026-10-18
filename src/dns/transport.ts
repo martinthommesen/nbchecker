@@ -38,8 +38,8 @@ const randomId = (): number => {
   return id;
 };
 
-/** Blames `server` for a message that can't be encoded or decoded. */
-const blame = (server: string) =>
+/** A message that can't be encoded or decoded fails the query to `server`. */
+const asQueryError = (server: string) =>
   Effect.mapError(
     (error: MalformedResponse) =>
       new QueryError({ reason: error.reason, server })
@@ -104,13 +104,13 @@ const exchange = (
   packet: Uint8Array
 ) =>
   send(server, port, packet).pipe(
-    Effect.flatMap((reply) => decodeResponse(reply).pipe(blame(server)))
+    Effect.flatMap((reply) => decodeResponse(reply).pipe(asQueryError(server)))
   );
 
 const ask = (port: number) => (server: string, name: string, type: QueryType) =>
   Effect.gen(function* () {
     const packet = yield* encodeQuery(randomId(), name, type).pipe(
-      blame(server)
+      asQueryError(server)
     );
     const answer = yield* exchange(sendUdp, server, port, packet);
     if (!answer.truncated) {
@@ -128,7 +128,7 @@ const doh =
   (client: HttpClient.HttpClient) =>
   (url: string, name: string, type: QueryType) =>
     Effect.gen(function* () {
-      const packet = yield* encodeQuery(0, name, type).pipe(blame(url));
+      const packet = yield* encodeQuery(0, name, type).pipe(asQueryError(url));
       const body = yield* post(client, url, packet);
       const problem = mismatch(packet, body);
       if (problem !== undefined) {
@@ -138,7 +138,7 @@ const doh =
       }
       // A partial reference answer could make a filter look like it blocks.
       return yield* decodeResponse(body).pipe(
-        blame(url),
+        asQueryError(url),
         Effect.flatMap(rejectTruncated(url, "answer was truncated"))
       );
     }).pipe(timeoutAfter("5 seconds", url));

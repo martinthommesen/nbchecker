@@ -91,7 +91,10 @@ export interface ResponseSpec {
   readonly truncated?: boolean;
 }
 
-/** Encodes a response with an optional OPT record. */
+/**
+ * Encodes a response with one question, the records and an OPT record that
+ * carries the rcode's upper bits and any Extended DNS Errors.
+ */
 export const response = (spec: ResponseSpec): Uint8Array => {
   const records = spec.records ?? [];
   const rcode = spec.rcode ?? Rcode.noError;
