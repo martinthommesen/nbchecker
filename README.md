@@ -54,7 +54,8 @@ donutbasefinder.com
 | `--version` | Print the version |
 
 The exit status is 0 if nothing is blocked, 1 if anything is blocked and 2 if
-Telenor's DNS servers could not be reached.
+any of Telenor's filters could not be reached, so an incomplete check never
+looks clean.
 
 ### What it checks
 

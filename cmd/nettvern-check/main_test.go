@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/martinthommesen/nettvern-check/internal/check"
 )
@@ -31,6 +33,7 @@ func TestExitCode(t *testing.T) {
 	ok := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern"}}}
 	blocked := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Verdict: check.Verdict{Blocked: true, Reason: check.ReasonNettvern}}}}
 	unreachable := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}}}
+	partial := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}, {Filter: "Nettvern+"}}}
 	ip := check.Result{IsIP: true}
 
 	for name, tt := range map[string]struct {
@@ -40,6 +43,7 @@ func TestExitCode(t *testing.T) {
 		"nothing blocked": {[]check.Result{ok, ip}, 0},
 		"one blocked":     {[]check.Result{ok, blocked}, 1},
 		"unreachable":     {[]check.Result{blocked, unreachable}, 2},
+		"one filter down": {[]check.Result{partial}, 2},
 	} {
 		if got := exitCode(tt.rs); got != tt.want {
 			t.Errorf("%s: exitCode = %d, want %d", name, got, tt.want)
@@ -94,5 +98,20 @@ func TestShortList(t *testing.T) {
 	}
 	if got := shortList([]string{"a", "b", "c", "d", "e", "f"}, 4); got != "a, b, c, d and 2 more" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestInteractiveExitCode(t *testing.T) {
+	c := check.New()
+	c.Filters = []check.Filter{{Name: "Nettvern", Servers: []string{"127.0.0.1"}}}
+	c.Port = "9" // nothing answers, so the filter check fails
+	c.Timeout = 100 * time.Millisecond
+	c.TruthURLs = nil
+	var out bytes.Buffer
+	if code := interactive(context.Background(), c, strings.NewReader("example.com\n\n"), &out); code != 2 {
+		t.Errorf("exit %d, want 2 after an unreachable filter:\n%s", code, out.String())
+	}
+	if code := interactive(context.Background(), c, strings.NewReader(""), &out); code != 0 {
+		t.Errorf("exit %d, want 0 with no input", code)
 	}
 }

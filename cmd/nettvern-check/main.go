@@ -40,7 +40,8 @@ their DNS servers directly. Run it on a Telenor connection.
 Run without arguments to type targets one at a time. With --json and no
 arguments, targets are read from standard input, one per line.
 
-Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 on errors.
+Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 if a
+filter could not be checked or on other errors.
 
 `)
 		fs.PrintDefaults()
@@ -70,6 +71,10 @@ Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 on errors.
 				targets = append(targets, t)
 			}
 		}
+		if err := sc.Err(); err != nil {
+			o.f("reading targets: %v\n", err)
+			return 2
+		}
 	}
 
 	var results []check.Result
@@ -97,18 +102,24 @@ func interactive(ctx context.Context, c *check.Checker, stdin io.Reader, stdout 
 	o.f("nettvern-check %s\n", version)
 	o.f("Your computer's DNS filter: %s\n\n", c.Status(ctx))
 	sc := bufio.NewScanner(stdin)
+	var results []check.Result
 	for {
 		o.f("Domain, URL or IP to check (empty line to quit): ")
 		if !sc.Scan() {
 			o.ln()
-			return 0
+			if sc.Err() != nil {
+				return 2
+			}
+			return exitCode(results)
 		}
 		t := strings.TrimSpace(sc.Text())
 		if t == "" {
-			return 0
+			return exitCode(results)
 		}
+		r := c.Check(ctx, t)
+		results = append(results, r)
 		o.ln()
-		printResult(stdout, c.Check(ctx, t))
+		printResult(stdout, r)
 		o.ln()
 	}
 }
@@ -121,11 +132,20 @@ func exitCode(results []check.Result) int {
 		}
 	}
 	for _, r := range results {
-		if r.Checked && allFiltersFailed(r) {
-			return 2
+		if r.Checked && anyFilterFailed(r) {
+			return 2 // an incomplete check must not pass as clean
 		}
 	}
 	return code
+}
+
+func anyFilterFailed(r check.Result) bool {
+	for _, f := range r.Filters {
+		if f.Err != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func allFiltersFailed(r check.Result) bool {

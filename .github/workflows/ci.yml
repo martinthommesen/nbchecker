@@ -92,6 +92,9 @@ jobs:
         with:
           fail-on-severity: moderate
           allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0
+          # The Go team's x/ modules are BSD-3-Clause plus Go's patent grant,
+          # which the license scanner reports as a non-SPDX LicenseRef.
+          allow-dependencies-licenses: pkg:golang/golang.org/x/net, pkg:golang/golang.org/x/sys
 
   release-config:
     name: Check release config
