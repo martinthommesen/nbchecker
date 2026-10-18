@@ -4,7 +4,7 @@ import {
   type CliRenderer,
   type StyledText,
 } from "@opentui/core";
-import { lines, paint } from "./paint.ts";
+import { lines, oneLine, paint } from "./paint.ts";
 import type { State } from "./state.ts";
 import { connectionBadge } from "./summary.ts";
 import { theme } from "./theme.ts";
@@ -62,7 +62,7 @@ const titleText = (s: State, wide: boolean): StyledText => {
  */
 const badgeText = (s: State): StyledText => {
   if (s.screen === "connection") {
-    return lines([[paint("← esc back to results")]]);
+    return oneLine("← esc back to results");
   }
   return connectionBadge(s);
 };

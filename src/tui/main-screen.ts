@@ -10,7 +10,7 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import type { Filter } from "../check/filters.ts";
-import { lines, paint } from "./paint.ts";
+import { oneLine } from "./paint.ts";
 import { flatRows, tableGroups } from "./rows.ts";
 import type { State } from "./state.ts";
 import { inputHint, summaryText } from "./summary.ts";
@@ -47,7 +47,7 @@ const buildInput = (renderer: CliRenderer) => {
   box.height = linePaneHeight;
   box.flexShrink = 0;
   const prompt = new TextRenderable(renderer, {
-    content: lines([[paint("› ", { fg: theme.accent })]]),
+    content: oneLine("› ", { fg: theme.accent }),
     flexShrink: 0,
   });
   const input = new InputRenderable(renderer, {

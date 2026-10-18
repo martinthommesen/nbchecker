@@ -11,7 +11,7 @@ import {
 import { realAnswerState, systemState } from "../report/resolver-state.ts";
 import { type Status, statusOf, statusPhrases } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
-import { lines, paint, spinner } from "./paint.ts";
+import { lines, oneLine, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
 import { theme } from "./theme.ts";
 
@@ -263,14 +263,10 @@ export const summaryText = (s: State, wide: boolean): StyledText => {
     return cancelledSummary(s.result);
   }
   if (s.result === undefined) {
-    return lines([
-      [
-        paint(
-          "Type a domain, URL or IP address and press enter to see which DNS filters block it.",
-          { fg: theme.dim }
-        ),
-      ],
-    ]);
+    return oneLine(
+      "Type a domain, URL or IP address and press enter to see which DNS filters block it.",
+      { fg: theme.dim }
+    );
   }
   return resultSummary(s.result, wide);
 };
@@ -278,20 +274,16 @@ export const summaryText = (s: State, wide: boolean): StyledText => {
 /** The hint at the right end of the input. */
 export const inputHint = (s: State): StyledText => {
   if (s.checking) {
-    return lines([[paint("esc cancel", { fg: theme.dim })]]);
+    return oneLine("esc cancel", { fg: theme.dim });
   }
   if (s.result?.checked !== true || s.elapsedMs === undefined) {
-    return lines([[paint("enter check", { fg: theme.dim })]]);
+    return oneLine("enter check", { fg: theme.dim });
   }
   const seconds = (s.elapsedMs / msPerSecond).toFixed(1);
   const { total } = progress(s.result);
-  return lines([
-    [
-      paint(`A + AAAA · checked ${total} resolvers in ${seconds} s`, {
-        fg: theme.dim,
-      }),
-    ],
-  ]);
+  return oneLine(`A + AAAA · checked ${total} resolvers in ${seconds} s`, {
+    fg: theme.dim,
+  });
 };
 
 /** The box at the top right: which filter this computer's DNS uses. */

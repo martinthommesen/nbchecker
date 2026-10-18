@@ -5,7 +5,7 @@ import type { Filter } from "../check/filters.ts";
 import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
 import { categoryLabels, categoryOrder } from "../report/categories.ts";
-import { lines, paint, spinner } from "./paint.ts";
+import { lines, oneLine, paint, plainText, shaded, spinner } from "./paint.ts";
 import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
@@ -102,7 +102,7 @@ const filterRow = (name: string, m: Mark): TextChunk[] => [
 /** What was detected. */
 const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   if (c === undefined) {
-    return lines([[paint(`${spinner(tick)} detecting…`, { fg: theme.dim })]]);
+    return oneLine(`${spinner(tick)} detecting…`, { fg: theme.dim });
   }
   return lines([
     ...detectedLines(c),
@@ -120,21 +120,12 @@ const testMark = (c: Connection): Mark => {
   return mark.notSeen;
 };
 
-/** Fills a line of the shaded block, or leaves it as it is for copying. */
-const fill = (text: string, width: number): string => {
-  if (width <= 0) {
-    return text;
-  }
-  return fit(text, width);
-};
-
 /** How it was detected: the test lookup and what its answers mean. */
 const howText = (c: Connection | undefined, width: number): StyledText => {
   if (c === undefined) {
     return lines([]);
   }
   const glyph = testMark(c);
-  const block = { bg: theme.response };
   return lines([
     [
       paint(fit("test lookup", lookupWidth), { fg: theme.dim }),
@@ -146,20 +137,9 @@ const howText = (c: Connection | undefined, width: number): StyledText => {
       paint(testAnswerText(c)),
     ],
     [],
-    [
-      paint(
-        fill(" Telenor's test page answers differently per filter:", width),
-        {
-          ...block,
-          fg: theme.answer,
-        }
-      ),
-    ],
+    [shaded(" Telenor's test page answers differently per filter:", width)],
     ...telenorTestPage.answers.map(({ ip, meaning }) => [
-      paint(fill(`   ${fit(ip, addressWidth)}${meaning}`, width), {
-        ...block,
-        fg: theme.answer,
-      }),
+      shaded(`   ${fit(ip, addressWidth)}${meaning}`, width),
     ]),
     [],
     prose(selfTestNote),
@@ -226,10 +206,7 @@ const safeZoneText = (): StyledText =>
   lines([prose(safeZone[0]), [paint(safeZone[1], { fg: theme.dim })]]);
 
 /** Why a browser can disagree with this computer. */
-const browserText = (): StyledText =>
-  lines([[paint(browser, { fg: theme.dim })]]);
-
-const plain = (t: StyledText): string => t.chunks.map((ch) => ch.text).join("");
+const browserText = (): StyledText => oneLine(browser, { fg: theme.dim });
 
 /** The connection screen as plain text, for copying. */
 const connectionCopy = (
@@ -243,7 +220,7 @@ const connectionCopy = (
     { body: safeZoneText(), title: "About SafeZone" },
     { body: browserText(), title: "Your browser may differ" },
   ]
-    .map(({ body, title }) => `${title}\n${plain(body)}`)
+    .map(({ body, title }) => `${title}\n${plainText(body)}`)
     .join("\n\n");
 
 export {

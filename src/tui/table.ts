@@ -1,6 +1,6 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import { lines, paint, spinner } from "./paint.ts";
+import { lines, oneLine, paint, shaded, spinner } from "./paint.ts";
 import type { Group, RowState, TableRow } from "./rows.ts";
 import { columns, fit, fitRight, wrap } from "./text-layout.ts";
 import { theme } from "./theme.ts";
@@ -72,14 +72,10 @@ const field = (label: string, value: string): TextChunk[] => [
 
 /** The column titles above the table. */
 export const tableHeader = (width: number): StyledText =>
-  lines([
-    [
-      paint(
-        `${" ".repeat(glyphWidth)}${fit("resolver", nameWidth)}${fit("verdict", verdictWidth)}${fit("answer", answerWidth(width) + 1)}${fitRight("ms", msWidth)}`,
-        { fg: theme.faint }
-      ),
-    ],
-  ]);
+  oneLine(
+    `${" ".repeat(glyphWidth)}${fit("resolver", nameWidth)}${fit("verdict", verdictWidth)}${fit("answer", answerWidth(width) + 1)}${fitRight("ms", msWidth)}`,
+    { fg: theme.faint }
+  );
 
 /** The table, and which line the selected row is on so it can be kept in view. */
 export const tableText = (
@@ -135,17 +131,11 @@ export const detailsText = (
     out.push(field("query", `A + AAAA ${host}`));
   }
   if (row.response.length > 0) {
-    const block = { bg: theme.response };
-    out.push(
-      [],
-      [paint(fit(" RESPONSE", width), { ...block, fg: theme.faint })]
-    );
+    out.push([], [shaded(" RESPONSE", width, theme.faint)]);
     // Wrapped, not cut: the exact address is what the details are for.
     for (const line of row.response) {
       for (const part of wrap(line, width - responseIndent, responseHang)) {
-        out.push([
-          paint(fit(` ${part}`, width), { ...block, fg: theme.answer }),
-        ]);
+        out.push([shaded(` ${part}`, width)]);
       }
     }
   }
