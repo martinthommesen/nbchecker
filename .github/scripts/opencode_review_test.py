@@ -89,6 +89,23 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("SAFE_EXAMPLE", diff)
         self.assertNotIn("HIDDEN_CANARY", diff)
 
+    def test_example_directory_cannot_restore_private_descendants(self):
+        self.write(".env.example/.env.production", "DIRECTORY_PRIVATE_CANARY=secret")
+        self.write(".env.example/secret", "DIRECTORY_NORMAL_CANARY=value")
+        self.write("config/.env.example", "SAFE_EXAMPLE=value")
+        head = self.commit()
+        review.prepare(self.source, self.destination, self.base, head)
+        diff = (self.destination / "changes.diff").read_text()
+        self.assertNotIn("DIRECTORY_PRIVATE_CANARY", diff)
+        self.assertIn("SAFE_EXAMPLE", diff)
+        # A plain directory pathspec would leak the canary; the explicit glob
+        # used by prepare matches the example file only, not its descendants.
+        unsafe = review.git(self.source, "diff", self.base, head, "--", ".env.example")
+        self.assertIn(b"DIRECTORY_PRIVATE_CANARY", unsafe)
+        examples = review.git(self.source, "diff", self.base, head, "--", ":(glob)**/.env.example")
+        self.assertNotIn(b"DIRECTORY_NORMAL_CANARY", examples)
+        self.assertNotIn(b"DIRECTORY_PRIVATE_CANARY", examples)
+
     def test_symlink_is_rejected_before_writing_snapshot(self):
         (self.source / "linked.ts").symlink_to("/etc/passwd")
         head = self.commit()
