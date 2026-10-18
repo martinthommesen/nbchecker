@@ -1,7 +1,8 @@
 /** Which key does what on each screen, and the footer that lists them. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import { columns, lines, paint } from "./paint.ts";
+import { lines, paint } from "./paint.ts";
 import type { State } from "./state.ts";
+import { columns } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const tableKeys = new Map<string, Action>([

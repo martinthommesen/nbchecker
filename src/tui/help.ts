@@ -1,6 +1,7 @@
 /** The help screen. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import { fit, lines, paint } from "./paint.ts";
+import { lines, paint } from "./paint.ts";
+import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const keyWidth = 10;

@@ -1,15 +1,8 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import {
-  columns,
-  fit,
-  fitRight,
-  lines,
-  paint,
-  spinner,
-  wrap,
-} from "./paint.ts";
+import { lines, paint, spinner } from "./paint.ts";
 import type { Group, RowState, TableRow } from "./rows.ts";
+import { columns, fit, fitRight, wrap } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const glyphWidth = 2;
