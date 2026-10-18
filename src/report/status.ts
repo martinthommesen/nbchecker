@@ -111,7 +111,7 @@ export interface Status {
   readonly kind: StatusKind;
   /** Filters that failed the self-test. */
   readonly redirected: number;
-  /** Filters with a self-test, so not those without a test name. */
+  /** Filters whose self-test answered, so passed or failed it. */
   readonly tested: number;
   /** Filters asked. */
   readonly total: number;
@@ -130,7 +130,9 @@ export const statusOf = (r: CheckResult): Status => {
       .length,
     inspectedHere: answeredWith(r.system, "inspected"),
     redirected: selfTests.filter((t) => t.result === "redirected").length,
-    tested: selfTests.filter((t) => t.result !== "untested").length,
+    tested: selfTests.filter(
+      (t) => t.result === "passed" || t.result === "redirected"
+    ).length,
     total: r.filters.length,
   };
   return { ...counts, kind: kindOf(r, counts) };

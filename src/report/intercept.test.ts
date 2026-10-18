@@ -9,6 +9,7 @@ import { type CheckResult, isBlocked } from "../check/result.ts";
 import {
   blockingRedirectTransport,
   computerWith,
+  fakeCanary,
   fakeFilters,
   publicTestPage,
   redirectingTransport,
@@ -221,6 +222,28 @@ describe("intercepted DNS: filters without a test name", () => {
       filters: [...fakeFilters, { ...untested, name: "Untested filter" }],
     });
     expect(text(r)).toContain("✗ blocked by 3 of 3 filters");
+  });
+});
+
+describe("intercepted DNS: the self-test count", () => {
+  test("leaves out a self-test that got no answer", async () => {
+    const quiet: Filter = {
+      canary: fakeCanary,
+      category: "ads",
+      name: "Quiet filter",
+      servers: ["203.0.113.1"],
+    };
+    const r = await runCheck("bad.example", {
+      dns: redirectedComputer,
+      filters: [...fakeFilters, quiet],
+      transport: redirectingTransport(["192.0.2.53", "198.51.100.53"]),
+    });
+    expect(r.network?.selfTests.map((t) => t.result)).toEqual([
+      "redirected",
+      "redirected",
+      "no-answer",
+    ]);
+    expect(text(r)).toContain("2 of 2 filters failed the self-test");
   });
 });
 
