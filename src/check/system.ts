@@ -2,14 +2,11 @@
 import { Effect, Result } from "effect";
 import { Dns, Host, NetAddress } from "effect/net";
 import { Rcode } from "../dns/codes.ts";
+import { timeoutAfter } from "../dns/query-error.ts";
 import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
-import { type CheckResult, unchecked } from "./result.ts";
 
-const ipNote =
-  "DNS filters block names, not IP addresses, so an IP address you connect to directly is not blocked by them.";
-
-const trailingDot = /\.$/;
-
+/** The system resolver retries on its own, so it gets longer than a filter. */
+const systemTimeout = "5 seconds";
 /** The CNAME query only adds to the answer, so it gets less time. */
 const cnameTimeout = "2 seconds";
 /** Like the forward lookups, the reverse lookup gets a deadline of its own. */
@@ -47,6 +44,9 @@ const cnamesOf = (dns: Dns.Dns["Service"], host: string, shown: string) =>
     Effect.result
   );
 
+/** What stands for this computer's resolver where a server's address would. */
+export const systemServer = "this computer";
+
 /** This computer's answer, shaped like a DNS answer so it can be classified. */
 export interface SystemAnswer {
   /** Never has an error rcode: the system resolver doesn't report one. */
@@ -64,12 +64,12 @@ export interface SystemAnswer {
 /**
  * Asks this computer's resolver for a name's addresses, the way programs do,
  * and separately for its CNAME, to show block pages. The addresses decide
- * the answer; a failed CNAME query only leaves the CNAME out.
+ * the answer; a failed CNAME query only leaves the CNAME out. `host` is the
+ * name as looked up and `shown` the name its records are shown under.
  */
-export const lookupSystem = (host: string) =>
+export const lookupSystem = (host: string, shown: string) =>
   Effect.gen(function* () {
     const dns = yield* Dns.Dns;
-    const shown = host.replace(trailingDot, "");
     const [cnames, addresses] = yield* Effect.all(
       [cnamesOf(dns, host, shown), dns.lookup(host).pipe(Effect.result)],
       { concurrency: "unbounded" }
@@ -103,13 +103,12 @@ export const lookupSystem = (host: string) =>
       noAddress: Result.isFailure(addresses),
       notes,
     } satisfies SystemAnswer;
-  });
+  }).pipe(timeoutAfter(systemTimeout, systemServer));
 
-/** Finds the name to check for an IP address: its reverse DNS name. */
-export const reverseName = (target: string, ip: string) =>
+/** The reverse DNS name of an IP address; undefined when it has none. */
+export const reverseName = (ip: string) =>
   Effect.gen(function* () {
     const dns = yield* Dns.Dns;
-    const base = unchecked(target, ip, true);
     const names = yield* dns.reverse(ip).pipe(
       Effect.timeoutOrElse({
         duration: reverseTimeout,
@@ -118,26 +117,10 @@ export const reverseName = (target: string, ip: string) =>
       Effect.result
     );
     if (Result.isSuccess(names)) {
-      const name = Host.toRelative(names.success[0]);
-      return {
-        ...base,
-        host: name,
-        notes: [ipNote, `Checking its reverse DNS name ${name} instead.`],
-      } satisfies CheckResult;
+      return Host.toRelative(names.success[0]);
     }
     if (names.failure.reason === "NotFound") {
-      return {
-        ...base,
-        notes: [
-          ipNote,
-          "The address has no reverse DNS name, so there is nothing else to check.",
-        ],
-      } satisfies CheckResult;
+      return;
     }
-    const error = names.failure.message;
-    return {
-      ...base,
-      lookupError: error,
-      notes: [ipNote, `Could not look up its reverse DNS name: ${error}`],
-    } satisfies CheckResult;
+    return yield* Effect.fail(names.failure);
   });

@@ -3,7 +3,6 @@
  * unfiltered resolver.
  */
 import { Duration, Effect, Ref, Result } from "effect";
-import { timeoutAfter } from "../dns/query-error.ts";
 import {
   classifyAll,
   classifySystem,
@@ -11,7 +10,6 @@ import {
   type Reference,
 } from "./classify.ts";
 import type { Filter } from "./filters.ts";
-import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
 import { normalize } from "./normalize.ts";
 import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
@@ -25,6 +23,15 @@ import {
   type RealAnswer,
   unchecked,
 } from "./result.ts";
+import {
+  lookupSystem,
+  reverseName,
+  type SystemAnswer,
+  systemServer,
+} from "./system.ts";
+
+const ipNote =
+  "DNS filters block names, not IP addresses, so an IP address you connect to directly is not blocked by them.";
 
 /** One lookup's result and how long it took. */
 interface Asked<A> {
@@ -39,8 +46,6 @@ interface Gathered {
   readonly realAnswer: Asked<FilterAnswer & Reference> | undefined;
   readonly system: Asked<SystemAnswer> | undefined;
 }
-
-const systemServer = "this computer";
 
 /**
  * How one lookup stands: pending until it is asked, failed with its error,
@@ -119,12 +124,6 @@ const timedResult = <A, E extends { readonly message: string }, R>(
     )
   );
 
-/** The system resolver retries on its own, so it gets longer than a filter. */
-const systemTimeout = "5 seconds";
-
-const systemAnswer = (host: string) =>
-  lookupSystem(host).pipe(timeoutAfter(systemTimeout, systemServer));
-
 /**
  * Asks everything about one name at once, reporting each answer. `query` is
  * the name as looked up, which can end in a dot that the shown name drops.
@@ -161,7 +160,10 @@ const checkName = <NetworkNeeds>(
           askUnfiltered(options.unfilteredResolvers, query),
           (g, realAnswer) => ({ ...g, realAnswer })
         ),
-        record(systemAnswer(query), (g, system) => ({ ...g, system })),
+        record(lookupSystem(query, base.host), (g, system) => ({
+          ...g,
+          system,
+        })),
         // Says whether an ISP's filter should have answered this computer,
         // and which filters' answers can be trusted.
         network.pipe(
@@ -177,6 +179,44 @@ const checkName = <NetworkNeeds>(
       { concurrency: "unbounded", discard: true }
     );
     return assemble(base, options.filters, yield* Ref.get(state));
+  });
+
+/** Checks an IP address by its reverse DNS name, as filters only see names. */
+const checkIp = <NetworkNeeds>(
+  target: string,
+  ip: string,
+  network: Effect.Effect<Network, never, NetworkNeeds>
+) =>
+  Effect.gen(function* () {
+    const base = unchecked(target, ip, true);
+    const named = yield* reverseName(ip).pipe(Effect.result);
+    if (Result.isFailure(named)) {
+      const error = named.failure.message;
+      return {
+        ...base,
+        completion: "incomplete",
+        lookupError: error,
+        notes: [ipNote, `Could not look up its reverse DNS name: ${error}`],
+      } satisfies CheckResult;
+    }
+    const name = named.success;
+    if (name === undefined) {
+      return {
+        ...base,
+        notes: [
+          ipNote,
+          "The address has no reverse DNS name, so there is nothing else to check.",
+        ],
+      } satisfies CheckResult;
+    }
+    return yield* checkName(
+      {
+        ...base,
+        host: name,
+        notes: [ipNote, `Checking its reverse DNS name ${name} instead.`],
+      },
+      network
+    );
   });
 
 /**
@@ -205,9 +245,5 @@ export const check = <NetworkNeeds>(
         t.query
       );
     }
-    const named = yield* reverseName(target, t.host);
-    if (named.host === t.host || named.lookupError !== undefined) {
-      return { ...named, completion: completionOf(named) };
-    }
-    return yield* checkName(named, network);
+    return yield* checkIp(target, t.host, network);
   });
