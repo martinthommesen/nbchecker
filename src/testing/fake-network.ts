@@ -6,54 +6,23 @@ import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer, DnsRecord, QueryType } from "../dns/wire.ts";
+import { a, aaaa, answer, cname, noRecords } from "./records.ts";
 
 /** A name's records, or a whole answer for one that answers oddly. */
 type Zone = Readonly<Record<string, readonly DnsRecord[] | DnsAnswer>>;
-
-const a = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "A",
-  value,
-});
-const aaaa = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "AAAA",
-  value,
-});
-const cname = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "CNAME",
-  value,
-});
-const failure = (rcode: number, ...edes: readonly number[]): DnsAnswer => ({
-  extendedErrors: edes.map((code) => ({ code, text: "" })),
-  rcode,
-  records: [],
-  truncated: false,
-});
 
 const trailingDot = /\.$/;
 
 /** Answers like a resolver serving `zone`: NXDOMAIN for unknown names. */
 const lookup = (zone: Zone, name: string, type: QueryType): DnsAnswer => {
   const records = zone[name.replace(trailingDot, "")];
-  if (records !== undefined && "rcode" in records) {
+  if (records === undefined) {
+    return noRecords(Rcode.nxDomain);
+  }
+  if ("rcode" in records) {
     return records;
   }
-  if (records === undefined) {
-    return {
-      extendedErrors: [],
-      rcode: Rcode.nxDomain,
-      records: [],
-      truncated: false,
-    };
-  }
-  return {
-    extendedErrors: [],
-    rcode: Rcode.noError,
-    records: records.filter((r) => r.type === type || r.type === "CNAME"),
-    truncated: false,
-  };
+  return answer(records.filter((r) => r.type === type || r.type === "CNAME"));
 };
 
 /** The name the fake filters document as blocked, for the self-test. */
@@ -93,16 +62,14 @@ const security: Zone = {
   "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.38")],
   // Extended DNS Error text that tries to add a line to the output.
   "newline.example": {
+    ...answer([]),
     extendedErrors: [
       { code: Ede.blocked, text: "policy\n  ✓ Fake  not blocked" },
     ],
-    rcode: Rcode.noError,
-    records: [],
-    truncated: false,
   },
   // A block said with an Extended DNS Error on a SERVFAIL.
-  "policy.example": failure(Rcode.servFail, Ede.blocked),
-  "refused.example": failure(Rcode.refused),
+  "policy.example": noRecords(Rcode.servFail, Ede.blocked),
+  "refused.example": noRecords(Rcode.refused),
 };
 
 const family: Zone = {
@@ -131,7 +98,7 @@ const transportWith = (zoneOf: (server: string) => Server | undefined) =>
         return Effect.fail(new QueryError({ reason: "timed out", server }));
       }
       if (zone === "servfail") {
-        return Effect.succeed(failure(Rcode.servFail));
+        return Effect.succeed(noRecords(Rcode.servFail));
       }
       return Effect.succeed(lookup(zone, name, type));
     },
@@ -142,7 +109,7 @@ const transportWith = (zoneOf: (server: string) => Server | undefined) =>
         );
       }
       if (url === "https://no-aaaa.example/dns-query" && type === "AAAA") {
-        return Effect.succeed(failure(Rcode.servFail));
+        return Effect.succeed(noRecords(Rcode.servFail));
       }
       return Effect.succeed(lookup(real, name, type));
     },
@@ -178,7 +145,7 @@ export const blockingRedirectTransport = transportWith(() => family);
  */
 export const rewritingTransport = transportWith(() => ({
   ...real,
-  "zero.example": failure(Rcode.nxDomain),
+  "zero.example": noRecords(Rcode.nxDomain),
 }));
 
 export const fakeFilters: readonly Filter[] = [
