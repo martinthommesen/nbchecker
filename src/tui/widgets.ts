@@ -1,9 +1,9 @@
-/** Building blocks shared by the screens: bordered panes and text. */
+/** Building blocks shared by the screen's parts: panes, scrolling and text. */
 import {
   BoxRenderable,
   type CliRenderer,
-  type InputRenderable,
-  type ScrollBoxRenderable,
+  type Renderable,
+  ScrollBoxRenderable,
   TextRenderable,
 } from "@opentui/core";
 import { lines } from "./paint.ts";
@@ -13,6 +13,8 @@ import { theme } from "./theme.ts";
 const paneChrome = 4;
 const rootPadding = 2;
 const paneGap = 2;
+/** A pane around one line of text: the line and a border above and below. */
+const linePaneHeight = 3;
 
 interface PaneLook {
   readonly color?: string;
@@ -45,6 +47,14 @@ const column = (renderer: CliRenderer, flexGrow: number) =>
     gap: 1,
   });
 
+/** Scrolls what doesn't fit, and gives up its height before what's around it. */
+const scrollBox = (renderer: CliRenderer) =>
+  new ScrollBoxRenderable(renderer, {
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+  });
+
 const text = (renderer: CliRenderer) =>
   new TextRenderable(renderer, {
     content: lines([]),
@@ -52,27 +62,22 @@ const text = (renderer: CliRenderer) =>
     wrapMode: "word",
   });
 
-const addAll = (
-  parent: BoxRenderable | ScrollBoxRenderable,
-  children: readonly (
-    | BoxRenderable
-    | InputRenderable
-    | ScrollBoxRenderable
-    | TextRenderable
-  )[]
-) => {
+const addAll = (parent: Renderable, children: readonly Renderable[]) => {
   for (const child of children) {
     parent.add(child);
   }
 };
 
+/** Adds a text to `box`, for what the box shows. */
 const bodyOf = (renderer: CliRenderer, box: BoxRenderable) => {
   const body = text(renderer);
   box.add(body);
   return body;
 };
 
+/** The terminal size every part of the screen is drawn for. */
 interface Layout {
+  /** Wide enough to set panes side by side, such as the details pane. */
   readonly wide: boolean;
   readonly width: number;
 }
@@ -86,9 +91,11 @@ export {
   bodyOf,
   column,
   inner,
+  linePaneHeight,
   pane,
   paneChrome,
   paneGap,
   rootPadding,
+  scrollBox,
   text,
 };

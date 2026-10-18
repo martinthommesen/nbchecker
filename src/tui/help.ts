@@ -1,8 +1,9 @@
-/** The help screen. */
-import type { StyledText, TextChunk } from "@opentui/core";
+/** The help screen: the keys, what the rows mean, and how nbchecker works. */
+import type { CliRenderer, StyledText, TextChunk } from "@opentui/core";
 import { lines, paint } from "./paint.ts";
 import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
+import { bodyOf, pane, scrollBox } from "./widgets.ts";
 
 const keyWidth = 10;
 
@@ -53,7 +54,7 @@ const heading = (text: string): TextChunk[] => [
   paint(text, { bold: true, fg: theme.accent }),
 ];
 
-export const helpText = (): StyledText =>
+const helpText = (): StyledText =>
   lines([
     heading("Keys"),
     ...keys.map(([key, text]) => [
@@ -82,3 +83,17 @@ export const helpText = (): StyledText =>
     [],
     [paint("Press esc or ? to go back.", { fg: theme.dim })],
   ]);
+
+/** The help never changes, so it is written once, when the screen is built. */
+const buildHelp = (renderer: CliRenderer) => {
+  const box = pane(renderer, { title: "Help" });
+  box.visible = false;
+  box.flexShrink = 1;
+  box.minHeight = 0;
+  const scroll = scrollBox(renderer);
+  bodyOf(renderer, scroll).content = helpText();
+  box.add(scroll);
+  return { box, scroll };
+};
+
+export { buildHelp };
