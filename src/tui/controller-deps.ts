@@ -22,6 +22,8 @@ export interface Runners {
   readonly background: (effect: Effect.Effect<void, never, Needs>) => void;
   readonly cancel: () => void;
   readonly check: (effect: Effect.Effect<void, never, Needs>) => void;
+  /** Runs a network detection, interrupting the one before it. */
+  readonly detect: (effect: Effect.Effect<void, never, Needs>) => void;
 }
 
 export interface Controller {

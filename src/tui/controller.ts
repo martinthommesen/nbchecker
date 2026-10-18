@@ -32,6 +32,8 @@ interface Session {
    */
   network: Deferred.Deferred<Network>;
   recalled: number;
+  /** Networks checks wait for that no detection has found yet. */
+  readonly waiting: Deferred.Deferred<Network>[];
 }
 
 const toaster =
@@ -127,20 +129,28 @@ const checkActions = (
       toast("cancelled");
     }
   };
-  // Only the latest detection may show its answer.
+  /**
+   * Starts a detection and interrupts the one before it, so pressing "detect
+   * again" doesn't pile up self-test queries. Checks still waiting for an
+   * interrupted detection get this one's network instead.
+   */
   const detect = () => {
     session.detections += 1;
     const generation = session.detections;
     const network = Deferred.makeUnsafe<Network>();
     session.network = network;
+    session.waiting.push(network);
     deps.store.set({ network: undefined });
-    deps.run.background(
+    deps.run.detect(
       Effect.gen(function* () {
         const found = yield* detectNetwork;
-        if (session.detections === generation) {
-          deps.store.set({ network: found });
+        if (session.detections !== generation) {
+          return;
         }
-        yield* Deferred.succeed(network, found);
+        deps.store.set({ network: found });
+        for (const waiting of session.waiting.splice(0)) {
+          yield* Deferred.succeed(waiting, found);
+        }
       })
     );
   };
@@ -233,13 +243,15 @@ const moveActions = (
 };
 
 const makeController = (deps: ControllerDeps): Controller => {
+  const first = Deferred.makeUnsafe<Network>();
   const session: Session = {
     checks: 0,
     detections: 0,
     history: [],
     lastTarget: undefined,
-    network: Deferred.makeUnsafe(),
+    network: first,
     recalled: 0,
+    waiting: [first],
   };
   const toast = toaster(deps);
   const checks = checkActions(deps, session, toast);

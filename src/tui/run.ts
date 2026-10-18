@@ -62,6 +62,8 @@ const runTui = (version: string, first?: string) =>
     const screen = mountScreen(renderer, filters);
     const checks = yield* FiberHandle.make();
     const runCheck = yield* FiberHandle.runtime(checks)<Needs>();
+    const detections = yield* FiberHandle.make();
+    const runDetection = yield* FiberHandle.runtime(detections)<Needs>();
     const runBackground = yield* FiberSet.makeRuntime<Needs>();
     const quit = yield* Deferred.make<void>();
     const store = makeStore(initialState(version), screen.draw);
@@ -74,6 +76,7 @@ const runTui = (version: string, first?: string) =>
         background: (effect) => runBackground(effect),
         cancel: () => runBackground(FiberHandle.clear(checks)),
         check: (effect) => runCheck(effect),
+        detect: (effect) => runDetection(effect),
       },
       scroll: screen.scroll,
       store,
