@@ -2,7 +2,7 @@
 import type { StyledText, TextChunk } from "@opentui/core";
 import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
 import { type CheckResult, settled, unavailable } from "../check/result.ts";
-import { type Status, statusOf } from "../report/status.ts";
+import { type Status, statusOf, statusPhrases } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
@@ -112,7 +112,7 @@ const verdictBadge = (status: Status): TextChunk[] => {
     case "cant-tell":
       return [
         badge("COULDN'T TELL", theme.warn),
-        paint("  the real answer is unavailable"),
+        paint(`  ${statusPhrases.cantTell}`),
       ];
     case "inspected":
       return inspectedBadge(status);
@@ -124,7 +124,7 @@ const verdictBadge = (status: Status): TextChunk[] => {
     case "local-only":
       return [
         badge("ONLY HERE", theme.dim),
-        paint("  only resolves on this computer (private or split DNS)"),
+        paint(`  ${statusPhrases.localOnly}`),
       ];
     case "missing":
       return [
@@ -132,7 +132,10 @@ const verdictBadge = (status: Status): TextChunk[] => {
         paint("  the real answer says so"),
       ];
     case "no-answer":
-      return [badge("NO ANSWER", theme.warn), paint("  no filter answered")];
+      return [
+        badge("NO ANSWER", theme.warn),
+        paint(`  ${statusPhrases.noAnswer}`),
+      ];
     default:
       return [
         badge("NOT BLOCKED", theme.ok),
@@ -200,17 +203,13 @@ const checkingSummary = (
 };
 
 /** A cancelled check has no verdict, only what answered before. */
-const cancelledSummary = (r: CheckResult): StyledText => {
-  const { answered, blocked, total } = statusOf(r);
-  return lines([
+const cancelledSummary = (r: CheckResult): StyledText =>
+  lines([
     [
       badge("CANCELLED", theme.warn),
-      paint(
-        `  ${answered} of ${total} filters answered first, ${blocked} of them blocking`
-      ),
+      paint(`  ${statusPhrases.cancelled(statusOf(r))}`),
     ],
   ]);
-};
 
 const connectionStatus = (s: State): TextChunk => {
   const c = s.network?.connection;

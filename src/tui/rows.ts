@@ -94,7 +94,7 @@ const outcomeRow = (
   if (o.kind === "answered") {
     return {
       ...row,
-      answer: answerSummary(o.exchange.answers, o.verdict),
+      answer: answerSummary(o.exchange.answers, o.verdict.reason),
       ms: String(o.exchange.ms),
       response: [
         ...responseLines(o.exchange.answers),
@@ -133,17 +133,9 @@ const realAnswerRow = (r: CheckResult): TableRow => {
     if (!exists) {
       state = "missing";
     }
-    const verdict = {
-      answers: o.addresses,
-      blocked: false,
-      detail: "",
-      inspected: false,
-      missing: !exists,
-      reason: undefined,
-    };
     return {
       ...base,
-      answer: answerSummary(ex.answers, verdict),
+      answer: answerSummary(ex.answers),
       ms: String(ex.ms),
       response: responseLines(ex.answers),
       server: new URL(ex.server).host,

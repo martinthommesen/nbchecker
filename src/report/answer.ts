@@ -1,7 +1,7 @@
 /** Short and long forms of a resolver's raw answer, for display. */
-import type { Reason, Verdict } from "../check/classify.ts";
+import type { Reason } from "../check/classify.ts";
 import { telenorBlockCnames } from "../check/known-answers.ts";
-import { extendedErrorName, rcodeName } from "../dns/codes.ts";
+import { extendedErrorName, Rcode, rcodeName } from "../dns/codes.ts";
 import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 
 /** Blocks that answer with a CNAME to a block page. */
@@ -31,39 +31,44 @@ const more = (n: number): string => {
   return "";
 };
 
-const statusOf = (answers: readonly DnsAnswer[]): string => {
+/** What an answer without addresses says, such as "NXDOMAIN · EDE 15". */
+const responseStatus = (answers: readonly DnsAnswer[]): string => {
   const codes = answers.flatMap((a) => a.extendedErrors).map((e) => e.code);
-  const rcode = rcodeName(answers.find((a) => a.rcode !== 0)?.rcode ?? 0);
+  const rcode =
+    answers.find((a) => a.rcode !== Rcode.noError)?.rcode ?? Rcode.noError;
   if (codes.length > 0) {
-    return `${rcode} · EDE ${[...new Set(codes)].join(", ")}`;
+    return `${rcodeName(rcode)} · EDE ${[...new Set(codes)].join(", ")}`;
   }
-  if (rcode === "NOERROR") {
+  if (rcode === Rcode.noError) {
     return "no records";
   }
-  return rcode;
+  return rcodeName(rcode);
 };
 
-/** One phrase for the table, such as "CNAME nettvern-info.telenor.net". */
+/**
+ * One phrase for the table, such as "A 192.0.2.1 +1". A block whose `reason`
+ * is a CNAME to a block page shows it: "CNAME nettvern-info.telenor.net".
+ */
 export const answerSummary = (
   answers: readonly DnsAnswer[],
-  verdict: Verdict
+  reason?: Reason
 ): string => {
   const records = unique(answers);
   const cname = records.findLast((r) => r.type === "CNAME");
-  if (cname && verdict.reason && cnameReasons.has(verdict.reason)) {
+  if (cname && reason !== undefined && cnameReasons.has(reason)) {
     return `CNAME ${cname.value}`;
   }
   const [first, ...rest] = addressesOf(records);
   if (first !== undefined) {
     return `${first.type} ${first.value}${more(rest.length)}`;
   }
-  return statusOf(answers);
+  return responseStatus(answers);
 };
 
 /** The answer written out like dig does, a line per record or status. */
 export const responseLines = (answers: readonly DnsAnswer[]): string[] => {
   const lines: string[] = [];
-  const failed = answers.find((a) => a.rcode !== 0);
+  const failed = answers.find((a) => a.rcode !== Rcode.noError);
   if (failed !== undefined) {
     lines.push(`status: ${rcodeName(failed.rcode)}`);
   }
