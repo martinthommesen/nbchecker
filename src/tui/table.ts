@@ -52,8 +52,8 @@ const rowLine = (
     paint(fit(glyph, glyphWidth), { ...back, fg: color }),
     paint(fit(row.name, nameWidth), { ...back, bold: selected }),
     paint(fit(row.verdict, verdictWidth), { ...back, fg: color }),
-    paint(`${fit(row.answer, answer)} `, { ...back, fg: theme.dim }),
-    paint(` ${fitRight(row.ms, msWidth - 1)}`, { ...back, fg: theme.faint }),
+    paint(`${fit(row.answer, answer)} `, { ...back, fg: theme.answer }),
+    paint(` ${fitRight(row.ms, msWidth - 1)}`, { ...back, fg: theme.dim }),
   ];
 };
 
@@ -127,9 +127,13 @@ export const detailsText = (
     out.push(field("query", `A + AAAA ${host}`));
   }
   if (row.response.length > 0) {
-    out.push([], [paint("RESPONSE", { fg: theme.faint })]);
+    const block = { bg: theme.response };
+    out.push(
+      [],
+      [paint(fit(" RESPONSE", width), { ...block, fg: theme.faint })]
+    );
     for (const line of row.response) {
-      out.push([paint(fit(` ${line}`, width), { bg: theme.response })]);
+      out.push([paint(fit(` ${line}`, width), { ...block, fg: theme.answer })]);
     }
   }
   out.push([], [paint("WHY", { fg: theme.faint })], [paint(row.why)]);

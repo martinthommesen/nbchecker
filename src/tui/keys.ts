@@ -107,7 +107,7 @@ const footerKeys = (s: State) => {
   return footers.results;
 };
 
-const gap = "   ";
+const gap = "  ";
 
 /**
  * The key list at the bottom, with any short message after it, wrapped
@@ -118,7 +118,7 @@ const footerText = (s: State, width: number): StyledText => {
   const rows: TextChunk[][] = [[]];
   let used = 0;
   for (const { key, label } of items) {
-    const size = columns(`${key} ${label}${gap}`);
+    const size = columns(` ${key}  ${label}${gap}`);
     if (used > 0 && used + size > width) {
       rows.push([]);
       used = 0;
@@ -126,7 +126,7 @@ const footerText = (s: State, width: number): StyledText => {
     rows
       .at(-1)
       ?.push(
-        paint(key, { fg: theme.accent }),
+        paint(` ${key} `, { bg: theme.chip }),
         paint(` ${label}${gap}`, { fg: theme.dim })
       );
     used += size;
