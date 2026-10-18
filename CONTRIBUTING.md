@@ -40,7 +40,9 @@ The code is TypeScript with [Effect](https://effect.website) and
 
 Tests don't touch the network. The DNS transport and this computer's resolver
 are Effect services, so tests swap in the fakes in `src/testing`, and the
-screen is tested in OpenTUI's virtual terminal. If you verified a change on a
+screen is tested in OpenTUI's virtual terminal. `src/testing/fake-cli.ts` runs
+the command on the fake network, so tests can run it as a real process with
+real pipes. If you verified a change on a
 real network with a filter, say which filter in the pull request.
 
 ## Pull requests

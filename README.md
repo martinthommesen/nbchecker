@@ -76,14 +76,23 @@ SECURITY · MALWARE, PHISHING
 | `--help` | Show all options |
 
 Without arguments, and when standard input isn't a terminal, nbchecker reads
-targets from it, one per line.
+targets from it, one per line, and prints each result as soon as it's
+checked. With `--json`, it prints one JSON document at the end. Without
+arguments and with standard input a terminal, it opens the interactive app, or
+prints a usage error if `--json` is given or the output isn't a terminal.
 
-When it checks targets from arguments or standard input, the exit status is 0
-if nothing is blocked, 1 if anything is blocked and 2 if a check was
-incomplete, for example because a filter, your own DNS or the real
-answer could not be reached. A filter that only answers some networks, such as Telenor's,
-doesn't make a check incomplete when you are elsewhere. The interactive app
-always exits with 0, since one session can check many targets.
+When it checks targets from arguments or standard input, the exit status is:
+
+| Status | |
+|---|---|
+| 0 | Nothing is blocked |
+| 1 | Something is blocked, even if some filters didn't answer |
+| 2 | Incomplete: nothing is known to be blocked, but a check couldn't tell, for example because a filter, your own DNS or the real answer could not be reached |
+| 64 | Usage error, such as a mistyped flag |
+
+A filter that only answers some networks, such as Telenor's, doesn't make a
+check incomplete when you are elsewhere. The interactive app always exits
+with 0, since one session can check many targets.
 
 ## What it checks
 
