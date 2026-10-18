@@ -148,7 +148,8 @@ const resultSummary = (r: CheckResult, wide: boolean): StyledText => {
 
 const checkingSummary = (
   r: CheckResult | undefined,
-  tick: number
+  tick: number,
+  wide: boolean
 ): StyledText => {
   const head = paint(`${spinner(tick)} Checking`, {
     bold: true,
@@ -159,17 +160,21 @@ const checkingSummary = (
   }
   const { finished, total } = progress(r);
   const filled = Math.round((finished / total) * barWidth);
-  return lines([
-    [
-      head,
-      paint("  "),
-      paint("━".repeat(filled), { fg: theme.accent }),
-      paint("━".repeat(barWidth - filled), { fg: theme.track }),
-      paint(`  ${finished} of ${total} answered`),
-      paint("    blocked so far: ", { fg: theme.dim }),
-      paint(String(tally(r).blocked), { fg: theme.block }),
-    ],
-  ]);
+  const bar = [
+    head,
+    paint("  "),
+    paint("━".repeat(filled), { fg: theme.accent }),
+    paint("━".repeat(barWidth - filled), { fg: theme.track }),
+    paint(`  ${finished} of ${total} answered`),
+  ];
+  const blocked = [
+    paint("blocked so far: ", { fg: theme.dim }),
+    paint(String(tally(r).blocked), { fg: theme.block }),
+  ];
+  if (wide) {
+    return lines([[...bar, paint("    "), ...blocked]]);
+  }
+  return lines([bar, blocked]);
 };
 
 /** A cancelled check has no verdict, only what answered before. */
@@ -204,11 +209,12 @@ const connectionStatus = (s: State): TextChunk => {
 
 /**
  * The line under the input: the verdict, or progress while checking. On a
- * narrow screen the reference answers go on a line of their own.
+ * narrow screen the reference answers, or the blocked count, go on a line of
+ * their own.
  */
 export const summaryText = (s: State, wide: boolean): StyledText => {
   if (s.checking) {
-    return checkingSummary(s.result, s.tick);
+    return checkingSummary(s.result, s.tick, wide);
   }
   if (s.cancelled && s.result?.checked === true) {
     return cancelledSummary(s.result);

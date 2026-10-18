@@ -15,6 +15,8 @@ import {
 import { OpenRenderer, runTui } from "./run.ts";
 
 const width = 120;
+/** The narrowest terminal the README promises to fit. */
+const narrowWidth = 80;
 const height = 40;
 const pollMs = 10;
 const pollTries = 200;
@@ -29,8 +31,11 @@ interface Session {
 
 let current: Session | undefined;
 
-const start = async (transport = designTransport): Promise<Session> => {
-  const setup = await createTestRenderer({ height, width });
+const start = async (
+  transport = designTransport,
+  columns = width
+): Promise<Session> => {
+  const setup = await createTestRenderer({ height, width: columns });
   const fiber = runTui("0.0.0").pipe(
     Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
     Effect.provide(
@@ -125,5 +130,17 @@ describe("tui", () => {
     expect(screen).toContain("can't see");
     s.input.pressEscape();
     await s.until("BLOCKED");
+  });
+});
+
+describe("tui on a narrow terminal", () => {
+  test("the checking line fits a narrow terminal", async () => {
+    const s = await start(slowDesignTransport, narrowWidth);
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("answered");
+    const line = screen.split("\n").find((l) => l.includes("answered"));
+    expect(line).toContain("Checking");
+    expect(screen).toContain("blocked so far:");
   });
 });
