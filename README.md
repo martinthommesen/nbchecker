@@ -154,7 +154,8 @@ DNS query to their own resolver, whatever server it was sent to. Every filter
 then seems to give that resolver's answers. So once per run, and once per
 session in the interactive app, nbchecker asks each filter for a test name it
 documents as blocked, such as Cloudflare's `malware.testcategory.com` or
-Telenor's test page, and checks that the answer is its block. Only names the
+Telenor's test page, and checks that every address it answers, over IPv4 and
+IPv6, is its block. Only names the
 provider itself gives as a test are used, so an honest filter doesn't fail.
 That is an A and an AAAA query to each of a filter's four servers: up to 40
 small queries per run.
@@ -171,7 +172,7 @@ would still pass.
   either.
 - **no answer**: nothing can be told either way, so its answers count as
   usual. Telenor's filters don't answer outside Telenor's network.
-- **redirected?**: the answer wasn't the filter's block, so its answers seem
+- **redirected?**: an address it answered wasn't the filter's block, so its answers seem
   to come from another resolver. Its row says so, it counts as neither
   blocked nor not blocked, and the check is incomplete. When at least two
   fail, and more fail than pass, the result says DNS on this network seems

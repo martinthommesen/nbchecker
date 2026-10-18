@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, type Layer } from "effect";
-import type { DnsTransport } from "../dns/transport.ts";
+import { Effect, Layer } from "effect";
+import { DnsTransport } from "../dns/transport.ts";
+import { type DnsAnswer, Rcode } from "../dns/wire.ts";
 import {
   blockingRedirectTransport,
   computer,
@@ -36,8 +37,36 @@ const detect = (
     Effect.runPromise
   );
 
+const dnsAnswer = (
+  name: string,
+  type: "A" | "AAAA",
+  value: string
+): DnsAnswer => ({
+  extendedErrors: [],
+  rcode: Rcode.noError,
+  records: [{ name, type, value }],
+  truncated: false,
+});
+
+/** Every filter blocks the canary over IPv4, but IPv6 queries go elsewhere. */
+const redirectedIpv6 = Layer.succeed(DnsTransport, {
+  ask: (_server, name, type) => {
+    if (type === "A") {
+      return Effect.succeed(dnsAnswer(name, type, "0.0.0.0"));
+    }
+    return Effect.succeed(dnsAnswer(name, type, "2001:db8::5"));
+  },
+  doh: (_url, name, type) => Effect.succeed(dnsAnswer(name, type, "192.0.2.5")),
+});
+
 const results = async (...args: Parameters<typeof detect>) =>
   (await detect(...args)).selfTests.map((t) => t.result);
+
+describe("self-test: every address counts", () => {
+  test("one address that isn't the block answer fails it", async () => {
+    expect(await results(redirectedIpv6)).toEqual(["redirected", "redirected"]);
+  });
+});
 
 describe("self-test", () => {
   test("filters that block their canary pass", async () => {
