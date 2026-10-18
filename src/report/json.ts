@@ -153,15 +153,15 @@ export interface JsonMeta {
 }
 
 /**
- * The meta for a run on `network`, which is undefined when it was never
- * found out: `dnsFilter` then says `unknown`.
+ * The meta for a run on `network`, which is undefined while the network
+ * hasn't been detected: `dnsFilter` then says `fallback`.
  */
 export const jsonMeta = (
   network: Network | undefined,
-  unknown: string,
+  fallback: string,
   version: string
 ): JsonMeta => ({
-  dnsFilter: dnsFilterOf(network?.connection, unknown),
+  dnsFilter: dnsFilterOf(network?.connection, fallback),
   intercepted: network && redirectedFilters(network),
   version,
 });

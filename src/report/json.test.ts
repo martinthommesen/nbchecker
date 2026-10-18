@@ -120,12 +120,14 @@ describe("a checked result in JSON", () => {
 describe("the document's meta", () => {
   test("leaves the self-test out until the network is known", async () => {
     const before = JSON.parse(
-      jsonText(jsonMeta(undefined, "unknown", "1"), [])
+      jsonText(jsonMeta(undefined, "not checked", "1"), [])
     );
     expect(Object.keys(before)).toEqual(["dnsFilter", "version", "results"]);
-    expect(before.dnsFilter).toBe("unknown");
+    expect(before.dnsFilter).toBe("not checked");
     const { network } = await runCheck("good.example");
-    const after = JSON.parse(jsonText(jsonMeta(network, "unknown", "1"), []));
+    const after = JSON.parse(
+      jsonText(jsonMeta(network, "not checked", "1"), [])
+    );
     expect(Object.keys(after)).toEqual([
       "dnsFilter",
       "intercepted",

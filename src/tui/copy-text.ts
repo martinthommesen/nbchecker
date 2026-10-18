@@ -9,7 +9,7 @@ import { connectionCopy } from "./connection-text.ts";
 import type { State } from "./state.ts";
 
 /** What the screen calls the DNS filter while the network is being detected. */
-const unknown = "unknown";
+const whileDetecting = "unknown";
 
 /** A result that couldn't be checked didn't wait for the network. */
 const networkOf = (s: State): Network | undefined =>
@@ -26,10 +26,10 @@ export const copyText = (
   if (s.result === undefined || s.checking) {
     return;
   }
-  const dnsFilter = dnsFilterOf(networkOf(s)?.connection, unknown);
+  const dnsFilter = dnsFilterOf(networkOf(s)?.connection, whileDetecting);
   return `${dnsFilterLine(dnsFilter)}\n\n${renderText(view(s.result), false)}`;
 };
 
 /** `result` as the JSON document, with the network it was checked on. */
 export const exportedJson = (s: State, result: CheckResult): string =>
-  jsonText(jsonMeta(networkOf(s), unknown, s.version), [result]);
+  jsonText(jsonMeta(networkOf(s), whileDetecting, s.version), [result]);

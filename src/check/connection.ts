@@ -97,15 +97,15 @@ export const connectionText = (c: Connection): string => {
 };
 
 /**
- * The filter on this computer, or `unknown` while there is no connection to
- * tell, which each output words its own way.
+ * The filter on this computer, or `fallback` while the network hasn't been
+ * detected, which each output words its own way.
  */
 export const dnsFilterOf = (
   c: Connection | undefined,
-  unknown: string
+  fallback: string
 ): string => {
   if (c === undefined) {
-    return unknown;
+    return fallback;
   }
   return connectionText(c);
 };
