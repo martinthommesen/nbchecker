@@ -38,5 +38,5 @@ test("the footer wraps between keys, not inside them", () => {
   for (const line of text.split("\n")) {
     expect(line.trimEnd().length).toBeLessThanOrEqual(narrow);
   }
-  expect(text).toContain("e export JSON");
+  expect(text).toContain(" e  export JSON");
 });
