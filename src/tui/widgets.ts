@@ -62,7 +62,7 @@ const text = (renderer: CliRenderer) =>
     wrapMode: "word",
   });
 
-const addAll = (parent: Renderable, children: readonly Renderable[]) => {
+const addAll = (parent: BoxRenderable, children: readonly Renderable[]) => {
   for (const child of children) {
     parent.add(child);
   }
@@ -85,7 +85,7 @@ interface Layout {
 /** The width inside the screen's padding. */
 const inner = (width: number): number => width - rootPadding;
 
-export type { Layout, PaneLook };
+export type { Layout };
 export {
   addAll,
   bodyOf,

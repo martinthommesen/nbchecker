@@ -3,9 +3,9 @@ import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
 import { printable } from "../report/printable.ts";
 import { theme } from "./theme.ts";
 
-export const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-export interface Ink {
+interface Ink {
   readonly bg?: string;
   readonly bold?: boolean;
   readonly fg?: string;

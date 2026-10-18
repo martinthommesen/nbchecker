@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { footerText } from "./footer.ts";
-import { initialState } from "./state.ts";
+import { initialState, type State } from "./state.ts";
 
 const browsing = { ...initialState("1.0.0"), focus: "table" as const };
 const narrow = 40;
@@ -8,7 +8,7 @@ const narrow = 40;
 const tight = 118;
 const roomy = 168;
 
-const plainLines = (s: typeof browsing, width: number): string[] =>
+const plainLines = (s: State, width: number): string[] =>
   footerText(s, width)
     .chunks.map((c) => c.text)
     .join("")
