@@ -30,6 +30,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
+      - name: Test trusted PR review helpers
+        run: python3 -I -m unittest discover -s .github/scripts -p '*_test.py'
 
   test:
     name: Test (${{ matrix.os }})
@@ -47,6 +49,16 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun test
+      # The standalone binary for this runner, the way users get it. An
+      # invalid target needs no network and exits 2.
+      - name: Run the compiled binary
+        run: |
+          bun run build
+          ./dist/nbchecker --version
+          status=0
+          ./dist/nbchecker --json 'not a name!' > result.json || status=$?
+          test "$status" = 2
+          jq -e '.results[0].error | length > 0' result.json
 
   dependency-review:
     name: Dependency review

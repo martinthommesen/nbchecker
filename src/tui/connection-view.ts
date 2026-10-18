@@ -30,10 +30,6 @@ const mark = {
 
 type Mark = (typeof mark)[keyof typeof mark];
 
-const heading = (text: string): TextChunk[] => [
-  paint(text, { bold: true, fg: theme.accent }),
-];
-
 const prose = (text: string): TextChunk[] => [paint(text)];
 
 const detectedLines = (c: Connection): TextChunk[][] => {
@@ -101,32 +97,49 @@ const filterRow = (name: string, m: Mark): TextChunk[] => [
   paint(m.text, { fg: m.color }),
 ];
 
-/** The left pane: what was detected and how. */
-export const detectionText = (
-  c: Connection | undefined,
-  tick: number
-): StyledText => {
+/** What was detected. */
+const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   if (c === undefined) {
-    return lines([
-      heading("Detected filter"),
-      [paint(`${spinner(tick)} detecting…`, { fg: theme.dim })],
-    ]);
-  }
-  let glyph: Mark = mark.notSeen;
-  if (c.filter !== undefined) {
-    glyph = mark.detected;
-  } else if (c.network !== undefined) {
-    glyph = mark.noFilter;
+    return lines([[paint(`${spinner(tick)} detecting…`, { fg: theme.dim })]]);
   }
   return lines([
-    heading("Detected filter"),
     ...detectedLines(c),
     [paint("Checked against Telenor's test page.", { fg: theme.dim })],
-    [],
-    heading("How we know"),
+  ]);
+};
+
+const testMark = (c: Connection): Mark => {
+  if (c.filter !== undefined) {
+    return mark.detected;
+  }
+  if (c.network !== undefined) {
+    return mark.noFilter;
+  }
+  if (c.error !== undefined) {
+    return mark.cantSee;
+  }
+  return mark.notSeen;
+};
+
+/** Fills a line of the shaded block, or leaves it as it is for copying. */
+const fill = (text: string, width: number): string => {
+  if (width <= 0) {
+    return text;
+  }
+  return fit(text, width);
+};
+
+/** How it was detected: the test lookup and what its answers mean. */
+const howText = (c: Connection | undefined, width: number): StyledText => {
+  if (c === undefined) {
+    return lines([]);
+  }
+  const glyph = testMark(c);
+  const block = { bg: theme.response };
+  return lines([
     [
-      paint(fit("test lookup", lookupWidth), { fg: theme.faint }),
-      paint("this computer got", { fg: theme.faint }),
+      paint(fit("test lookup", lookupWidth), { fg: theme.dim }),
+      paint("this computer got", { fg: theme.dim }),
     ],
     [
       paint(`${glyph.glyph} `, { fg: glyph.color }),
@@ -135,24 +148,31 @@ export const detectionText = (
     ],
     [],
     [
-      paint("Telenor's test page answers differently per filter:", {
-        fg: theme.dim,
-      }),
+      paint(
+        fill(" Telenor's test page answers differently per filter:", width),
+        {
+          ...block,
+          fg: theme.answer,
+        }
+      ),
     ],
     ...testPageMeaning.map(([ip, meaning]) => [
-      paint(`  ${fit(ip, addressWidth)}${meaning}`, { fg: theme.dim }),
+      paint(fill(`   ${fit(ip, addressWidth)}${meaning}`, width), {
+        ...block,
+        fg: theme.answer,
+      }),
     ]),
   ]);
 };
 
-/** The right pane: every filter, whether it was seen, and the caveats. */
-export const filtersText = (
+/** Every filter, and whether it was seen. */
+const filtersText = (
   c: Connection | undefined,
   items: readonly Filter[]
 ): StyledText => {
-  const out: TextChunk[][] = [heading("Filters we look for")];
+  const out: TextChunk[][] = [];
   for (const category of categoryOrder) {
-    out.push([], [paint(groupTitles[category], { fg: theme.faint })]);
+    out.push([paint(groupTitles[category], { fg: theme.faint })]);
     for (const f of items.filter((x) => x.category === category)) {
       out.push(filterRow(f.name, markOf(c, f)));
       // SafeZone has no server to ask, so it is only listed here.
@@ -161,26 +181,47 @@ export const filtersText = (
       }
     }
   }
-  out.push(
-    [],
-    heading("About SafeZone"),
-    prose(
-      "SafeZone filters inside Telenor's mobile network and has no public server to ask. nbchecker can only see it when this computer is online through a SafeZone phone hotspot or VPN, as the Your DNS row."
-    ),
-    [],
-    heading("Your browser may differ"),
-    prose(
-      "Browsers with secure DNS turned on ask their own server, so a site can open there even when this computer is blocked."
-    )
-  );
   return lines(out);
 };
 
+const safeZone = [
+  "SafeZone filters inside Telenor's mobile network and has no public server to ask.",
+  "nbchecker can only see it when this computer is online through a SafeZone phone hotspot or VPN, as the Your DNS row.",
+] as const;
+
+const browser =
+  "Browsers with secure DNS turned on ask their own server, so a site can open there even when this computer is blocked.";
+
+/** Why SafeZone is only seen from inside its network. */
+const safeZoneText = (): StyledText =>
+  lines([prose(safeZone[0]), [paint(safeZone[1], { fg: theme.dim })]]);
+
+/** Why a browser can disagree with this computer. */
+const browserText = (): StyledText =>
+  lines([[paint(browser, { fg: theme.dim })]]);
+
+const plain = (t: StyledText): string => t.chunks.map((ch) => ch.text).join("");
+
 /** The connection screen as plain text, for copying. */
-export const connectionCopy = (
+const connectionCopy = (
   c: Connection | undefined,
   items: readonly Filter[]
 ): string =>
-  [detectionText(c, 0), filtersText(c, items)]
-    .map((t) => t.chunks.map((ch) => ch.text).join(""))
+  [
+    { body: detectedText(c, 0), title: "Detected filter" },
+    { body: howText(c, 0), title: "How we know" },
+    { body: filtersText(c, items), title: "Filters we look for" },
+    { body: safeZoneText(), title: "About SafeZone" },
+    { body: browserText(), title: "Your browser may differ" },
+  ]
+    .map(({ body, title }) => `${title}\n${plain(body)}`)
     .join("\n\n");
+
+export {
+  browserText,
+  connectionCopy,
+  detectedText,
+  filtersText,
+  howText,
+  safeZoneText,
+};

@@ -15,6 +15,7 @@
   "scripts": {
     "build": "bun build --compile --minify --sourcemap src/main.ts --outfile dist/nbchecker",
     "check": "bun run typecheck && bun run lint && bun test",
+    "demo": "bun run src/testing/demo.ts",
     "fix": "ultracite fix",
     "lint": "ultracite check",
     "start": "bun run src/main.ts",

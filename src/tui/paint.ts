@@ -1,6 +1,7 @@
 /** Helpers for building coloured lines of text. */
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
 import { printable } from "../report/printable.ts";
+import { theme } from "./theme.ts";
 
 export const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -12,10 +13,11 @@ export interface Ink {
 
 /** One piece of text in one style. */
 export const paint = (text: string, ink: Ink = {}): TextChunk => {
-  let chunk: TextChunk = { __isChunk: true, text: printable(text) };
-  if (ink.fg !== undefined) {
-    chunk = fg(ink.fg)(chunk);
-  }
+  // Every chunk gets a colour, so the look doesn't depend on the terminal's.
+  let chunk = fg(ink.fg ?? theme.text)({
+    __isChunk: true,
+    text: printable(text),
+  });
   if (ink.bg !== undefined) {
     chunk = bg(ink.bg)(chunk);
   }
