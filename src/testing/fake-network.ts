@@ -2,19 +2,13 @@
 import { Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import type { Filter } from "../check/filters.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import {
-  type DnsAnswer,
-  type DnsRecord,
-  type QueryType,
-  Rcode,
-} from "../dns/wire.ts";
+import type { DnsAnswer, DnsRecord, QueryType } from "../dns/wire.ts";
 
 /** A name's records, or a whole answer for one that answers oddly. */
 type Zone = Readonly<Record<string, readonly DnsRecord[] | DnsAnswer>>;
-
-const edeBlocked = 15;
 
 const a = (name: string, value: string): DnsRecord => ({
   name,
@@ -100,14 +94,14 @@ const security: Zone = {
   // Extended DNS Error text that tries to add a line to the output.
   "newline.example": {
     extendedErrors: [
-      { code: edeBlocked, text: "policy\n  ✓ Fake  not blocked" },
+      { code: Ede.blocked, text: "policy\n  ✓ Fake  not blocked" },
     ],
     rcode: Rcode.noError,
     records: [],
     truncated: false,
   },
   // A block said with an Extended DNS Error on a SERVFAIL.
-  "policy.example": failure(Rcode.servFail, edeBlocked),
+  "policy.example": failure(Rcode.servFail, Ede.blocked),
   "refused.example": failure(Rcode.refused),
 };
 

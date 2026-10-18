@@ -213,15 +213,6 @@ const decode = (bytes: Uint8Array): DnsAnswer => {
 
 export type QueryType = "A" | "AAAA";
 
-export const Rcode = {
-  formErr: 1,
-  noError: 0,
-  notImp: 4,
-  nxDomain: 3,
-  refused: 5,
-  servFail: 2,
-} as const;
-
 /** One record from the answer section. */
 export interface DnsRecord {
   readonly name: string;

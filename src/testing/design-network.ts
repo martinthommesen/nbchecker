@@ -2,25 +2,20 @@
 import { type Duration, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import { type Filter, filters } from "../check/filters.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import {
-  type DnsAnswer,
-  type DnsRecord,
-  type QueryType,
-  Rcode,
-} from "../dns/wire.ts";
+import type { DnsAnswer, DnsRecord, QueryType } from "../dns/wire.ts";
 
 const domain = "bad.example";
 const realAddress = "203.0.113.42";
-const edeBlocked = 15;
 
 const answer = (
   records: readonly DnsRecord[],
   rcode: number = Rcode.noError,
   ede = false
 ): DnsAnswer => ({
-  extendedErrors: [{ code: edeBlocked, text: "" }].filter(() => ede),
+  extendedErrors: [{ code: Ede.blocked, text: "" }].filter(() => ede),
   rcode,
   records,
   truncated: false,

@@ -1,7 +1,8 @@
 /** Lookups through this computer's own resolver. */
 import { Effect, Result } from "effect";
 import { Dns, Host, NetAddress } from "effect/net";
-import { type DnsAnswer, type DnsRecord, Rcode } from "../dns/wire.ts";
+import { Rcode } from "../dns/codes.ts";
+import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 import { type CheckResult, unchecked } from "./result.ts";
 
 const ipNote =

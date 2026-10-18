@@ -1,6 +1,6 @@
 /** Short and long forms of a resolver's raw answer, for display. */
 import type { Reason, Verdict } from "../check/classify.ts";
-import { extendedErrorName, rcodeName } from "../check/codes.ts";
+import { extendedErrorName, rcodeName } from "../dns/codes.ts";
 import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 
 /** Blocks that answer with a CNAME to a block page. */

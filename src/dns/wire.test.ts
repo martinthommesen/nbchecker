@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { response } from "../testing/response.ts";
-import { decodeResponse, encodeQuery, Rcode, responseId } from "./wire.ts";
+import { Ede, Rcode } from "./codes.ts";
+import { decodeResponse, encodeQuery, responseId } from "./wire.ts";
 
 const decode = (bytes: Uint8Array) => Effect.runSync(decodeResponse(bytes));
 const decodeError = (bytes: Uint8Array) =>
@@ -21,7 +22,6 @@ const toHex = (bytes: Uint8Array): string =>
   [...bytes].map((b) => b.toString(hexRadix).padStart(2, "0")).join(" ");
 
 const queryId = 4242;
-const edeFiltered = 17;
 // BADCOOKIE (23) is carried partly in the OPT record's extended rcode.
 const extendedRcode = 23;
 
@@ -81,12 +81,12 @@ describe("decodeResponse: flags and errors", () => {
   test("reads Extended DNS Errors and the extended rcode", () => {
     const answer = decode(
       response({
-        extendedErrors: [{ code: edeFiltered, text: "malware" }],
+        extendedErrors: [{ code: Ede.filtered, text: "malware" }],
         rcode: extendedRcode,
       })
     );
     expect(answer.extendedErrors).toEqual([
-      { code: edeFiltered, text: "malware" },
+      { code: Ede.filtered, text: "malware" },
     ]);
     expect(answer.rcode).toBe(extendedRcode);
   });

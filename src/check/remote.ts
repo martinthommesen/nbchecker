@@ -1,9 +1,9 @@
 /** Asks the filters and the unfiltered resolvers over the network. */
 import { Effect } from "effect";
+import { Rcode, rcodeName } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import { type DnsAnswer, Rcode } from "../dns/wire.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
 import { hasBlockingError } from "./classify.ts";
-import { rcodeName } from "./codes.ts";
 import type { Filter } from "./filters.ts";
 
 const isFailure = (a: DnsAnswer): boolean =>

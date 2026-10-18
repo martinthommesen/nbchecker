@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type DnsAnswer, type DnsRecord, Rcode } from "../dns/wire.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
+import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 import {
   canonicalAddress,
   classify,
@@ -10,8 +11,6 @@ import {
   type Reference,
 } from "./classify.ts";
 
-const edeBlocked = 15;
-const edeFiltered = 17;
 const edeStale = 3;
 
 /** The real answer for a name that exists, with an address of its own. */
@@ -97,7 +96,7 @@ const cases: readonly Case[] = [
   },
   {
     answer: answer([], {
-      extendedErrors: [{ code: edeBlocked, text: "" }],
+      extendedErrors: [{ code: Ede.blocked, text: "" }],
       rcode: Rcode.servFail,
     }),
     detail: "Blocked",
@@ -106,7 +105,7 @@ const cases: readonly Case[] = [
   },
   {
     answer: answer([], {
-      extendedErrors: [{ code: edeBlocked, text: "policy" }],
+      extendedErrors: [{ code: Ede.blocked, text: "policy" }],
       rcode: Rcode.refused,
     }),
     detail: "Blocked: policy",
@@ -125,7 +124,7 @@ const cases: readonly Case[] = [
   },
   {
     answer: answer([], {
-      extendedErrors: [{ code: edeFiltered, text: "malware" }],
+      extendedErrors: [{ code: Ede.filtered, text: "malware" }],
     }),
     detail: "Filtered: malware",
     name: "Extended DNS Error",
@@ -217,7 +216,7 @@ describe("classify: compared with the real answer", () => {
   test("an Extended DNS Error still counts", () => {
     const v = classify(
       answer([a("zero.example", "0.0.0.0")], {
-        extendedErrors: [{ code: edeFiltered, text: "" }],
+        extendedErrors: [{ code: Ede.filtered, text: "" }],
       }),
       zero
     );

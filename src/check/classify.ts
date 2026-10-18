@@ -3,8 +3,8 @@
  */
 import { Result } from "effect";
 import { NetAddress } from "effect/net";
-import { type DnsAnswer, Rcode } from "../dns/wire.ts";
-import { extendedErrorName, isBlockingError } from "./codes.ts";
+import { extendedErrorName, isBlockingError, Rcode } from "../dns/codes.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
 
 /** Telenor answers a blocked name with a CNAME to one of these hosts. */
 const telenorTargets = new Map<string, Reason>([

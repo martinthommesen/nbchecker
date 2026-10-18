@@ -2,9 +2,10 @@
  * Checks that a reply answers the query it was sent for: the ID, the QR bit,
  * the opcode and the question (RFC 5452).
  */
+
+import { Rcode } from "./codes.ts";
 import { MalformedResponse } from "./malformed.ts";
 import { Reader } from "./reader.ts";
-import { Rcode } from "./wire.ts";
 
 const headerLength = 12;
 const flagResponse = 0x80_00;

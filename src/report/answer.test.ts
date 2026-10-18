@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import type { Verdict } from "../check/classify.ts";
-import { type DnsAnswer, Rcode } from "../dns/wire.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
 import { answerSummary, responseLines } from "./answer.ts";
-
-const edeBlocked = 15;
 
 const answer = (fields: Partial<DnsAnswer>): DnsAnswer => ({
   extendedErrors: [],
@@ -59,7 +58,7 @@ test("addresses show the first and count the rest", () => {
 
 test("an error shows its status and Extended DNS Error", () => {
   const a = answer({
-    extendedErrors: [{ code: edeBlocked, text: "malware" }],
+    extendedErrors: [{ code: Ede.blocked, text: "malware" }],
     rcode: Rcode.nxDomain,
   });
   expect(answerSummary([a], verdict({ blocked: true, reason: "ede" }))).toBe(

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { replyTo, response } from "../testing/response.ts";
+import { Rcode } from "./codes.ts";
 import { mismatch } from "./match.ts";
-import { encodeQuery, Rcode } from "./wire.ts";
+import { encodeQuery } from "./wire.ts";
 
 const queryId = 4242;
 const flagsByte = 2;

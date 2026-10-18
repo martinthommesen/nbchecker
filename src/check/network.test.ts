@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
+import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import { type DnsAnswer, Rcode } from "../dns/wire.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
 import {
   blockingRedirectTransport,
   computer,

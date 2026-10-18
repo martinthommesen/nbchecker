@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { sleep, udpSocket } from "bun";
 import { Effect, Fiber } from "effect";
 import { replyTo } from "../testing/response.ts";
+import { Rcode } from "./codes.ts";
 import { type OpenUdp, sendUdp, type UdpOptions } from "./sockets.ts";
 import { encodeQuery } from "./wire.ts";
 
@@ -77,7 +78,7 @@ describe("sendUdp", () => {
     const udp = fakeUdp();
     const fiber = run(udp.factory);
     await udp.opened();
-    const right = replyTo(query, { rcode: 3 });
+    const right = replyTo(query, { rcode: Rcode.nxDomain });
     udp.receive(replyTo(query, { question: "bad.example" }));
     udp.receive(right);
     expect(await Effect.runPromise(Fiber.join(fiber))).toEqual(right);
