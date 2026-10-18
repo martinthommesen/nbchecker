@@ -80,6 +80,19 @@ jobs:
         with:
           go-version-file: go.mod
 
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0
+
   release-config:
     name: Check release config
     runs-on: ubuntu-latest
@@ -96,7 +109,7 @@ jobs:
   # passed or was skipped.
   result:
     name: CI result
-    needs: [detect, test, lint, vulncheck, release-config]
+    needs: [detect, test, lint, vulncheck, dependency-review, release-config]
     if: always()
     runs-on: ubuntu-latest
     steps:
