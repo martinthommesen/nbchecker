@@ -6,6 +6,7 @@ import {
   isRedirected,
   type Outcome,
   shouldAnswer,
+  truthCancelled,
   truthPending,
   wasCancelled,
 } from "../check/result.ts";
@@ -155,19 +156,17 @@ const truthRow = (r: CheckResult): TableRow => {
     };
   }
   let state: RowState = "pending";
+  let verdict = verdictWords.pending;
   let response: string[] = [];
-  if (!truthPending(r)) {
+  if (truthCancelled(r)) {
+    state = "unavailable";
+    verdict = "cancelled";
+  } else if (!truthPending(r)) {
     state = "failed";
+    verdict = verdictWords.failed;
     response = [`error: ${r.truthError ?? ""}`];
   }
-  return {
-    ...base,
-    answer: "",
-    ms: "",
-    response,
-    state,
-    verdict: verdictWords[state],
-  };
+  return { ...base, answer: "", ms: "", response, state, verdict };
 };
 
 const filterBase = (f: Filter): RowBase => ({

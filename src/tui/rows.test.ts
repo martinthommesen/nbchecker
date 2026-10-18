@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { CheckResult } from "../check/result.ts";
+import { type CheckResult, cancelPending } from "../check/result.ts";
 import { downTruthUrl, runCheck } from "../testing/run-check.ts";
 import { flatRows, resultGroups, type TableRow } from "./rows.ts";
 
@@ -31,5 +31,17 @@ describe("resultGroups", () => {
       verdict: "no address",
     });
     expect(row(r, "Your DNS")?.why).toContain("not a block");
+  });
+});
+
+describe("resultGroups after a cancel", () => {
+  test("the real answer that was still on its way says cancelled", async () => {
+    const r = await runCheck("good.example");
+    const waiting = { ...r, truthError: undefined, truthExchange: undefined };
+    expect(row(cancelPending(waiting), "Real answer")).toMatchObject({
+      response: [],
+      state: "unavailable",
+      verdict: "cancelled",
+    });
   });
 });
