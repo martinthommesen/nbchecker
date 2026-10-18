@@ -11,7 +11,7 @@ import {
   fakeFilters,
   fakeTransport,
 } from "../testing/fake-network.ts";
-import { truthUrl } from "../testing/run-check.ts";
+import { realAnswerUrl } from "../testing/run-check.ts";
 import { toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
@@ -27,7 +27,7 @@ describe("a cancelled check", () => {
       ),
       Effect.provideService(CheckerOptions, {
         filters: fakeFilters,
-        truthUrls: [truthUrl],
+        unfilteredResolvers: [realAnswerUrl],
       }),
       Effect.provide(Layer.merge(fakeTransport, computer))
     );

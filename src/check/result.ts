@@ -93,21 +93,21 @@ export interface CheckResult {
    */
   readonly network: Network | undefined;
   readonly notes: readonly string[];
+  /** The real answer's addresses. */
+  readonly realAddresses: readonly string[];
+  readonly realAnswerError: string | undefined;
+  /** How the real answer was fetched; undefined until it arrives. */
+  readonly realAnswerExchange: Exchange | undefined;
   /** What this computer's own DNS says; undefined when not checked. */
   readonly system: Outcome | undefined;
   readonly target: string;
-  /** The unfiltered answers. */
-  readonly truth: readonly string[];
-  readonly truthError: string | undefined;
-  /** How the unfiltered answer was fetched; undefined until it arrives. */
-  readonly truthExchange: Exchange | undefined;
 }
 
 export const pending: Outcome = { kind: "pending" };
 
 /** Whether the real answer was cut short by a cancelled check. */
-export const truthCancelled = (r: CheckResult): boolean =>
-  r.truthError === cancelledError;
+export const realAnswerCancelled = (r: CheckResult): boolean =>
+  r.realAnswerError === cancelledError;
 
 /** Whether an outcome is a lookup cut short by a cancelled check. */
 export const wasCancelled = (o: Outcome): boolean =>
@@ -175,7 +175,7 @@ export const completionOf = (r: CheckResult): Completion => {
   const failed = (o: Outcome | undefined) => o?.kind === "failed";
   if (
     r.network === undefined ||
-    r.truthExchange === undefined ||
+    r.realAnswerExchange === undefined ||
     outcomes.some((o) => o === undefined || o.kind === "pending") ||
     failed(r.system) ||
     r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter)) ||
@@ -191,25 +191,27 @@ export const isBlocked = (r: CheckResult): boolean =>
   trustedFilters(r).some((f) => outcomeBlocks(f.outcome)) ||
   outcomeBlocks(r.system);
 
-/** Whether the unfiltered answer is still on its way. */
-export const truthPending = (r: CheckResult): boolean =>
-  r.checked && r.truthError === undefined && r.truthExchange === undefined;
+/** Whether the real answer is still on its way. */
+export const realAnswerPending = (r: CheckResult): boolean =>
+  r.checked &&
+  r.realAnswerError === undefined &&
+  r.realAnswerExchange === undefined;
 
 /** Marks everything that hadn't answered when a check was cancelled. */
 export const cancelPending = (r: CheckResult): CheckResult => {
-  let { system, truthError } = r;
+  let { system, realAnswerError } = r;
   if (system !== undefined) {
     system = settle(system);
   }
-  if (truthPending(r)) {
-    truthError = cancelledError;
+  if (realAnswerPending(r)) {
+    realAnswerError = cancelledError;
   }
   return {
     ...r,
     completion: "cancelled",
     filters: r.filters.map((f) => ({ ...f, outcome: settle(f.outcome) })),
+    realAnswerError,
     system,
-    truthError,
   };
 };
 
@@ -228,9 +230,9 @@ export const unchecked = (
   lookupError: undefined,
   network: undefined,
   notes: [],
+  realAddresses: [],
+  realAnswerError: undefined,
+  realAnswerExchange: undefined,
   system: undefined,
   target,
-  truth: [],
-  truthError: undefined,
-  truthExchange: undefined,
 });

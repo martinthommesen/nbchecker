@@ -14,7 +14,7 @@ import { theme } from "./theme.ts";
 
 const barWidth = 30;
 const msPerSecond = 1000;
-const truthShown = 2;
+const realAddressesShown = 2;
 /** Your DNS and the real answer are asked alongside the filters. */
 const extraResolvers = 2;
 
@@ -30,7 +30,7 @@ const progress = (r: CheckResult) => {
   if (done(r.system)) {
     finished += 1;
   }
-  if (r.truthExchange !== undefined || r.truthError !== undefined) {
+  if (r.realAnswerExchange !== undefined || r.realAnswerError !== undefined) {
     finished += 1;
   }
   return { finished, total: r.filters.length + extraResolvers };
@@ -66,20 +66,22 @@ const systemPhrase = (r: CheckResult): TextChunk => {
   return paint("resolves", { fg: theme.ok });
 };
 
-const truthPhrase = (r: CheckResult): TextChunk => {
-  if (r.truthError !== undefined) {
+const realAnswerPhrase = (r: CheckResult): TextChunk => {
+  if (r.realAnswerError !== undefined) {
     return paint("unavailable", { fg: theme.warn });
   }
-  if (r.truthExchange === undefined) {
+  if (r.realAnswerExchange === undefined) {
     return paint("asking…", { fg: theme.dim });
   }
   if (!r.exists) {
     return paint("doesn't exist", { fg: theme.dim });
   }
-  if (r.truth.length === 0) {
+  if (r.realAddresses.length === 0) {
     return paint("no addresses", { fg: theme.ok });
   }
-  return paint(shortList(r.truth, truthShown), { fg: theme.ok });
+  return paint(shortList(r.realAddresses, realAddressesShown), {
+    fg: theme.ok,
+  });
 };
 
 const counted = (n: number, of: number, color: string): TextChunk =>
@@ -165,7 +167,7 @@ const resultSummary = (r: CheckResult, wide: boolean): StyledText => {
     paint(" your DNS: ", { fg: theme.dim }),
     systemPhrase(r),
     paint("    real answer: ", { fg: theme.dim }),
-    truthPhrase(r),
+    realAnswerPhrase(r),
   ];
   const verdict = verdictBadge(statusOf(r));
   if (wide) {

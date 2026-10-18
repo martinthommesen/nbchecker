@@ -5,14 +5,14 @@ import {
   type Exchange,
   isRedirected,
   type Outcome,
+  realAnswerCancelled,
+  realAnswerPending,
   shouldAnswer,
-  truthCancelled,
-  truthPending,
   wasCancelled,
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { categoryOrder, categoryTitles } from "../report/view.ts";
-import { filterWhy, systemWhy, truthWhy } from "./why.ts";
+import { filterWhy, realAnswerWhy, systemWhy } from "./why.ts";
 
 const categoryNames = {
   ads: "ads and trackers",
@@ -51,8 +51,8 @@ interface RowContext {
 }
 
 /** A filter's "doesn't exist" can only be judged against the real answer. */
-const truthUnknown = (r: CheckResult): boolean =>
-  r.truthExchange === undefined && !truthPending(r);
+const realAnswerUnknown = (r: CheckResult): boolean =>
+  r.realAnswerExchange === undefined && !realAnswerPending(r);
 
 const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.kind === "pending") {
@@ -73,7 +73,7 @@ const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.verdict.inspected) {
     return "inspected";
   }
-  if (o.verdict.missing && !c.system && truthUnknown(c.result)) {
+  if (o.verdict.missing && !c.system && realAnswerUnknown(c.result)) {
     return "unsure";
   }
   if (o.verdict.missing) {
@@ -123,22 +123,22 @@ const outcomeRow = (
   return { ...row, answer: "", ms: "", response: [] };
 };
 
-const truthRow = (r: CheckResult): TableRow => {
+const realAnswerRow = (r: CheckResult): TableRow => {
   const base = {
     category: "reference",
     name: "Real answer",
     server: "DNS over HTTPS",
     transport: "HTTPS 443",
-    why: truthWhy(r),
+    why: realAnswerWhy(r),
   };
-  const ex: Exchange | undefined = r.truthExchange;
+  const ex: Exchange | undefined = r.realAnswerExchange;
   if (ex !== undefined) {
     let state: RowState = "resolves";
     if (!r.exists) {
       state = "missing";
     }
     const verdict = {
-      answers: r.truth,
+      answers: r.realAddresses,
       blocked: false,
       detail: "",
       inspected: false,
@@ -158,13 +158,13 @@ const truthRow = (r: CheckResult): TableRow => {
   let state: RowState = "pending";
   let verdict = verdictWords.pending;
   let response: string[] = [];
-  if (truthCancelled(r)) {
+  if (realAnswerCancelled(r)) {
     state = "unavailable";
     verdict = "cancelled";
-  } else if (!truthPending(r)) {
+  } else if (!realAnswerPending(r)) {
     state = "failed";
     verdict = verdictWords.failed;
-    response = [`error: ${r.truthError ?? ""}`];
+    response = [`error: ${r.realAnswerError ?? ""}`];
   }
   return { ...base, answer: "", ms: "", response, state, verdict };
 };
@@ -254,7 +254,7 @@ export const resultGroups = (r: CheckResult): Group[] => {
         systemWhy(system, r),
         { optional: false, redirected: false, result: r, system: true }
       ),
-      truthRow(r),
+      realAnswerRow(r),
     ],
     title: "REFERENCE",
   };

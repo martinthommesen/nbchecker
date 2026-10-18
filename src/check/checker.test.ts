@@ -22,7 +22,7 @@ const run = <A, E>(
   effect.pipe(
     Effect.provideService(CheckerOptions, {
       filters,
-      truthUrls: ["https://truth.example/dns-query"],
+      unfilteredResolvers: ["https://unfiltered.example/dns-query"],
       ...options,
     }),
     Effect.provide(Layer.merge(fakeTransport, computer)),
@@ -38,7 +38,7 @@ describe("check: names", () => {
     const r = await run(check("https://good.example/page", detectNetwork));
     expect(r.host).toBe("good.example");
     expect(r.exists).toBe(true);
-    expect(r.truth).toEqual(["192.0.2.20"]);
+    expect(r.realAddresses).toEqual(["192.0.2.20"]);
     expect(isBlocked(r)).toBe(false);
   });
 
@@ -77,7 +77,7 @@ describe("check: names", () => {
     const r = await check("good.example.", detectNetwork).pipe(
       Effect.provideService(CheckerOptions, {
         filters,
-        truthUrls: ["https://truth.example/dns-query"],
+        unfilteredResolvers: ["https://unfiltered.example/dns-query"],
       }),
       Effect.provideService(Dns.Dns, recording),
       Effect.provide(fakeTransport),
@@ -116,30 +116,32 @@ describe("check: failures", () => {
 
   test("falls back to the next unfiltered resolver", async () => {
     const r = await run(check("good.example", detectNetwork), {
-      truthUrls: [
+      unfilteredResolvers: [
         "https://down.example/dns-query",
-        "https://truth.example/dns-query",
+        "https://unfiltered.example/dns-query",
       ],
     });
-    expect(r.truthError).toBeUndefined();
+    expect(r.realAnswerError).toBeUndefined();
     expect(r.exists).toBe(true);
   });
 
   test("a resolver that fails the AAAA query is skipped", async () => {
     const r = await run(check("good.example", detectNetwork), {
-      truthUrls: [
+      unfilteredResolvers: [
         "https://no-aaaa.example/dns-query",
-        "https://truth.example/dns-query",
+        "https://unfiltered.example/dns-query",
       ],
     });
-    expect(r.truthExchange?.server).toBe("https://truth.example/dns-query");
+    expect(r.realAnswerExchange?.server).toBe(
+      "https://unfiltered.example/dns-query"
+    );
   });
 
   test("reports when no unfiltered resolver answers", async () => {
     const r = await run(check("good.example", detectNetwork), {
-      truthUrls: ["https://down.example/dns-query"],
+      unfilteredResolvers: ["https://down.example/dns-query"],
     });
-    expect(r.truthError).toContain("timed out");
+    expect(r.realAnswerError).toContain("timed out");
   });
 });
 
@@ -242,15 +244,15 @@ describe("check: progress", () => {
         )
       )
     );
-    // One report before any answer, then one per filter, system and truth,
-    // and one when the network is known.
+    // One report before any answer, then one per filter, this computer and
+    // the real answer, and one when the network is known.
     const reports =
-      filters.length + ["start", "system", "truth", "network"].length;
+      filters.length + ["start", "system", "real answer", "network"].length;
     expect(seen).toHaveLength(reports);
     expect(seen[0]?.filters.every((f) => f.outcome.kind === "pending")).toBe(
       true
     );
     expect(seen.at(-1)).toEqual(r);
-    expect(r.truthExchange).toMatchObject({ transport: "HTTPS 443" });
+    expect(r.realAnswerExchange).toMatchObject({ transport: "HTTPS 443" });
   });
 });

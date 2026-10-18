@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type CheckResult, cancelPending } from "../check/result.ts";
-import { downTruthUrl, runCheck } from "../testing/run-check.ts";
+import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
 import { flatRows, resultGroups, type TableRow } from "./rows.ts";
 
 const row = (r: CheckResult, name: string): TableRow | undefined =>
@@ -16,7 +16,9 @@ describe("resultGroups", () => {
   });
 
   test("a filter's NXDOMAIN without the real answer can't be told", async () => {
-    const r = await runCheck("nope.example", { truthUrls: [downTruthUrl] });
+    const r = await runCheck("nope.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
+    });
     expect(row(r, "Family filter")).toMatchObject({
       state: "unsure",
       verdict: "can't tell",
@@ -37,7 +39,11 @@ describe("resultGroups", () => {
 describe("resultGroups after a cancel", () => {
   test("the real answer that was still on its way says cancelled", async () => {
     const r = await runCheck("good.example");
-    const waiting = { ...r, truthError: undefined, truthExchange: undefined };
+    const waiting = {
+      ...r,
+      realAnswerError: undefined,
+      realAnswerExchange: undefined,
+    };
     expect(row(cancelPending(waiting), "Real answer")).toMatchObject({
       response: [],
       state: "unavailable",

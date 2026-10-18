@@ -31,7 +31,7 @@ const detect = (
   filters: readonly Filter[] = fakeFilters
 ) =>
   detectNetwork.pipe(
-    Effect.provideService(CheckerOptions, { filters, truthUrls: [] }),
+    Effect.provideService(CheckerOptions, { filters, unfilteredResolvers: [] }),
     Effect.provide(transport),
     Effect.provide(computer),
     Effect.runPromise

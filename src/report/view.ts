@@ -8,14 +8,14 @@ import {
   type CheckResult,
   isRedirected,
   type Outcome,
+  realAnswerCancelled,
   shouldAnswer,
-  truthCancelled,
   wasCancelled,
 } from "../check/result.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 
 const maxAnswers = 2;
-const maxTruth = 4;
+const maxRealAddresses = 4;
 
 /** The answers worth showing next to a block, such as the block page. */
 const blockDetail = (v: Verdict): string => {
@@ -67,7 +67,7 @@ const missingRow = (
       tone: "dim",
     };
   }
-  if (r.truthExchange === undefined) {
+  if (r.realAnswerExchange === undefined) {
     return {
       icon: "?",
       name,
@@ -162,9 +162,9 @@ const summaryOf = (r: CheckResult): Line => {
   return { text: [icon, statusText(status)].filter(Boolean).join(" "), tone };
 };
 
-const truthRow = (r: CheckResult): Row => {
+const realAnswerRow = (r: CheckResult): Row => {
   const name = "Real answer";
-  if (truthCancelled(r)) {
+  if (realAnswerCancelled(r)) {
     return {
       icon: "–",
       name,
@@ -172,21 +172,21 @@ const truthRow = (r: CheckResult): Row => {
       tone: "dim",
     };
   }
-  if (r.truthError !== undefined) {
+  if (r.realAnswerError !== undefined) {
     return {
       icon: "?",
       name,
-      text: `could not reach an unfiltered resolver: ${r.truthError}`,
+      text: `could not reach an unfiltered resolver: ${r.realAnswerError}`,
       tone: "warn",
     };
   }
-  if (r.truthExchange === undefined) {
+  if (r.realAnswerExchange === undefined) {
     return { icon: "…", name, text: "asking…", tone: "dim" };
   }
   if (!r.exists) {
     return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
   }
-  if (r.truth.length === 0) {
+  if (r.realAddresses.length === 0) {
     return {
       icon: "✓",
       name,
@@ -194,7 +194,12 @@ const truthRow = (r: CheckResult): Row => {
       tone: "plain",
     };
   }
-  return { icon: "✓", name, text: shortList(r.truth, maxTruth), tone: "plain" };
+  return {
+    icon: "✓",
+    name,
+    text: shortList(r.realAddresses, maxRealAddresses),
+    tone: "plain",
+  };
 };
 
 const filterSections = (r: CheckResult): Section[] =>
@@ -262,7 +267,7 @@ export const view = (r: CheckResult): View => {
   if (r.system !== undefined) {
     reference.push(outcomeRow("Your DNS", r.system, r));
   }
-  reference.push(truthRow(r));
+  reference.push(realAnswerRow(r));
   return {
     ...base,
     sections: [

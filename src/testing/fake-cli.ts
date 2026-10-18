@@ -18,7 +18,7 @@ import {
   fakeTransport,
   redirectingTransport,
 } from "./fake-network.ts";
-import { truthUrl } from "./run-check.ts";
+import { realAnswerUrl } from "./run-check.ts";
 
 const { NBCHECKER_FAKE_NETWORK: network, NBCHECKER_FAKE_QUERIES: logQueries } =
   env;
@@ -68,7 +68,7 @@ const recordedComputer = Layer.effect(
 cli.pipe(
   Effect.provideService(CheckerOptions, {
     filters: fakeFilters,
-    truthUrls: [truthUrl],
+    unfilteredResolvers: [realAnswerUrl],
   }),
   Effect.provide(
     Layer.mergeAll(BunServices.layer, recordedTransport, recordedComputer)

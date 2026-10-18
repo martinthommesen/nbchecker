@@ -50,14 +50,14 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (seemsIntercepted(r.network)) {
     return "intercepted";
   }
-  const truthKnown = r.truthExchange !== undefined;
-  if (truthKnown && !r.exists && resolvesHere(r)) {
+  const realAnswerKnown = r.realAnswerExchange !== undefined;
+  if (realAnswerKnown && !r.exists && resolvesHere(r)) {
     return "local-only";
   }
-  if (truthKnown && !r.exists) {
+  if (realAnswerKnown && !r.exists) {
     return "missing";
   }
-  if (!truthKnown && someMissing(r)) {
+  if (!realAnswerKnown && someMissing(r)) {
     return "cant-tell";
   }
   if (s.answered === 0) {

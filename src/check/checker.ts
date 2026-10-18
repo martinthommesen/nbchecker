@@ -15,12 +15,7 @@ import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
 import { normalize } from "./normalize.ts";
 import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
-import {
-  askFilter,
-  type FilterAnswer,
-  lookupTruth,
-  type Truth,
-} from "./remote.ts";
+import { askFilter, askUnfiltered, type FilterAnswer } from "./remote.ts";
 import {
   type CheckResult,
   completionOf,
@@ -40,8 +35,8 @@ interface Asked<A> {
 interface Gathered {
   readonly filters: readonly (Asked<FilterAnswer> | undefined)[];
   readonly network: Network | undefined;
+  readonly realAnswer: Asked<FilterAnswer & Reference> | undefined;
   readonly system: Asked<SystemAnswer> | undefined;
-  readonly truth: Asked<Truth> | undefined;
 }
 
 const systemServer = "this computer";
@@ -95,11 +90,11 @@ const systemOutcome = (
  * it can't be fetched, a missing name is not a block.
  */
 const referenceOf = (g: Gathered): Reference => {
-  const truth = g.truth?.result;
-  if (truth === undefined || Result.isFailure(truth)) {
+  const real = g.realAnswer?.result;
+  if (real === undefined || Result.isFailure(real)) {
     return noReference;
   }
-  return truth.success;
+  return real.success;
 };
 
 /** Builds the result from what has answered, classifying it afresh. */
@@ -108,7 +103,7 @@ const assemble = (
   asked: readonly Filter[],
   g: Gathered
 ): CheckResult => {
-  const truth = g.truth?.result;
+  const real = g.realAnswer?.result;
   const reference = referenceOf(g);
   let result: CheckResult = {
     ...base,
@@ -121,17 +116,17 @@ const assemble = (
     network: g.network,
     system: systemOutcome(g.system, reference),
   };
-  if (g.truth !== undefined && truth !== undefined) {
-    if (Result.isFailure(truth)) {
-      result = { ...result, truthError: truth.failure.message };
+  if (g.realAnswer !== undefined && real !== undefined) {
+    if (Result.isFailure(real)) {
+      result = { ...result, realAnswerError: real.failure.message };
     } else {
       result = {
         ...result,
-        truth: truth.success.addresses,
-        truthExchange: {
-          answers: truth.success.answers,
-          ms: g.truth.ms,
-          server: truth.success.server,
+        realAddresses: real.success.addresses,
+        realAnswerExchange: {
+          answers: real.success.answers,
+          ms: g.realAnswer.ms,
+          server: real.success.server,
           transport: "HTTPS 443",
         },
       };
@@ -175,8 +170,8 @@ const checkName = <NetworkNeeds>(
     const state = yield* Ref.make<Gathered>({
       filters: options.filters.map(() => undefined),
       network: undefined,
+      realAnswer: undefined,
       system: undefined,
-      truth: undefined,
     });
     const report = (update: (g: Gathered) => Gathered) =>
       Ref.updateAndGet(state, update).pipe(
@@ -192,10 +187,10 @@ const checkName = <NetworkNeeds>(
     yield* progress(assemble(base, options.filters, yield* Ref.get(state)));
     yield* Effect.all(
       [
-        record(lookupTruth(options.truthUrls, query), (g, truth) => ({
-          ...g,
-          truth,
-        })),
+        record(
+          askUnfiltered(options.unfilteredResolvers, query),
+          (g, realAnswer) => ({ ...g, realAnswer })
+        ),
         record(systemAnswer(query), (g, system) => ({ ...g, system })),
         // Says whether an ISP's filter should have answered this computer,
         // and which filters' answers can be trusted.

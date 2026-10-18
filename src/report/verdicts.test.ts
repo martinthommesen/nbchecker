@@ -13,7 +13,7 @@ import {
   exitNotBlocked,
 } from "../cli/exit-status.ts";
 import { fakeCanary } from "../testing/fake-network.ts";
-import { downTruthUrl, runCheck } from "../testing/run-check.ts";
+import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
 import { toJson } from "./json.ts";
@@ -69,13 +69,15 @@ describe("verdicts: names without an address this computer can use", () => {
 describe("verdicts: compared with the real answer", () => {
   test("a domain whose own record is 0.0.0.0 is not blocked", async () => {
     const r = await runCheck("zero.example");
-    expect(r.truth).toEqual(["0.0.0.0"]);
+    expect(r.realAddresses).toEqual(["0.0.0.0"]);
     expect(isBlocked(r)).toBe(false);
     expect(text(r)).toContain("✓ not blocked by any of 2 filters");
   });
 
   test("a filter's NXDOMAIN without the real answer can't be told", async () => {
-    const r = await runCheck("nope.example", { truthUrls: [downTruthUrl] });
+    const r = await runCheck("nope.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
+    });
     expect(text(r)).toContain(
       "? couldn't tell: the real answer is unavailable"
     );

@@ -11,7 +11,7 @@ import {
   fakeFilters,
   publicTestPage,
 } from "../testing/fake-network.ts";
-import { downTruthUrl, runCheck } from "../testing/run-check.ts";
+import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
 import {
   exitBlocked,
   exitCode,
@@ -40,11 +40,11 @@ describe("exit status", () => {
   });
 
   test("a failed real answer or system lookup makes the check incomplete", async () => {
-    const noTruth = await runCheck("good.example", {
-      truthUrls: [downTruthUrl],
+    const noRealAnswer = await runCheck("good.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
     });
-    expect(noTruth.completion).toBe("incomplete");
-    expect(exitCode([noTruth])).toBe(exitIncomplete);
+    expect(noRealAnswer.completion).toBe("incomplete");
+    expect(exitCode([noRealAnswer])).toBe(exitIncomplete);
     const noSystem = await runCheck("good.example", {
       dns: Layer.succeed(Dns.Dns, failing),
     });
@@ -70,7 +70,9 @@ describe("exit status", () => {
     });
     expect(r.completion).toBe("incomplete");
     expect(exitCode([r])).toBe(exitBlocked);
-    const clean = await runCheck("good.example", { truthUrls: [downTruthUrl] });
+    const clean = await runCheck("good.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
+    });
     expect(exitCode([clean, r])).toBe(exitBlocked);
   });
 });

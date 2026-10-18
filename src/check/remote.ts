@@ -4,7 +4,7 @@ import { Rcode, rcodeName } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer } from "../dns/wire.ts";
 import { addressesIn } from "./address.ts";
-import { hasBlockingError } from "./classify.ts";
+import { hasBlockingError, type Reference } from "./classify.ts";
 import type { Filter } from "./filters.ts";
 
 const isFailure = (a: DnsAnswer): boolean =>
@@ -18,11 +18,6 @@ const failure = (server: string, a: DnsAnswer) => ({
 export interface FilterAnswer {
   readonly answers: readonly DnsAnswer[];
   readonly server: string;
-}
-
-export interface Truth extends FilterAnswer {
-  readonly addresses: readonly string[];
-  readonly exists: boolean;
 }
 
 /**
@@ -51,7 +46,7 @@ export const askFilter = (filter: Filter, host: string) =>
   });
 
 /** Gets the real answer from the first DNS-over-HTTPS resolver that works. */
-export const lookupTruth = (urls: readonly string[], host: string) =>
+export const askUnfiltered = (urls: readonly string[], host: string) =>
   Effect.gen(function* () {
     const transport = yield* DnsTransport;
     const askUrl = (url: string) =>
@@ -64,7 +59,7 @@ export const lookupTruth = (urls: readonly string[], host: string) =>
           if (failed !== undefined) {
             return Effect.fail(failure(url, failed));
           }
-          return Effect.succeed<Truth>({
+          return Effect.succeed<FilterAnswer & Reference>({
             addresses: addressesIn([a, aaaa]),
             answers: [a, aaaa],
             exists: a.rcode !== Rcode.nxDomain,

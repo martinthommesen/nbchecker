@@ -5,10 +5,10 @@ import {
   type CheckResult,
   isRedirected,
   type Outcome,
+  realAnswerCancelled,
+  realAnswerPending,
   shouldAnswer,
   trustedFilters,
-  truthCancelled,
-  truthPending,
   wasCancelled,
 } from "../check/result.ts";
 
@@ -38,26 +38,26 @@ const reasonWhy: Record<Reason, (name: string, detail: string) => string> = {
     "The answer points to Cisco's inspection proxy, so the site is sent through it rather than blocked by DNS. The proxy checks the pages as they load and may still block some URLs.",
 };
 
-const waitingForTruth = "Waiting for the real answer to compare it with.";
+const waitingForRealAnswer = "Waiting for the real answer to compare it with.";
 
 const missingWhy = (r: CheckResult): string => {
-  if (truthPending(r)) {
-    return `It says the domain doesn't exist. ${waitingForTruth}`;
+  if (realAnswerPending(r)) {
+    return `It says the domain doesn't exist. ${waitingForRealAnswer}`;
   }
-  if (r.truthError !== undefined) {
+  if (r.realAnswerError !== undefined) {
     return "It says the domain doesn't exist. The real answer couldn't be fetched, so nbchecker can't tell whether that is a block.";
   }
   return "It says the domain doesn't exist, and the real answer agrees, so this is not a block.";
 };
 
 const resolvesWhy = (name: string, v: Verdict, r: CheckResult): string => {
-  if (truthPending(r)) {
-    return `${name} resolves the domain. ${waitingForTruth}`;
+  if (realAnswerPending(r)) {
+    return `${name} resolves the domain. ${waitingForRealAnswer}`;
   }
-  if (r.truthError !== undefined) {
+  if (r.realAnswerError !== undefined) {
     return `${name} resolves the domain. The real answer couldn't be fetched, so nbchecker can't compare the addresses.`;
   }
-  if (v.answers.some((a) => r.truth.includes(a))) {
+  if (v.answers.some((a) => r.realAddresses.includes(a))) {
     return `Same as the real answer, so ${name} does not block this domain.`;
   }
   return `${name} gives a different address from the real answer, but not a known block answer. Sites on content delivery networks often answer differently per resolver.`;
@@ -122,10 +122,10 @@ const systemBlockWhy = (v: Verdict, r: CheckResult): string => {
 const noAddressWhy = (r: CheckResult): string => {
   const same =
     "This computer's resolver found no address for the domain. It says the same for a domain that doesn't exist, one without addresses, and one with only IPv6 addresses on a computer without IPv6,";
-  if (truthPending(r)) {
-    return `${same} so it is compared with the real answer. ${waitingForTruth}`;
+  if (realAnswerPending(r)) {
+    return `${same} so it is compared with the real answer. ${waitingForRealAnswer}`;
   }
-  if (r.truthError !== undefined) {
+  if (r.realAnswerError !== undefined) {
     return `${same} and the real answer couldn't be fetched, so nbchecker can't tell whether this is a block.`;
   }
   return `${same} and the real answer has no IPv4 address, so this is not a block.`;
@@ -133,7 +133,7 @@ const noAddressWhy = (r: CheckResult): string => {
 
 /** Why this computer resolving the domain is not a block. */
 const resolvesHereWhy = (r: CheckResult): string => {
-  if (r.truthExchange !== undefined && !r.exists) {
+  if (r.realAnswerExchange !== undefined && !r.exists) {
     return "This computer resolves the domain, but the public DNS says it doesn't exist, so it only resolves here, as with a private network or split DNS.";
   }
   return "This computer's own DNS resolves the domain, so no DNS filter blocks it here.";
@@ -165,17 +165,17 @@ const systemWhy = (o: Outcome, r: CheckResult): string => {
 };
 
 /** Why the "Real answer" row reads as it does. */
-const truthWhy = (r: CheckResult): string => {
-  if (truthCancelled(r)) {
+const realAnswerWhy = (r: CheckResult): string => {
+  if (realAnswerCancelled(r)) {
     return "The check was cancelled before the real answer arrived.";
   }
-  if (r.truthError !== undefined) {
-    return `No unfiltered resolver could be reached: ${r.truthError}. Without it, a filter that says a domain doesn't exist can't be told apart from a domain that really doesn't.`;
+  if (r.realAnswerError !== undefined) {
+    return `No unfiltered resolver could be reached: ${r.realAnswerError}. Without it, a filter that says a domain doesn't exist can't be told apart from a domain that really doesn't.`;
   }
-  if (truthPending(r)) {
+  if (realAnswerPending(r)) {
     return "Waiting for the real answer, fetched over encrypted DNS so no filter on your network can change it.";
   }
   return "The real answer, fetched over encrypted DNS so no filter on your network can change it. Every other row is compared with this.";
 };
 
-export { filterWhy, systemWhy, truthWhy };
+export { filterWhy, realAnswerWhy, systemWhy };

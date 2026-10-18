@@ -165,7 +165,7 @@ export const filters: readonly Filter[] = [
 ];
 
 /** Unfiltered DNS-over-HTTPS resolvers give the real answer from anywhere. */
-export const truthResolvers: readonly string[] = [
+export const unfilteredResolvers: readonly string[] = [
   "https://cloudflare-dns.com/dns-query",
   "https://dns.google/dns-query",
 ];
