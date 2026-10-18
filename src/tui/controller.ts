@@ -194,6 +194,8 @@ const moveActions = (
     if (s.result === undefined && !s.checking) {
       return quit();
     }
+    // Show what the results are for, not a half-typed new target.
+    input.value = session.lastTarget ?? "";
     input.blur();
     store.set({ focus: "table" });
   };

@@ -107,6 +107,16 @@ describe("tui", () => {
     expect(screen).toContain("cancelled");
   });
 
+  test("leaving a new check shows the checked domain again", async () => {
+    const s = await start();
+    await checkBlocked(s);
+    s.input.pressKey("/");
+    await s.until("a domain, URL or IP address");
+    s.input.pressEscape();
+    const screen = await s.until(`› ${blockedName}`);
+    expect(screen).not.toContain("a domain, URL or IP address");
+  });
+
   test("shows the connection screen and goes back", async () => {
     const s = await start();
     await checkBlocked(s);

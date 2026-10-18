@@ -6,7 +6,7 @@ import { lines, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
 import { theme } from "./theme.ts";
 
-const barWidth = 24;
+const barWidth = 30;
 const msPerSecond = 1000;
 const truthShown = 2;
 /** Your DNS and the real answer are asked alongside the filters. */
@@ -91,7 +91,12 @@ const verdictBadge = (r: CheckResult): TextChunk[] => {
   if (blocked > 0) {
     return [
       badge("BLOCKED", theme.block),
-      paint(`  by ${blocked} of ${r.filters.length} filters`),
+      paint("  by "),
+      paint(`${blocked} of ${r.filters.length}`, {
+        bold: true,
+        fg: theme.block,
+      }),
+      paint(" filters"),
     ];
   }
   if (systemBlocked) {
@@ -108,7 +113,9 @@ const verdictBadge = (r: CheckResult): TextChunk[] => {
   }
   return [
     badge("NOT BLOCKED", theme.ok),
-    paint(`  by any of ${answered} filters`),
+    paint("  by any of "),
+    paint(String(answered), { bold: true, fg: theme.ok }),
+    paint(" filters"),
   ];
 };
 
@@ -157,7 +164,7 @@ const checkingSummary = (
       head,
       paint("  "),
       paint("━".repeat(filled), { fg: theme.accent }),
-      paint("─".repeat(barWidth - filled), { fg: theme.faint }),
+      paint("━".repeat(barWidth - filled), { fg: theme.track }),
       paint(`  ${finished} of ${total} answered`),
       paint("    blocked so far: ", { fg: theme.dim }),
       paint(String(tally(r).blocked), { fg: theme.block }),
@@ -176,6 +183,23 @@ const cancelledSummary = (r: CheckResult): StyledText => {
       ),
     ],
   ]);
+};
+
+const connectionStatus = (s: State): TextChunk => {
+  const c = s.connection;
+  if (c === undefined) {
+    return paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim });
+  }
+  if (c.filter !== undefined) {
+    return paint(`✕ ${c.filter}`, { fg: theme.block });
+  }
+  if (c.network !== undefined) {
+    return paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok });
+  }
+  if (c.error !== undefined) {
+    return paint("? unknown", { fg: theme.warn });
+  }
+  return paint("· no filter detected", { fg: theme.dim });
 };
 
 /**
@@ -222,19 +246,6 @@ export const inputHint = (s: State): StyledText => {
 };
 
 /** What the header says about this computer's connection. */
-export const connectionBadge = (s: State): StyledText => {
-  const c = s.connection;
-  if (c === undefined) {
-    return lines([[paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim })]]);
-  }
-  if (c.filter !== undefined) {
-    return lines([[paint(`✕ ${c.filter}`, { fg: theme.block })]]);
-  }
-  if (c.network !== undefined) {
-    return lines([[paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok })]]);
-  }
-  if (c.error !== undefined) {
-    return lines([[paint("? unknown", { fg: theme.warn })]]);
-  }
-  return lines([[paint("· no filter detected", { fg: theme.dim })]]);
-};
+/** The box at the top right: which filter this computer's DNS uses. */
+export const connectionBadge = (s: State): StyledText =>
+  lines([[paint("your connection  ", { fg: theme.dim }), connectionStatus(s)]]);
