@@ -40,12 +40,22 @@ jobs:
           "$REVIEW_BASE_SHA...$REVIEW_HEAD_SHA"
           > .git/opencode-review.diff
 
+      - name: Install OpenCode
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/60c9be092129745688bb3c3a752affc6cbd66ede/install -o "$RUNNER_TEMP/install-opencode.sh"
+          bash "$RUNNER_TEMP/install-opencode.sh" --version 1.19.3 --no-modify-path
+          printf '%s\n' "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
       - name: Review the changes
-        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
+        run: opencode github run
         env:
+          MODEL: opencode-go/deepseek-v4.1-flash
+          VARIANT: max
+          SHARE: "false"
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_PR_REVIEW_API_KEY }}
           OPENCODE_CONFIG_CONTENT: |
             {
+              "default_agent": "pr-review",
               "provider": {
                 "opencode-go": {
                   "models": {
@@ -71,12 +81,7 @@ jobs:
                 }
               }
             }
-        with:
-          model: opencode-go/deepseek-v4.1-flash
-          variant: max
-          agent: pr-review
-          share: false
-          prompt: |
+          PROMPT: |
             Review this pull request. Read .git/opencode-review.diff for the
             changes, then inspect relevant source files for context.
 
