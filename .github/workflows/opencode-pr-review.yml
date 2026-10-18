@@ -1,4 +1,4 @@
-# Uses DeepSeek V4.1 Flash on OpenCode Go with maximum reasoning effort.
+# Uses DeepSeek V4.1 Flash on OpenCode Go with low reasoning effort.
 # Store OPENCODE_PR_REVIEW_API_KEY only in the opencode-review environment.
 # Its deployment branch policy must allow only the main branch.
 name: OpenCode PR review
@@ -64,7 +64,7 @@ jobs:
         run: |
           test -n "$OPENCODE_API_KEY" || { echo "::error::Missing protected OpenCode key"; exit 1; }
           opencode run --format json --model opencode-go/deepseek-v4.1-flash \
-            --variant max --agent pr-review "$REVIEW_PROMPT" \
+            --variant low --agent pr-review "$REVIEW_PROMPT" \
             > "$RUNNER_TEMP/opencode-review-events.jsonl"
         env:
           OPENCODE_DISABLE_PROJECT_CONFIG: "1"
@@ -82,7 +82,7 @@ jobs:
                   "models": {
                     "deepseek-v4.1-flash": {
                       "variants": {
-                        "max": { "reasoningEffort": "max" }
+                        "low": { "reasoningEffort": "low" }
                       }
                     }
                   }

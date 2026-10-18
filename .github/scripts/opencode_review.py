@@ -116,7 +116,7 @@ def publish(events_path, repository, number, head, run_id, token):
         return
     body = (
         f"## OpenCode review\n\n{text}\n\n---\n"
-        f"Reviewed commit `{head}` with DeepSeek V4.1 Flash (max effort).\n"
+        f"Reviewed commit `{head}` with DeepSeek V4.1 Flash (low effort).\n"
         f"[Workflow run](https://github.com/{repository}/actions/runs/{run_id})"
     )
     github(f"repos/{repository}/issues/{number}/comments", token, {"body": body})
