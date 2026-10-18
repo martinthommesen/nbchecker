@@ -17,6 +17,7 @@ import { Progress } from "./progress.ts";
 import { askFilter, askUnfiltered, type ServerAnswer } from "./remote.ts";
 import {
   type CheckResult,
+  type Exchange,
   type Network,
   type Outcome,
   pending,
@@ -48,7 +49,7 @@ interface Gathered {
 }
 
 /**
- * How one lookup stands: pending until it is asked, failed with its error,
+ * How one lookup stands: pending until it comes back, failed with its error,
  * or answered with what `toAnswered` makes of the answer and its time.
  */
 const outcomeOf = <A, B>(
@@ -76,20 +77,27 @@ const referenceOf = (realAnswer: Outcome<RealAnswer>): Reference => {
   return realAnswer;
 };
 
+/** How a remote resolver was asked, and what it said. */
+const exchangeOf = (a: ServerAnswer, ms: number): Exchange => ({
+  answers: a.answers,
+  ms,
+  server: a.server,
+});
+
 /** Builds the result from what has answered, classifying it afresh. */
 const assemble = (
   base: CheckResult,
-  asked: readonly Filter[],
+  filters: readonly Filter[],
   g: Gathered
 ): CheckResult => {
   const realAnswer = outcomeOf(g.realAnswer, (a, ms) => ({
     addresses: a.addresses,
-    exchange: { answers: a.answers, ms, server: a.server },
+    exchange: exchangeOf(a, ms),
     exists: a.exists,
   }));
   const reference = referenceOf(realAnswer);
   const filterAnswered = (a: ServerAnswer, ms: number) => ({
-    exchange: { answers: a.answers, ms, server: a.server },
+    exchange: exchangeOf(a, ms),
     verdict: classifyAll(a.answers, reference),
   });
   const systemAnswered = (a: SystemAnswer, ms: number) => ({
@@ -99,7 +107,7 @@ const assemble = (
   const result: CheckResult = {
     ...base,
     checked: true,
-    filters: asked.map((filter, i) => ({
+    filters: filters.map((filter, i) => ({
       filter,
       outcome: outcomeOf(g.filters[i], filterAnswered),
     })),
