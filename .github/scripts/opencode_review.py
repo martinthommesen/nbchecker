@@ -13,6 +13,10 @@ CONFIG_DIRS = {".git", ".opencode", ".claude", ".agents"}
 INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md", "CONTEXT.md"}
 
 
+def is_private_env(path):
+    return path.name.startswith(".env") and path.name != ".env.example"
+
+
 def git(source, *args):
     return subprocess.check_output(
         ["git", "-c", "core.hooksPath=/dev/null", "-C", str(source), *args]
@@ -41,11 +45,22 @@ def prepare(source, destination, base, head):
         # plugins, custom tools, automatically loaded instructions, or skills.
         if CONFIG_DIRS.intersection(path.parts) or path.name in INSTRUCTION_FILES:
             continue
-        if path.name.startswith(".env") and path.name != ".env.example":
+        if is_private_env(path):
             continue
         files.append((path, oid.decode()))
 
-    diff = git(source, "diff", "--no-ext-diff", "--no-textconv", "--unified=40", f"{base}...{head}")
+    comparison = f"{base}...{head}"
+    # Filter both sides, including deletions, with a fixed number of pathspecs.
+    # A separate pass restores safe examples without exposing other .env files.
+    diff_args = (
+        "diff", "--no-ext-diff", "--no-textconv", "--no-renames",
+        "--unified=40", comparison, "--",
+    )
+    diff = git(
+        source, *diff_args, ".", ":(glob,exclude)**/.env*",
+    ) + git(
+        source, *diff_args, ":(glob)**/.env.example",
+    )
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     for path, oid in files:
