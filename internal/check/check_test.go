@@ -200,3 +200,17 @@ func TestFilterServfailIsAnError(t *testing.T) {
 		t.Fatalf("SERVFAIL from every server should be an error, got verdict %+v", r.Filters[0].Verdict)
 	}
 }
+
+func TestReverseLookupFailureIsReported(t *testing.T) {
+	c := New()
+	c.Resolver = resolverAt(fakeDNSRcode(t, nil, dns.RcodeServerFailure))
+	r := c.Check(context.Background(), "192.0.2.1")
+	if r.LookupErr == nil || r.Checked {
+		t.Errorf("want LookupErr and Checked=false, got err=%v checked=%v notes=%v", r.LookupErr, r.Checked, r.Notes)
+	}
+	c.Resolver = resolverAt(fakeDNS(t, nil)) // NXDOMAIN: no PTR record
+	r = c.Check(context.Background(), "192.0.2.1")
+	if r.LookupErr != nil {
+		t.Errorf("a missing PTR is not an error: %v", r.LookupErr)
+	}
+}

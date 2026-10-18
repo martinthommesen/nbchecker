@@ -76,7 +76,7 @@ filter could not be checked or on other errors.
 			}
 		}
 		if err := sc.Err(); err != nil {
-			o.f("reading targets: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "reading targets: %v\n", err)
 			return 2
 		}
 	}
@@ -136,8 +136,9 @@ func exitCode(results []check.Result) int {
 		}
 	}
 	for _, r := range results {
-		if r.Checked && anyFilterFailed(r) {
-			return 2 // an incomplete check must not pass as clean
+		// An incomplete check must not pass as clean.
+		if r.LookupErr != nil || r.Checked && (anyFilterFailed(r) || r.TruthErr != nil) {
+			return 2
 		}
 	}
 	return code

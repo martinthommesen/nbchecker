@@ -34,6 +34,8 @@ func TestExitCode(t *testing.T) {
 	blocked := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Verdict: check.Verdict{Blocked: true, Reason: check.ReasonNettvern}}}}
 	unreachable := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}}}
 	partial := check.Result{Checked: true, Filters: []check.FilterResult{{Filter: "Nettvern", Err: errors.New("timeout")}, {Filter: "Nettvern+"}}}
+	noTruth := check.Result{Checked: true, TruthErr: errors.New("doh down"), Filters: []check.FilterResult{{Filter: "Nettvern"}}}
+	ptrFailed := check.Result{IsIP: true, LookupErr: errors.New("timeout")}
 	ip := check.Result{IsIP: true}
 
 	for name, tt := range map[string]struct {
@@ -44,6 +46,8 @@ func TestExitCode(t *testing.T) {
 		"one blocked":     {[]check.Result{ok, blocked}, 1},
 		"unreachable":     {[]check.Result{blocked, unreachable}, 2},
 		"one filter down": {[]check.Result{partial}, 2},
+		"truth down":      {[]check.Result{noTruth}, 2},
+		"PTR lookup fail": {[]check.Result{ptrFailed}, 2},
 	} {
 		if got := exitCode(tt.rs); got != tt.want {
 			t.Errorf("%s: exitCode = %d, want %d", name, got, tt.want)

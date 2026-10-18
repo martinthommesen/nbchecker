@@ -46,17 +46,18 @@ type FilterResult struct {
 
 // Result is everything known about one target.
 type Result struct {
-	Target   string
-	Host     string // the name looked up (from a URL, or a PTR for an IP)
-	IsIP     bool
-	Checked  bool     // DNS was checked; false for an IP with no reverse name
-	Exists   bool     // an unfiltered resolver found the name
-	Truth    []string // unfiltered answers
-	TruthErr error
-	Filters  []FilterResult
-	System   Verdict // what this computer's own DNS says
-	SysErr   error
-	Notes    []string
+	Target    string
+	Host      string // the name looked up (from a URL, or a PTR for an IP)
+	IsIP      bool
+	Checked   bool     // DNS was checked; false for an IP with no reverse name
+	LookupErr error    // the reverse lookup of an IP failed
+	Exists    bool     // an unfiltered resolver found the name
+	Truth     []string // unfiltered answers
+	TruthErr  error
+	Filters   []FilterResult
+	System    Verdict // what this computer's own DNS says
+	SysErr    error
+	Notes     []string
 }
 
 // Blocked reports whether any filter blocks the target.
@@ -124,7 +125,14 @@ func (c *Checker) Check(ctx context.Context, target string) Result {
 	if isIP {
 		r.Notes = append(r.Notes, "Nettvern and Nettvern+ filter DNS names, not IP addresses, so an IP address you connect to directly is not blocked by them.")
 		names, err := c.Resolver.LookupAddr(ctx, host)
-		if err != nil || len(names) == 0 {
+		var dnsErr *net.DNSError
+		notFound := errors.As(err, &dnsErr) && dnsErr.IsNotFound
+		if err != nil && !notFound {
+			r.LookupErr = err
+			r.Notes = append(r.Notes, fmt.Sprintf("Could not look up its reverse DNS name: %v", err))
+			return r
+		}
+		if len(names) == 0 {
 			r.Notes = append(r.Notes, "The address has no reverse DNS name, so there is nothing else to check.")
 			return r
 		}
