@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import { isBlocked } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
-import type { CheckResult } from "../check/result.ts";
+import { type CheckResult, cancelPending, pending } from "../check/result.ts";
 import {
   exitBlocked,
   exitCode,
@@ -172,13 +172,14 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
       dns: redirectedComputer,
       transport: redirectingTransport(),
     });
-    const cancelled: CheckResult = {
+    // Cancelled before any filter answered.
+    const cancelled = cancelPending({
       ...r,
-      filters: r.filters.map((f) => ({
-        ...f,
-        outcome: { error: "cancelled", kind: "failed", ms: 0 },
-      })),
-    };
+      filters: r.filters.map((f) => ({ ...f, outcome: pending })),
+    });
+    expect(text(cancelled)).toContain(
+      "– Security filter  cancelled before it answered"
+    );
     expect(text(cancelled)).not.toContain("don't look like they come from");
   });
 
