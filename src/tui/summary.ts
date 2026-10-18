@@ -6,7 +6,7 @@ import { lines, paint, spinner } from "./paint.ts";
 import type { State } from "./state.ts";
 import { theme } from "./theme.ts";
 
-const barWidth = 24;
+const barWidth = 30;
 const msPerSecond = 1000;
 const truthShown = 2;
 /** Your DNS and the real answer are asked alongside the filters. */
@@ -91,7 +91,12 @@ const verdictBadge = (r: CheckResult): TextChunk[] => {
   if (blocked > 0) {
     return [
       badge("BLOCKED", theme.block),
-      paint(`  by ${blocked} of ${r.filters.length} filters`),
+      paint("  by "),
+      paint(`${blocked} of ${r.filters.length}`, {
+        bold: true,
+        fg: theme.block,
+      }),
+      paint(" filters"),
     ];
   }
   if (systemBlocked) {
@@ -108,7 +113,9 @@ const verdictBadge = (r: CheckResult): TextChunk[] => {
   }
   return [
     badge("NOT BLOCKED", theme.ok),
-    paint(`  by any of ${answered} filters`),
+    paint("  by any of "),
+    paint(String(answered), { bold: true, fg: theme.ok }),
+    paint(" filters"),
   ];
 };
 
@@ -141,7 +148,8 @@ const resultSummary = (r: CheckResult, wide: boolean): StyledText => {
 
 const checkingSummary = (
   r: CheckResult | undefined,
-  tick: number
+  tick: number,
+  wide: boolean
 ): StyledText => {
   const head = paint(`${spinner(tick)} Checking`, {
     bold: true,
@@ -152,17 +160,21 @@ const checkingSummary = (
   }
   const { finished, total } = progress(r);
   const filled = Math.round((finished / total) * barWidth);
-  return lines([
-    [
-      head,
-      paint("  "),
-      paint("━".repeat(filled), { fg: theme.accent }),
-      paint("─".repeat(barWidth - filled), { fg: theme.faint }),
-      paint(`  ${finished} of ${total} answered`),
-      paint("    blocked so far: ", { fg: theme.dim }),
-      paint(String(tally(r).blocked), { fg: theme.block }),
-    ],
-  ]);
+  const bar = [
+    head,
+    paint("  "),
+    paint("━".repeat(filled), { fg: theme.accent }),
+    paint("━".repeat(barWidth - filled), { fg: theme.track }),
+    paint(`  ${finished} of ${total} answered`),
+  ];
+  const blocked = [
+    paint("blocked so far: ", { fg: theme.dim }),
+    paint(String(tally(r).blocked), { fg: theme.block }),
+  ];
+  if (wide) {
+    return lines([[...bar, paint("    "), ...blocked]]);
+  }
+  return lines([bar, blocked]);
 };
 
 /** A cancelled check has no verdict, only what answered before. */
@@ -178,13 +190,31 @@ const cancelledSummary = (r: CheckResult): StyledText => {
   ]);
 };
 
+const connectionStatus = (s: State): TextChunk => {
+  const c = s.connection;
+  if (c === undefined) {
+    return paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim });
+  }
+  if (c.filter !== undefined) {
+    return paint(`✕ ${c.filter}`, { fg: theme.block });
+  }
+  if (c.network !== undefined) {
+    return paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok });
+  }
+  if (c.error !== undefined) {
+    return paint("? unknown", { fg: theme.warn });
+  }
+  return paint("· no filter detected", { fg: theme.dim });
+};
+
 /**
  * The line under the input: the verdict, or progress while checking. On a
- * narrow screen the reference answers go on a line of their own.
+ * narrow screen the reference answers, or the blocked count, go on a line of
+ * their own.
  */
 export const summaryText = (s: State, wide: boolean): StyledText => {
   if (s.checking) {
-    return checkingSummary(s.result, s.tick);
+    return checkingSummary(s.result, s.tick, wide);
   }
   if (s.cancelled && s.result?.checked === true) {
     return cancelledSummary(s.result);
@@ -221,20 +251,6 @@ export const inputHint = (s: State): StyledText => {
   ]);
 };
 
-/** What the header says about this computer's connection. */
-export const connectionBadge = (s: State): StyledText => {
-  const c = s.connection;
-  if (c === undefined) {
-    return lines([[paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim })]]);
-  }
-  if (c.filter !== undefined) {
-    return lines([[paint(`✕ ${c.filter}`, { fg: theme.block })]]);
-  }
-  if (c.network !== undefined) {
-    return lines([[paint(`✓ ${c.network} DNS, no filter`, { fg: theme.ok })]]);
-  }
-  if (c.error !== undefined) {
-    return lines([[paint("? unknown", { fg: theme.warn })]]);
-  }
-  return lines([[paint("· no filter detected", { fg: theme.dim })]]);
-};
+/** The box at the top right: which filter this computer's DNS uses. */
+export const connectionBadge = (s: State): StyledText =>
+  lines([[paint("your connection  ", { fg: theme.dim }), connectionStatus(s)]]);

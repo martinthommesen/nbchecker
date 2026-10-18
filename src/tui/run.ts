@@ -85,6 +85,8 @@ const runTui = (version: string, first?: string) =>
     renderer.keyInput.on("keypress", (key: KeyEvent) => {
       const action = actionFor(store.get(), key);
       if (action !== undefined) {
+        // The key did its job; don't also type it into the input.
+        key.preventDefault();
         controller.handle(action);
       }
     });

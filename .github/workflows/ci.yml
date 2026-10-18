@@ -30,6 +30,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
+      - name: Test trusted PR review helpers
+        run: python3 -I -m unittest discover -s .github/scripts -p '*_test.py'
 
   test:
     name: Test (${{ matrix.os }})
