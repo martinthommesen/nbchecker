@@ -6,7 +6,12 @@ import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import type { Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
-import { exitBlocked, exitCode, exitIncomplete } from "../cli/exit-status.ts";
+import {
+  exitBlocked,
+  exitCode,
+  exitIncomplete,
+  exitNotBlocked,
+} from "../cli/exit-status.ts";
 import {
   blockingRedirectTransport,
   computerWith,
@@ -136,7 +141,7 @@ describe("intercepted DNS: self-tests that get no answer", () => {
     expect(r.network?.selfTests.map((t) => t.result)).toEqual(["no-answer"]);
     expect(text(r)).toContain("✓ not blocked by any of 1 filters");
     expect(r.completion).toBe("complete");
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 
   test("Telenor's filters off its network aren't redirected", async () => {
@@ -157,7 +162,7 @@ describe("intercepted DNS: self-tests that get no answer", () => {
     );
     expect(text(r)).toContain("✓ not blocked by any of 2 filters");
     expect(r.completion).toBe("complete");
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 });
 
