@@ -1,12 +1,12 @@
 # GoReleaser config: https://goreleaser.com/customization/
 version: 2
 
-project_name: nettvern-check
+project_name: nbchecker
 
 builds:
-  - id: nettvern-check
-    main: ./cmd/nettvern-check
-    binary: nettvern-check
+  - id: nbchecker
+    main: ./cmd/nbchecker
+    binary: nbchecker
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]

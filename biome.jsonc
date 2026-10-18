@@ -1,0 +1,85 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "root": true,
+  "extends": ["ultracite/biome/core", "ultracite/biome/type-aware"],
+  // Every rule Ultracite ships turned off is turned back on here.
+  "assist": {
+    "actions": {
+      "source": {
+        "useSortedEnumMembers": "on"
+      }
+    }
+  },
+  "linter": {
+    "rules": {
+      "a11y": {
+        "noAutofocus": "error"
+      },
+      "complexity": {
+        "noExcessiveLinesPerFunction": "error",
+        "noImplicitCoercions": "error",
+        "noImportantStyles": "error",
+        "useMaxParams": "error"
+      },
+      "correctness": {
+        "noNodejsModules": "error",
+        "noPrivateImports": "error",
+        "noProcessGlobal": "error",
+        "noUnresolvedImports": "error",
+        "useImportExtensions": "error",
+        "useJsonImportAttributes": "error",
+        "useUniqueElementIds": "error"
+      },
+      "performance": {
+        "noReExportAll": "error"
+      },
+      "security": {
+        "noSecrets": "error"
+      },
+      "style": {
+        "noCommonJs": "error",
+        "noContinue": "error",
+        "noDefaultExport": "error",
+        "noExcessiveClassesPerFile": "error",
+        "noExcessiveLinesPerFile": "error",
+        "noHexColors": "error",
+        "noImplicitBoolean": "error",
+        "noJsxLiterals": "error",
+        "noMagicNumbers": "error",
+        "noProcessEnv": "error",
+        "noTernary": "error",
+        "useComponentExportOnlyModules": "error",
+        "useConsistentCurlyBraces": "error",
+        "useExplicitLengthCheck": "error",
+        "useExportsLast": "error",
+        "useGlobalThis": "error",
+        "useNamingConvention": "error",
+        "useSingleVarDeclarator": "error"
+      },
+      "suspicious": {
+        "noConsole": "error",
+        "noDeprecatedImports": "error",
+        "noImportCycles": "error",
+        "noUndeclaredEnvVars": "error",
+        "useArraySortCompare": "error",
+        "useDeprecatedDate": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Ultracite relaxes these for tests; keep them on there too.
+      "includes": ["**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "error"
+          },
+          "suspicious": {
+            "noExplicitAny": "error"
+          }
+        }
+      }
+    }
+  ]
+}

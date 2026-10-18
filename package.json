@@ -1,0 +1,38 @@
+{
+  "name": "nbchecker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Check whether Telenor Nettvern, Nettvern+ or a public DNS filter blocks a domain or IP address.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinthommesen/nbchecker.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "nbchecker": "src/main.ts"
+  },
+  "scripts": {
+    "build": "bun build --compile --minify --sourcemap src/main.ts --outfile dist/nbchecker",
+    "check": "bun run typecheck && bun run lint && bun test",
+    "fix": "ultracite fix",
+    "lint": "ultracite check",
+    "start": "bun run src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.5",
+    "@opentui/core": "0.6.6",
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.3",
+    "typescript": "7.0.2",
+    "ultracite": "8.0.1"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  }
+}

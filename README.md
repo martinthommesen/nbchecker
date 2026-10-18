@@ -1,7 +1,7 @@
-# nettvern-check
+# nbchecker
 
-[![CI](https://github.com/martinthommesen/nettvern-check/actions/workflows/ci.yml/badge.svg)](https://github.com/martinthommesen/nettvern-check/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/martinthommesen/nettvern-check/badge)](https://scorecard.dev/viewer/?uri=github.com/martinthommesen/nettvern-check)
+[![CI](https://github.com/martinthommesen/nbchecker/actions/workflows/ci.yml/badge.svg)](https://github.com/martinthommesen/nbchecker/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/martinthommesen/nbchecker/badge)](https://scorecard.dev/viewer/?uri=github.com/martinthommesen/nbchecker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Check whether Telenor's Nettvern, Nettvern+ or SafeZone is blocking a domain or IP address.
@@ -11,7 +11,7 @@ Check whether Telenor's Nettvern, Nettvern+ or SafeZone is blocking a domain or 
 ## Install
 
 Download the file for your platform (Windows, macOS or Linux) from the
-[latest release](https://github.com/martinthommesen/nettvern-check/releases/latest).
+[latest release](https://github.com/martinthommesen/nbchecker/releases/latest).
 It is a single program with nothing else to install.
 
 Each release includes a `checksums.txt` file and a signed build provenance
@@ -19,7 +19,7 @@ attestation, so you can check that the file you downloaded was built from this
 repository:
 
 ```sh
-gh attestation verify <downloaded-file> --repo martinthommesen/nettvern-check
+gh attestation verify <downloaded-file> --repo martinthommesen/nbchecker
 ```
 
 ## Usage
@@ -32,7 +32,7 @@ domains one at a time. You can also pass domains, URLs or IP addresses
 directly:
 
 ```console
-$ nettvern-check tiktokvip.cyou donutbasefinder.com
+$ nbchecker tiktokvip.cyou donutbasefinder.com
 Your computer's DNS filter: Nettvern
 
 tiktokvip.cyou
@@ -83,13 +83,13 @@ directly. It only shows up in the "This computer" line, and only when the
 computer is online through a SafeZone phone's hotspot or the SafeZone VPN.
 SafeZone can also block IP addresses, which this checker doesn't test. How
 SafeZone answers in Norway isn't confirmed yet. If you have SafeZone, please
-[open an issue](https://github.com/martinthommesen/nettvern-check/issues/new/choose)
+[open an issue](https://github.com/martinthommesen/nbchecker/issues/new/choose)
 with the program's `--json` output from such a connection.
 
 ## Building from source
 
 ```sh
-go install github.com/martinthommesen/nettvern-check/cmd/nettvern-check@latest
+go install github.com/martinthommesen/nbchecker/cmd/nbchecker@latest
 ```
 
 ## Contributing
@@ -106,7 +106,7 @@ opening a public issue.
 This is an independent project. It is not made, endorsed or supported by
 Telenor. Nettvern, Nettvern+ and SafeZone are names used by Telenor. Results are
 a best-effort check and can be wrong; if you think one is, please
-[report it](https://github.com/martinthommesen/nettvern-check/issues/new/choose).
+[report it](https://github.com/martinthommesen/nbchecker/issues/new/choose).
 
 ## License
 

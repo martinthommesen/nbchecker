@@ -1,11 +1,11 @@
-# Contributing to nettvern-check
+# Contributing to nbchecker
 
 Thanks for helping. Bug reports, wrong results, documentation fixes and code
 are all welcome.
 
 ## Reporting problems
 
-Use the [issue forms](https://github.com/martinthommesen/nettvern-check/issues/new/choose).
+Use the [issue forms](https://github.com/martinthommesen/nbchecker/issues/new/choose).
 For wrong results, the most useful details are the domain or IP you checked,
 which Telenor filter you have (Nettvern, Nettvern+ or SafeZone), and the full
 output of the program.
@@ -18,8 +18,8 @@ You need [Go](https://go.dev/dl/) (the version in `go.mod`) and, optionally,
 [golangci-lint](https://golangci-lint.run/welcome/install/) v2.
 
 ```sh
-git clone https://github.com/martinthommesen/nettvern-check.git
-cd nettvern-check
+git clone https://github.com/martinthommesen/nbchecker.git
+cd nbchecker
 go build ./...
 go test ./...
 ```

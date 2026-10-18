@@ -11,7 +11,7 @@ discussions.
 
 Report them privately through GitHub instead:
 
-1. Go to the [Security tab](https://github.com/martinthommesen/nettvern-check/security)
+1. Go to the [Security tab](https://github.com/martinthommesen/nbchecker/security)
    of this repository.
 2. Select **Report a vulnerability**.
 3. Describe the problem, how to reproduce it, and the impact you expect.
@@ -22,7 +22,7 @@ credit to you, unless you ask to stay anonymous.
 
 ## Scope
 
-In scope: the `nettvern-check` program, its build and release process, and the
+In scope: the `nbchecker` program, its build and release process, and the
 files published in this repository's releases.
 
 Out of scope: Telenor's services themselves, including how Nettvern, Nettvern+
