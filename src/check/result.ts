@@ -18,6 +18,9 @@ const settle = (o: Outcome): Outcome => {
   return o;
 };
 
+/** One failed self-test marks that filter, not the whole network. */
+const minRedirected = 2;
+
 /** How one resolver was asked, and what it said. */
 export interface Exchange {
   /** The raw answers to the A and AAAA queries. */
@@ -141,15 +144,16 @@ export const redirectedFilters = (n: Network): readonly string[] =>
   n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
 
 /**
- * Whether most filters that answered the self-test failed it, so DNS on
- * this network seems to be intercepted.
+ * Whether most filters that answered the self-test failed it, and more than
+ * one did, so DNS on this network seems to be intercepted.
  */
 export const seemsIntercepted = (n: Network | undefined): boolean => {
   if (n === undefined) {
     return false;
   }
   const passed = n.selfTests.filter((t) => t.result === "passed").length;
-  return redirectedFilters(n).length > passed;
+  const redirected = redirectedFilters(n).length;
+  return redirected >= minRedirected && redirected > passed;
 };
 
 /**

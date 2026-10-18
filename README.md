@@ -157,8 +157,9 @@ small queries per run.
   usual. Telenor's filters don't answer outside Telenor's network.
 - **redirected?**: the answer wasn't the filter's block, so its answers seem
   to come from another resolver. Its row says so, it counts as neither
-  blocked nor not blocked, and the check is incomplete. When most filters
-  fail, the result says DNS on this network seems to be intercepted.
+  blocked nor not blocked, and the check is incomplete. When at least two
+  fail, and more fail than pass, the result says DNS on this network seems
+  to be intercepted.
 
 The `c` screen shows each filter's self-test. In the JSON, such a filter
 has `"intercepted": true`, the result's `status` is `"intercepted"` when

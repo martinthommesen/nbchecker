@@ -115,4 +115,15 @@ describe("self-test without a test name", () => {
     ]);
     expect(redirectedFilters(n)).toEqual(["Family filter"]);
   });
+
+  test("one redirected filter, when the others can't tell, isn't an intercepted network", async () => {
+    const [security, family] = fakeFilters;
+    const { canary: _, ...untested } = security as Filter;
+    const n = await detect(redirectingTransport(), [
+      untested,
+      family,
+    ] as Filter[]);
+    expect(redirectedFilters(n)).toEqual(["Family filter"]);
+    expect(seemsIntercepted(n)).toBe(false);
+  });
 });
