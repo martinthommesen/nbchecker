@@ -1,37 +1,97 @@
-import { expect, test } from "bun:test";
-import { listen } from "bun";
-import { Effect } from "effect";
-import { response } from "../testing/response.ts";
-import { sendTcp } from "./sockets.ts";
-import { encodeQuery, responseId } from "./wire.ts";
+import { describe, expect, test } from "bun:test";
+import { connect, listen, sleep } from "bun";
+import { Effect, Fiber } from "effect";
+import { replyTo } from "../testing/response.ts";
+import { type OpenTcp, sendTcp } from "./sockets.ts";
+import { encodeQuery } from "./wire.ts";
 
 const lengthPrefix = 2;
 const queryId = 7;
+const waitMs = 500;
+const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
 
-test("a TCP answer for a different query is rejected", async () => {
+const frame = (body: Uint8Array): Uint8Array => {
+  const framed = new Uint8Array(body.length + lengthPrefix);
+  new DataView(framed.buffer).setUint16(0, body.length);
+  framed.set(body, lengthPrefix);
+  return framed;
+};
+
+/** A loopback DNS server over TCP that says if the client hung up. */
+const tcpServer = (reply: (query: Uint8Array) => Uint8Array) => {
+  const seen = { queries: 0 };
+  const { promise: hungUp, resolve } = Promise.withResolvers<boolean>();
   const server = listen({
     hostname: "127.0.0.1",
     port: 0,
     socket: {
       binaryType: "uint8array",
+      close: () => resolve(true),
       data: (socket, data) => {
-        const id = (responseId(data.subarray(lengthPrefix)) ?? 0) + 1;
-        const body = response({ id });
-        const framed = new Uint8Array(body.length + lengthPrefix);
-        new DataView(framed.buffer).setUint16(0, body.length);
-        framed.set(body, lengthPrefix);
-        socket.write(framed);
+        seen.queries += 1;
+        socket.write(frame(reply(data.subarray(lengthPrefix))));
       },
     },
   });
-  try {
-    const error = await encodeQuery(queryId, "example.com", "A").pipe(
-      Effect.flatMap((q) => sendTcp("127.0.0.1", server.port, q)),
-      Effect.flip,
-      Effect.runPromise
-    );
-    expect(error.message).toContain("different query");
-  } finally {
-    server.stop(true);
-  }
+  const closed = () => Promise.race([hungUp, sleep(waitMs).then(() => false)]);
+  return { closed, port: server.port, seen, stop: () => server.stop(true) };
+};
+
+const askTcp = (port: number, open?: OpenTcp) =>
+  Effect.flip(sendTcp("127.0.0.1", port, query, open)).pipe(Effect.runPromise);
+
+describe("sendTcp", () => {
+  test("an answer for a different query is rejected and hung up", async () => {
+    const server = tcpServer((q) => replyTo(q, { id: queryId + 1 }));
+    try {
+      const error = await askTcp(server.port);
+      expect(error.message).toContain("different query");
+      expect(await server.closed()).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("an answer to another question is rejected", async () => {
+    const server = tcpServer((q) => replyTo(q, { question: "bad.example" }));
+    try {
+      const error = await askTcp(server.port);
+      expect(error.reason).toBe("bad answer: question doesn't match");
+      expect(await server.closed()).toBe(true);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("a connection that opens after an interrupt sends nothing", async () => {
+    const server = tcpServer((q) => replyTo(q));
+    try {
+      const { promise: called, resolve } = Promise.withResolvers<void>();
+      const open: OpenTcp = (options) => {
+        const opening = connect(options);
+        resolve();
+        return opening;
+      };
+      const fiber = Effect.runFork(
+        sendTcp("127.0.0.1", server.port, query, open)
+      );
+      await called;
+      await Effect.runPromise(Fiber.interrupt(fiber));
+      expect(await server.closed()).toBe(true);
+      expect(server.seen.queries).toBe(0);
+    } finally {
+      server.stop();
+    }
+  });
+
+  test("a socket that can't be created is a query error", async () => {
+    const open: OpenTcp = () => {
+      throw new Error("connect EPERM 127.0.0.1:53");
+    };
+    const error = await askTcp(1, open);
+    expect(error).toMatchObject({
+      _tag: "QueryError",
+      reason: "connect EPERM 127.0.0.1:53",
+    });
+  });
 });

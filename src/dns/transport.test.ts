@@ -2,9 +2,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { listen, serve, udpSocket } from "bun";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { response } from "../testing/response.ts";
+import { replyTo } from "../testing/response.ts";
 import { DnsTransport, layer } from "./transport.ts";
-import { responseId } from "./wire.ts";
 
 const answerRecord = {
   name: "example.com",
@@ -32,9 +31,8 @@ beforeAll(async () => {
     hostname: "127.0.0.1",
     socket: {
       data: (socket, data, fromPort, fromAddress) => {
-        const id = responseId(data) ?? 0;
         socket.send(
-          response({ id, records: [answerRecord], truncated: true }),
+          replyTo(data, { records: [answerRecord], truncated: true }),
           fromPort,
           fromAddress
         );
@@ -50,9 +48,8 @@ beforeAll(async () => {
       binaryType: "uint8array",
       data: (socket, data) => {
         const query = data.subarray(lengthPrefix);
-        const id = responseId(query) ?? 0;
         const truncated = decoder.decode(query).includes("cut");
-        const body = response({ id, records: [bigRecord], truncated });
+        const body = replyTo(query, { records: [bigRecord], truncated });
         const framed = new Uint8Array(body.length + lengthPrefix);
         new DataView(framed.buffer).setUint16(0, body.length);
         framed.set(body, lengthPrefix);
@@ -99,10 +96,7 @@ test("doh posts a DNS message and decodes the answer", async () => {
   const server = serve({
     fetch: async (request) => {
       const query = new Uint8Array(await request.arrayBuffer());
-      const body = response({
-        id: responseId(query) ?? 0,
-        records: [answerRecord],
-      });
+      const body = replyTo(query, { records: [answerRecord] });
       return new Response(body, {
         headers: { "content-type": "application/dns-message" },
       });
