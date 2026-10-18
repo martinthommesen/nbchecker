@@ -4,6 +4,7 @@ import { Console, Effect, Fiber, Stdio, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { check } from "./check/checker.ts";
 import { connectionText, detectConnection } from "./check/connection.ts";
+import { normalize } from "./check/normalize.ts";
 import type { CheckResult } from "./check/result.ts";
 import { ExitStatus, exitUsage } from "./exit-status.ts";
 import { exitCode, toJson } from "./report/json.ts";
@@ -43,40 +44,59 @@ const stdinTargets = Stream.unwrap(
   })
 );
 
+/** What `dnsFilter` says when no target could be checked. */
+const notChecked = "not checked";
+
 /**
  * Checks the targets one at a time. Text is printed as each one is
  * checked, so a long list from standard input shows progress; JSON is one
- * document at the end.
+ * document at the end. This computer's DNS filter is only looked up once a
+ * target can be checked, so a run of invalid targets needs no network, and
+ * the text header comes just before the first such result.
  */
 const report = <E, R>(targets: Stream.Stream<string, E, R>, json: boolean) =>
   Effect.gen(function* () {
     const stdio = yield* Stdio.Stdio;
     const color = yield* stdio.stdoutIsTerminal;
-    const dnsFilter = yield* Effect.forkChild(
-      Effect.map(detectConnection, connectionText)
-    );
     const results: CheckResult[] = [];
-    const checked = targets.pipe(
-      Stream.mapEffect(check),
-      Stream.tap((r) => Effect.sync(() => results.push(r)))
+    let detection: Fiber.Fiber<string> | undefined;
+    let headerPrinted = false;
+    const header = Effect.gen(function* () {
+      if (json || headerPrinted || detection === undefined) {
+        return;
+      }
+      headerPrinted = true;
+      const dnsFilter = yield* Fiber.join(detection);
+      yield* print(`DNS filter on this computer: ${dnsFilter}\n`);
+    });
+    yield* Stream.runForEach(targets, (target) =>
+      Effect.gen(function* () {
+        if (detection === undefined && normalize(target).kind !== "invalid") {
+          detection = yield* Effect.forkScoped(
+            Effect.map(detectConnection, connectionText)
+          );
+        }
+        const result = yield* check(target);
+        results.push(result);
+        yield* header;
+        if (!json) {
+          yield* print(renderText(view(result), color));
+        }
+      })
     );
     if (json) {
-      yield* Stream.runDrain(checked);
-      const meta = { dnsFilter: yield* Fiber.join(dnsFilter), version };
-      yield* print(JSON.stringify(toJson(meta, results), null, jsonIndent));
-    } else {
-      yield* print(
-        `DNS filter on this computer: ${yield* Fiber.join(dnsFilter)}\n`
-      );
-      yield* Stream.runForEach(checked, (r) =>
-        print(renderText(view(r), color))
-      );
+      let dnsFilter = notChecked;
+      if (detection !== undefined) {
+        dnsFilter = yield* Fiber.join(detection);
+      }
+      const document = toJson({ dnsFilter, version }, results);
+      yield* print(JSON.stringify(document, null, jsonIndent));
     }
     const code = exitCode(results);
     if (code !== 0) {
       return yield* Effect.fail(new ExitStatus({ code }));
     }
-  });
+  }).pipe(Effect.scoped);
 
 const handler = (input: {
   readonly json: boolean;

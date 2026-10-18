@@ -80,6 +80,9 @@ targets from it, one per line, and prints each result as soon as it's
 checked. With `--json`, it prints one JSON document at the end. Without
 arguments and with standard input a terminal, it opens the interactive app, or
 prints a usage error if `--json` is given or the output isn't a terminal.
+It only looks up which DNS filter your computer uses once a target can be
+checked, so a list of invalid targets needs no network; the JSON then says
+`"dnsFilter": "not checked"`.
 
 When it checks targets from arguments or standard input, the exit status is:
 

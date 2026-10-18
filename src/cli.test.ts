@@ -143,3 +143,23 @@ describe("usage", () => {
     expect(String(errors)).toContain("standard input");
   });
 });
+
+describe("connection detection", () => {
+  test("is skipped when no target can be checked", async () => {
+    const proc = run(["--json", "not a name!"]);
+    const out = await new Response(proc.stdout).text();
+    const parsed = JSON.parse(out) as { dnsFilter: string };
+    expect(parsed.dnsFilter).toBe("not checked");
+    const text = await new Response(run(["not a name!"]).stdout).text();
+    expect(text).not.toContain("DNS filter on this computer");
+  });
+
+  test("runs once a target can be checked", async () => {
+    const proc = run(["--json", "not a name!", "good.example"]);
+    const out = await new Response(proc.stdout).text();
+    const parsed = JSON.parse(out) as { dnsFilter: string };
+    expect(parsed.dnsFilter).toBe("Telenor Nettvern+");
+    const text = await new Response(run(["good.example"]).stdout).text();
+    expect(text).toStartWith("DNS filter on this computer: Telenor Nettvern+");
+  });
+});
