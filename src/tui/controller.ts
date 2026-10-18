@@ -68,7 +68,6 @@ const checkTarget = (
     });
   return Effect.gen(function* () {
     yield* update(() => ({
-      cancelled: false,
       checking: true,
       elapsedMs: undefined,
       focus: "table",
@@ -87,7 +86,6 @@ const checkTarget = (
       Effect.timed
     );
     yield* update(() => ({
-      cancelled: false,
       checking: false,
       elapsedMs: Duration.toMillis(duration),
       result,
@@ -95,7 +93,6 @@ const checkTarget = (
   }).pipe(
     Effect.onInterrupt(() =>
       update(({ result }) => ({
-        cancelled: true,
         checking: false,
         result: result && cancelPending(result),
       }))
