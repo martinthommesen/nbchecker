@@ -5,9 +5,8 @@
 import { Context, Duration, Effect, Ref, Result } from "effect";
 import { timeoutAfter } from "../dns/query-error.ts";
 import {
-  classify,
+  classifyAll,
   classifySystem,
-  merge,
   noReference,
   type Reference,
 } from "./classify.ts";
@@ -61,7 +60,7 @@ const filterOutcome = (
   return {
     exchange: { answers, ms, server, transport: "UDP 53" },
     kind: "answered",
-    verdict: merge(...answers.map((a) => classify(a, reference))),
+    verdict: classifyAll(answers, reference),
   };
 };
 

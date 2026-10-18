@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { Ede, Rcode } from "../dns/codes.ts";
 import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 import {
-  canonicalAddress,
   classify,
   classifySystem,
   describe as describeVerdict,
@@ -187,12 +186,6 @@ test("merge keeps the block and removes duplicate answers", () => {
   const merged = merge(plain, blocked);
   expect(merged.reason).toBe("nettvern");
   expect(merged.answers).toEqual(["192.0.2.1", "nettvern-info.telenor.net"]);
-});
-
-test("canonicalAddress unmaps IPv4-mapped IPv6 and shortens IPv6", () => {
-  expect(canonicalAddress("::ffff:192.0.2.1")).toBe("192.0.2.1");
-  expect(canonicalAddress("2001:0db8:0000::0001")).toBe("2001:db8::1");
-  expect(canonicalAddress("not-an-ip")).toBe("not-an-ip");
 });
 
 test("describe", () => {

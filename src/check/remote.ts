@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { Rcode, rcodeName } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import type { DnsAnswer } from "../dns/wire.ts";
+import { addressesIn } from "./address.ts";
 import { hasBlockingError } from "./classify.ts";
 import type { Filter } from "./filters.ts";
 
@@ -63,11 +64,8 @@ export const lookupTruth = (urls: readonly string[], host: string) =>
           if (failed !== undefined) {
             return Effect.fail(failure(url, failed));
           }
-          const addresses = [...a.records, ...aaaa.records]
-            .filter((r) => r.type !== "CNAME")
-            .map((r) => r.value);
           return Effect.succeed<Truth>({
-            addresses,
+            addresses: addressesIn([a, aaaa]),
             answers: [a, aaaa],
             exists: a.rcode !== Rcode.nxDomain,
             server: url,

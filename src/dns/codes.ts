@@ -34,13 +34,6 @@ const extendedErrorNames = new Map<number, string>([
   [Ede.prohibited, "Prohibited"],
 ]);
 
-/** The Extended DNS Errors that mean the name was blocked. */
-const blockingCodes: ReadonlySet<number> = new Set([
-  Ede.blocked,
-  Ede.censored,
-  Ede.filtered,
-]);
-
 /** A response code's name, such as REFUSED. */
 const rcodeName = (code: number): string =>
   rcodeNames.get(code) ?? `RCODE ${code}`;
@@ -49,7 +42,4 @@ const rcodeName = (code: number): string =>
 const extendedErrorName = (code: number): string | undefined =>
   extendedErrorNames.get(code);
 
-/** Whether an Extended DNS Error says the name was blocked. */
-const isBlockingError = (code: number): boolean => blockingCodes.has(code);
-
-export { Ede, extendedErrorName, isBlockingError, Rcode, rcodeName };
+export { Ede, extendedErrorName, Rcode, rcodeName };

@@ -1,10 +1,9 @@
 /**
  * Works out from a resolver's answer whether, and why, a name is blocked.
  */
-import { Result } from "effect";
-import { NetAddress } from "effect/net";
-import { extendedErrorName, isBlockingError, Rcode } from "../dns/codes.ts";
+import { Ede, extendedErrorName, Rcode } from "../dns/codes.ts";
 import type { DnsAnswer } from "../dns/wire.ts";
+import { canonicalAddress, isIpv4 } from "./address.ts";
 import {
   adguardBlockPages,
   nullAddresses,
@@ -13,9 +12,18 @@ import {
   umbrellaProxyPrefix,
 } from "./known-answers.ts";
 
-/** The first 12 bytes of an IPv4-mapped IPv6 address, ::ffff:a.b.c.d. */
-const ff = 0xff;
-const ipv4MappedPrefix = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ff, ff];
+/**
+ * The Extended DNS Errors that mean the name was blocked. Prohibited is left
+ * out: a resolver says it to a client it won't serve at all.
+ */
+const blockingCodes: ReadonlySet<number> = new Set([
+  Ede.blocked,
+  Ede.censored,
+  Ede.filtered,
+]);
+
+/** Whether an Extended DNS Error says the name was blocked. */
+const isBlockingError = (code: number): boolean => blockingCodes.has(code);
 
 interface Draft {
   answers: string[];
@@ -52,8 +60,6 @@ const addAddress = (v: Draft, raw: string, real: ReadonlySet<string>): void => {
     v.inspected = true;
   }
 };
-
-const isIpv4 = (address: string): boolean => !address.includes(":");
 
 const reasonText: Record<Reason, string> = {
   adguard: "blocked: points to AdGuard's block page",
@@ -112,25 +118,6 @@ export interface Reference {
 
 /** Nothing known yet: a missing name is not a block. */
 export const noReference: Reference = { addresses: [], exists: false };
-
-/**
- * Formats an address the same way whichever way it was written, turning
- * IPv4-mapped IPv6 addresses back into IPv4.
- */
-export const canonicalAddress = (s: string): string => {
-  const parsed = NetAddress.ipFromString(s);
-  if (Result.isFailure(parsed)) {
-    return s;
-  }
-  const ip = parsed.success;
-  if (NetAddress.isIpv6Address(ip)) {
-    const octets = NetAddress.ipv6ToOctets(ip);
-    if (ipv4MappedPrefix.every((b, i) => octets[i] === b)) {
-      return octets.slice(ipv4MappedPrefix.length).join(".");
-    }
-  }
-  return NetAddress.formatIp(ip);
-};
 
 /** Whether an answer carries an Extended DNS Error saying it was blocked. */
 export const hasBlockingError = (answer: DnsAnswer): boolean =>
@@ -222,6 +209,12 @@ export const merge = (...verdicts: readonly Verdict[]): Verdict => {
     reason: flagged?.reason,
   };
 };
+
+/** Reads a resolver's A and AAAA answers together. */
+export const classifyAll = (
+  answers: readonly DnsAnswer[],
+  reference: Reference
+): Verdict => merge(...answers.map((a) => classify(a, reference)));
 
 /** Says what a verdict means, in a phrase for people. */
 export const describe = (v: Verdict): string => {

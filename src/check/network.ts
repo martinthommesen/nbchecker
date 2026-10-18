@@ -3,13 +3,9 @@
  * DNS goes through, and whether each filter's answers really come from it.
  */
 import { Effect, Result } from "effect";
+import { addressesIn, canonicalAddress } from "./address.ts";
 import { CheckerOptions } from "./checker.ts";
-import {
-  canonicalAddress,
-  classify,
-  merge,
-  type Reference,
-} from "./classify.ts";
+import { classifyAll, type Reference } from "./classify.ts";
 import { detectConnection } from "./connection.ts";
 import type { Filter } from "./filters.ts";
 import { askFilter } from "./remote.ts";
@@ -40,14 +36,9 @@ const selfTest = (filter: Filter) => {
       if (Result.isFailure(asked)) {
         return { answers: [], filter: filter.name, result: "no-answer" };
       }
-      const verdict = merge(
-        ...asked.success.answers.map((a) => classify(a, canaryExists))
-      );
-      // A CNAME, such as to Telenor's warning page, leads to an address.
-      const addresses = asked.success.answers
-        .flatMap((a) => a.records)
-        .filter((r) => r.type !== "CNAME")
-        .map((r) => canonicalAddress(r.value));
+      const { answers } = asked.success;
+      const verdict = classifyAll(answers, canaryExists);
+      const addresses = addressesIn(answers).map(canonicalAddress);
       const passed =
         addresses.length > 0 &&
         addresses.every((a) => canary.answers.includes(a));
