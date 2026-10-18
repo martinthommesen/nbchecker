@@ -86,6 +86,10 @@ const footers = {
     ["?", "help"],
     ["q", "quit"],
   ],
+  starting: [
+    ["enter", "check"],
+    ["ctrl+c", "quit"],
+  ],
   typing: [
     ["enter", "check"],
     ["↑↓", "earlier checks"],
@@ -97,6 +101,9 @@ const footers = {
 const footerKeys = (s: State) => {
   if (s.screen !== "main") {
     return footers[s.screen];
+  }
+  if (s.focus === "input" && s.result === undefined && !s.checking) {
+    return footers.starting;
   }
   if (s.focus === "input") {
     return footers.typing;

@@ -187,7 +187,7 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
 };
 
 const moveActions = (
-  { filters, input, quit, store }: ControllerDeps,
+  { filters, input, store }: ControllerDeps,
   session: Session
 ) => {
   const move = (delta: number) => {
@@ -214,11 +214,11 @@ const moveActions = (
     input.value = "";
     input.focus();
   };
-  // Leaving the input goes back to the results, or quits if there are none.
+  // Leaving the input goes back to the results, if there are any.
   const leaveInput = () => {
     const s = store.get();
     if (s.result === undefined && !s.checking) {
-      return quit();
+      return;
     }
     // Show what the results are for, not a half-typed new target.
     input.value = session.lastTarget ?? "";

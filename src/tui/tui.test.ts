@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { sleep } from "bun";
 import { blockedName, slowDesignTransport } from "../testing/design-network.ts";
 import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
@@ -6,6 +7,7 @@ import { startTui, type TuiSession } from "../testing/tui-session.ts";
 const narrowWidth = 80;
 /** The blocked count, unbroken by wrapping. */
 const blockedSoFar = /blocked so far: \d/u;
+const settleMs = 100;
 
 let current: TuiSession | undefined;
 
@@ -94,6 +96,20 @@ describe("tui while typing a target", () => {
     const screen = await s.until("A + AAAA example.com");
     expect(screen).not.toContain("/example.com");
     expect(screen).toContain("› example.com");
+  });
+
+  test("esc on the start screen doesn't quit", async () => {
+    const s = await start();
+    await s.until("Quad9");
+    s.input.pressEscape();
+    const ended = await Promise.race([
+      s.ended.then(() => true),
+      sleep(settleMs).then(() => false),
+    ]);
+    expect(ended).toBe(false);
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    await s.until("BLOCKED");
   });
 });
 
