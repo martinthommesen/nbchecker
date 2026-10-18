@@ -61,7 +61,5 @@ test("a block exits 1", () => {
   };
   expect(exitCode([blocked])).toBe(exitBlocked);
   // A definite block wins over a lookup that didn't answer.
-  expect(exitCode([{ ...blocked, truthError: "timed out" }])).toBe(
-    exitBlocked
-  );
+  expect(exitCode([{ ...blocked, truthError: "timed out" }])).toBe(exitBlocked);
 });
