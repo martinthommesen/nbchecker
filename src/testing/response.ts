@@ -1,6 +1,7 @@
 /** Builds DNS response messages for tests. */
 import { NetAddress } from "effect/net";
-import type { DnsRecord, ExtendedError } from "../dns/wire.ts";
+import { Reader } from "../dns/reader.ts";
+import type { DnsRecord, ExtendedError, QueryType } from "../dns/wire.ts";
 
 const typeA = 1;
 const typeCname = 5;
@@ -9,6 +10,10 @@ const typeCodes = new Map<DnsRecord["type"], number>([
   ["A", typeA],
   ["AAAA", typeAaaa],
   ["CNAME", typeCname],
+]);
+const questionTypes = new Map<number, QueryType>([
+  [typeA, "A"],
+  [typeAaaa, "AAAA"],
 ]);
 const typeOpt = 41;
 const classIn = 1;
@@ -20,6 +25,7 @@ const extendedRcodeMultiplier = 2 ** 24;
 const extendedErrorOption = 15;
 const uint16Bytes = 2;
 const uint32Bytes = 4;
+const headerLength = 12;
 const encoder = new TextEncoder();
 
 const bytes = (...parts: readonly (number[] | Uint8Array)[]): number[] =>
@@ -94,6 +100,7 @@ export interface ResponseSpec {
   readonly extendedErrors?: readonly ExtendedError[];
   readonly id?: number;
   readonly question?: string;
+  readonly questionType?: QueryType;
   readonly rcode?: number;
   readonly records?: readonly DnsRecord[];
   readonly truncated?: boolean;
@@ -117,10 +124,20 @@ export const response = (spec: ResponseSpec): Uint8Array => {
       u16(0),
       u16(1),
       name(spec.question ?? "example.com"),
-      u16(typeA),
+      u16(typeCodes.get(spec.questionType ?? "A") ?? typeA),
       u16(classIn),
       ...records.map(record),
       opt(rcode, errors)
     )
   );
+};
+
+/** Encodes a response to `query`, with its ID and question. */
+export const replyTo = (query: Uint8Array, spec: ResponseSpec = {}) => {
+  const r = new Reader(query);
+  const id = r.u16();
+  r.offset = headerLength;
+  const question = r.name();
+  const questionType = questionTypes.get(r.u16()) ?? "A";
+  return response({ id, question, questionType, ...spec });
 };

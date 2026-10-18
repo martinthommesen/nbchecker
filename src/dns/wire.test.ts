@@ -108,3 +108,41 @@ describe("decodeResponse: flags and errors", () => {
     expect(decodeError(bytes).reason).toBe("name compression loop");
   });
 });
+
+describe("decodeResponse: malformed records", () => {
+  const header = (answers: number) =>
+    `00 01 81 80 00 01 00 0${answers} 00 00 00 00
+     07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01`;
+  const reason = (s: string) => decodeError(hex(s)).reason;
+
+  test("fails on an address of the wrong size", () => {
+    const zeros = (n: number) =>
+      Array.from({ length: n }, () => "00").join(" ");
+    const ipv4 = 4;
+    const ipv6 = 16;
+    expect(
+      reason(`${header(1)} c0 0c 00 01 00 01 00 00 00 3c 00 03 c0 00 02`)
+    ).toBe("bad A record");
+    expect(
+      reason(`${header(1)} c0 0c 00 01 00 01 00 00 00 3c 00 10 ${zeros(ipv6)}`)
+    ).toBe("bad A record");
+    expect(
+      reason(`${header(1)} c0 0c 00 1c 00 01 00 00 00 3c 00 04 ${zeros(ipv4)}`)
+    ).toBe("bad AAAA record");
+  });
+
+  test("keeps a CNAME within its record", () => {
+    // An empty CNAME, then an A record the target must not be read from.
+    expect(
+      reason(`${header(2)}
+        c0 0c 00 05 00 01 00 00 00 3c 00 00
+        c0 0c 00 01 00 01 00 00 00 3c 00 04 c0 00 02 01`)
+    ).toBe("bad CNAME record");
+    // A CNAME target that runs past the record's two bytes.
+    expect(
+      reason(
+        `${header(1)} c0 0c 00 05 00 01 00 00 00 3c 00 02 03 77 77 77 c0 0c`
+      )
+    ).toBe("bad CNAME record");
+  });
+});
