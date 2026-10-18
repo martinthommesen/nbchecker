@@ -8,15 +8,18 @@ types, formatting, and lint belong in CI.
 | Reviewer | Configuration | When it runs |
 | --- | --- | --- |
 | Codex | [Codex repository settings](https://chatgpt.com/settings/code-review), `AGENTS.md` | All PRs, every push; exhaustive code review and accompanying security review |
-| Claude | `claude-code-review.yml`, official `code-review` plugin, `CLAUDE.md` | Same-repository non-draft PRs opened, updated, reopened, or marked ready |
+| Claude | `claude-code-review.yml`, official Claude Code action with a custom review prompt, `CLAUDE.md` | Same-repository non-draft PRs opened, updated, reopened, or marked ready |
 | Copilot | Repository Settings → Copilot → Code review; default-branch ruleset; `.github/copilot-instructions.md` | PRs targeting the default branch, including new pushes; drafts excluded; Balanced effort |
 | OpenCode | `opencode-pr-review.yml`, `opencode_review.py`, trusted copies of `AGENTS.md` and `REVIEW.md` | Same-repository non-draft PRs opened, updated, reopened, or marked ready |
 
 Codex and Copilot are GitHub integrations; they need no API key in a workflow.
 Claude uses the existing `CLAUDE_CODE_OAUTH_TOKEN` secret and a short-lived,
 repository-scoped Actions token. `claude.yml` also handles authorized `@claude`
-mentions. Both Claude workflows check out the trusted base/default branch, keep
-checkout credentials out of Git, and pin actions to full commits.
+mentions. Both Claude workflows check out the trusted base/default branch,
+disable checkout credential persistence, and pin actions to full commits.
+The automatic workflow uses a custom prompt because the bundled `code-review`
+plugin skips PRs that already have a Claude comment. Its independent passes
+validate findings and check the current head before publishing.
 
 OpenCode uses OpenCode Go with `opencode-go/deepseek-v4.1-flash` and the `max`
 reasoning variant. Its API key is confined to the `opencode-review` environment,
@@ -34,6 +37,11 @@ rules remain authoritative. To request another Codex pass, comment
 `@codex review` or `@codex security review`. Request another Copilot pass through
 the PR's Reviewers menu. Claude and OpenCode run again on the next push; their
 workflow runs link to the exact configuration used.
+
+Copilot's personal effort preference takes precedence over the repository
+default. A PR also remembers its previous review effort. Choose Balanced in the
+PR's Reviewers menu to override either for that PR; repository setup does not
+change anyone's account-wide preference.
 
 ## Official references
 
