@@ -19,6 +19,10 @@ const jsonIndent = 2;
 
 /** What the controller remembers between key presses. */
 interface Session {
+  /** Counts checks, so only the latest one updates the screen. */
+  checks: number;
+  /** Counts connection detections, for the same reason. */
+  detections: number;
   readonly history: string[];
   lastTarget: string | undefined;
   recalled: number;
@@ -50,9 +54,25 @@ const toaster =
       })
     );
 
-const checkTarget = ({ store }: ControllerDeps, target: string) =>
-  Effect.gen(function* () {
-    store.set({
+/**
+ * Checks `target`. A check that has been replaced by a newer one leaves the
+ * screen alone, even when its last progress or its cancellation comes late.
+ */
+const checkTarget = (
+  { store }: ControllerDeps,
+  session: Session,
+  target: string
+) => {
+  session.checks += 1;
+  const generation = session.checks;
+  const update = (patch: (s: State) => Partial<State>) =>
+    Effect.sync(() => {
+      if (session.checks === generation) {
+        store.set(patch(store.get()));
+      }
+    });
+  return Effect.gen(function* () {
+    yield* update(() => ({
       cancelled: false,
       checking: true,
       elapsedMs: undefined,
@@ -60,30 +80,29 @@ const checkTarget = ({ store }: ControllerDeps, target: string) =>
       result: undefined,
       screen: "main",
       selected: 0,
-    });
+    }));
     const [duration, result] = yield* check(target).pipe(
       Effect.provideService(Progress, (sofar) =>
-        Effect.sync(() => store.set({ result: sofar }))
+        update(() => ({ result: sofar }))
       ),
       Effect.timed
     );
-    store.set({
+    yield* update(() => ({
+      cancelled: false,
       checking: false,
       elapsedMs: Duration.toMillis(duration),
       result,
-    });
+    }));
   }).pipe(
     Effect.onInterrupt(() =>
-      Effect.sync(() => {
-        const { result } = store.get();
-        store.set({
-          cancelled: true,
-          checking: false,
-          result: result && cancelPending(result),
-        });
-      })
+      update(({ result }) => ({
+        cancelled: true,
+        checking: false,
+        result: result && cancelPending(result),
+      }))
     )
   );
+};
 
 const checkActions = (
   deps: ControllerDeps,
@@ -98,11 +117,11 @@ const checkActions = (
     session.lastTarget = target;
     deps.input.value = target;
     deps.input.blur();
-    deps.run.check(checkTarget(deps, target));
+    deps.run.check(checkTarget(deps, session, target));
   };
   const recheck = () => {
     if (session.lastTarget !== undefined) {
-      deps.run.check(checkTarget(deps, session.lastTarget));
+      deps.run.check(checkTarget(deps, session, session.lastTarget));
     }
   };
   const cancel = () => {
@@ -111,13 +130,20 @@ const checkActions = (
       toast("cancelled");
     }
   };
-  const detect = () =>
+  // Only the latest detection may show its answer.
+  const detect = () => {
+    session.detections += 1;
+    const generation = session.detections;
+    deps.store.set({ connection: undefined });
     deps.run.background(
       Effect.gen(function* () {
-        deps.store.set({ connection: undefined });
-        deps.store.set({ connection: yield* detectConnection });
+        const connection = yield* detectConnection;
+        if (session.detections === generation) {
+          deps.store.set({ connection });
+        }
       })
     );
+  };
   return { cancel, detect, recheck, submit };
 };
 
@@ -203,7 +229,13 @@ const moveActions = (
 };
 
 const makeController = (deps: ControllerDeps): Controller => {
-  const session: Session = { history: [], lastTarget: undefined, recalled: 0 };
+  const session: Session = {
+    checks: 0,
+    detections: 0,
+    history: [],
+    lastTarget: undefined,
+    recalled: 0,
+  };
   const toast = toaster(deps);
   const checks = checkActions(deps, session, toast);
   const output = outputActions(deps, toast);
