@@ -9,7 +9,7 @@ import {
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { byCategory, categoryLabels } from "../report/categories.ts";
-import { filterWhy, realAnswerWhy, systemWhy } from "./why.ts";
+import { filterWhy, realAnswerWhy, systemWhy } from "../report/why.ts";
 
 const verdictWords: Record<RowState, string> = {
   blocked: "blocked",

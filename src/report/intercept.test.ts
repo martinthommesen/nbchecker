@@ -23,11 +23,11 @@ import {
   rewritingTransport,
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
-import { systemWhy } from "../tui/why.ts";
 import { toJson } from "./json.ts";
 import { statusOf } from "./status.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
+import { systemWhy } from "./why.ts";
 
 const text = (r: CheckResult): string => renderText(view(r), false);
 

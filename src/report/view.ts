@@ -2,7 +2,7 @@
  * Turns a check result into rows and sections, shared by the terminal
  * interface and plain text output.
  */
-import { describe, type Verdict } from "../check/classify.ts";
+import type { Verdict } from "../check/classify.ts";
 import { isRedirected, shouldAnswer } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import {
@@ -11,6 +11,7 @@ import {
   realAnswerKnown,
 } from "../check/result.ts";
 import { byCategory } from "./categories.ts";
+import { verdictText } from "./reasons.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 
 const maxAnswers = 2;
@@ -66,7 +67,7 @@ const missingRow = (
       tone: "warn",
     };
   }
-  return { icon: "–", name, text: describe(v), tone: "dim" };
+  return { icon: "–", name, text: verdictText(v), tone: "dim" };
 };
 
 const outcomeRow = (
@@ -95,7 +96,7 @@ const outcomeRow = (
       detail: blockDetail(v),
       icon: "✗",
       name,
-      text: describe(v),
+      text: verdictText(v),
       tone: "blocked",
     };
   }
@@ -104,14 +105,14 @@ const outcomeRow = (
       detail: shortList(v.answers, maxAnswers),
       icon: "!",
       name,
-      text: describe(v),
+      text: verdictText(v),
       tone: "warn",
     };
   }
   if (v.missing) {
     return missingRow(name, v, r, filter === undefined);
   }
-  return { icon: "✓", name, text: describe(v), tone: "ok" };
+  return { icon: "✓", name, text: verdictText(v), tone: "ok" };
 };
 
 /**
