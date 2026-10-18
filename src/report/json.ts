@@ -1,4 +1,4 @@
-/** The --json output and the exit status. */
+/** The --json output. */
 import type { Verdict } from "../check/classify.ts";
 import type { Filter } from "../check/filters.ts";
 import {
@@ -81,24 +81,6 @@ const resultJson = (r: CheckResult) => ({
   target: r.target,
   thisComputer: r.system && outcomeJson(r.system),
 });
-
-export const exitBlocked = 1;
-export const exitIncomplete = 2;
-
-/**
- * 1 if anything is blocked, even when a check was incomplete; otherwise 2 if
- * a check was incomplete, so that nbchecker couldn't tell; otherwise 0.
- * See `completionOf` for what makes a check incomplete.
- */
-export const exitCode = (results: readonly CheckResult[]): number => {
-  if (results.some(isBlocked)) {
-    return exitBlocked;
-  }
-  if (results.some((r) => r.completion !== "complete")) {
-    return exitIncomplete;
-  }
-  return 0;
-};
 
 /**
  * The whole document. `intercepted` lists the filters that failed the

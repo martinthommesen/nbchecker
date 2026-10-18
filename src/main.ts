@@ -2,7 +2,7 @@
 import { BunDns, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { cli } from "./cli.ts";
+import { cli } from "./cli/command.ts";
 import { layer as transport } from "./dns/transport.ts";
 
 const live = Layer.mergeAll(

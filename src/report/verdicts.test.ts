@@ -6,11 +6,17 @@ import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import type { Category, Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
+import {
+  exitBlocked,
+  exitCode,
+  exitIncomplete,
+  exitNotBlocked,
+} from "../cli/exit-status.ts";
 import { fakeCanary } from "../testing/fake-network.ts";
 import { downTruthUrl, runCheck } from "../testing/run-check.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
-import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
+import { toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 
@@ -36,7 +42,7 @@ describe("verdicts: names without an address this computer can use", () => {
     const r = await runCheck("mail.example");
     expect(r.exists).toBe(true);
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
     expect(text(r)).toContain("– Your DNS         no address on this computer");
     expect(text(r)).toContain("the domain exists, but has no addresses");
     expect(text(r)).not.toContain("doesn't exist");
@@ -45,7 +51,7 @@ describe("verdicts: names without an address this computer can use", () => {
   test("an IPv6-only name on a computer without IPv6 is not blocked", async () => {
     const r = await runCheck("v6.example");
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 
   test("no address for a name with an IPv4 address is a block", async () => {
@@ -96,7 +102,7 @@ describe("verdicts: compared with the real answer", () => {
     const r = await runCheck("nope.example");
     expect(text(r)).toContain("– the domain doesn't exist");
     expect(screen(r)).toContain("DOESN'T EXIST");
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 });
 
@@ -133,7 +139,7 @@ describe("verdicts: block answers", () => {
   test("Cisco's inspection proxy is inspected, not blocked", async () => {
     const r = await runCheck("grey.example");
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
     expect(text(r)).toContain(
       "! Security filter  sent through Cisco's inspection proxy; the site may still be blocked by URL"
     );
