@@ -6,9 +6,15 @@ import {
   type TestRendererSetup,
 } from "@opentui/core/testing";
 import { sleep } from "bun";
-import { Effect, Fiber, Layer } from "effect";
+import { Effect, Fiber, FileSystem, Layer } from "effect";
 import { OpenRenderer, runTui } from "../tui/run.ts";
 import { designComputer, designTransport } from "./design-network.ts";
+
+/** Saving pretends to work, so tests leave no files behind. */
+const noFiles = FileSystem.layerNoop({
+  writeFile: () => Effect.void,
+  writeFileString: () => Effect.void,
+});
 
 const pollMs = 10;
 const pollTries = 200;
@@ -42,7 +48,9 @@ const startTui = async ({
   const setup = await createTestRenderer({ height, width });
   const fiber = runTui("0.0.0").pipe(
     Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
-    Effect.provide(Layer.mergeAll(BunServices.layer, transport, computer)),
+    Effect.provide(
+      Layer.mergeAll(BunServices.layer, transport, computer, noFiles)
+    ),
     Effect.runFork
   );
   const frame = async () => {

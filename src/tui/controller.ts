@@ -1,5 +1,4 @@
 /** What each action does: checks, copying, saving and moving around. */
-import type { CliRenderer, InputRenderable } from "@opentui/core";
 import { Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
 import { connectionText, detectConnection } from "../check/connection.ts";
@@ -10,6 +9,7 @@ import { toJson } from "../report/json.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
 import { connectionCopy } from "./connection-view.ts";
+import type { Controller, ControllerDeps } from "./controller-deps.ts";
 import type { Action } from "./keys.ts";
 import { flatRows, resultGroups } from "./rows.ts";
 import type { State } from "./state.ts";
@@ -258,6 +258,10 @@ const makeController = (deps: ControllerDeps): Controller => {
     pageUp: () => moves.move(-pageStep),
     quit: deps.quit,
     recheck: checks.recheck,
+    scrollDown: () => deps.scroll(1, "line"),
+    scrollPageDown: () => deps.scroll(1, "page"),
+    scrollPageUp: () => deps.scroll(-1, "page"),
+    scrollUp: () => deps.scroll(-1, "line"),
     up: () => moves.move(-1),
   };
   return {
@@ -266,37 +270,5 @@ const makeController = (deps: ControllerDeps): Controller => {
     submit: checks.submit,
   };
 };
-
-export interface Store {
-  readonly get: () => State;
-  readonly set: (patch: Partial<State>) => void;
-}
-
-export type Needs =
-  | FileSystem.FileSystem
-  | Effect.Services<ReturnType<typeof check>>
-  | Effect.Services<typeof detectConnection>;
-
-/** Runs effects from key handlers: one for checks, one for the rest. */
-export interface Runners {
-  readonly background: (effect: Effect.Effect<void, never, Needs>) => void;
-  readonly cancel: () => void;
-  readonly check: (effect: Effect.Effect<void, never, Needs>) => void;
-}
-
-export interface Controller {
-  readonly detect: () => void;
-  readonly handle: (action: Action) => void;
-  readonly submit: (target: string) => void;
-}
-
-export interface ControllerDeps {
-  readonly filters: readonly Filter[];
-  readonly input: InputRenderable;
-  readonly quit: () => void;
-  readonly renderer: CliRenderer;
-  readonly run: Runners;
-  readonly store: Store;
-}
 
 export { makeController };

@@ -27,7 +27,18 @@ const inputKeys = new Map<string, Action>([
   ["up", "historyUp"],
 ]);
 
+/** The help and connection screens scroll, as they may not fit. */
+const scrollKeys: readonly (readonly [string, Action])[] = [
+  ["down", "scrollDown"],
+  ["j", "scrollDown"],
+  ["k", "scrollUp"],
+  ["pagedown", "scrollPageDown"],
+  ["pageup", "scrollPageUp"],
+  ["up", "scrollUp"],
+];
+
 const connectionKeys = new Map<string, Action>([
+  ...scrollKeys,
   ["?", "help"],
   ["escape", "back"],
   ["q", "quit"],
@@ -36,6 +47,7 @@ const connectionKeys = new Map<string, Action>([
 ]);
 
 const helpKeys = new Map<string, Action>([
+  ...scrollKeys,
   ["?", "back"],
   ["escape", "back"],
   ["q", "quit"],
@@ -66,6 +78,8 @@ const footers = {
     ["q", "quit"],
   ],
   connection: [
+    ["↑↓", "scroll"],
+    ["pgup pgdn", "page"],
     ["esc", "back"],
     ["r", "detect again"],
     ["y", "copy as text"],
@@ -73,6 +87,8 @@ const footers = {
     ["q", "quit"],
   ],
   help: [
+    ["↑↓", "scroll"],
+    ["pgup pgdn", "page"],
     ["esc", "back"],
     ["q", "quit"],
   ],
@@ -118,7 +134,8 @@ const gap = "  ";
 
 /**
  * The key list at the bottom, with any short message after it, wrapped
- * between keys so a key stays with its label.
+ * between keys so a key stays with its label. A message too long for the
+ * line wraps on its own.
  */
 const footerText = (s: State, width: number): StyledText => {
   const items = footerKeys(s).map(([key, label]) => ({ key, label }));
@@ -138,7 +155,11 @@ const footerText = (s: State, width: number): StyledText => {
       );
     used += size;
   }
+  // A message that doesn't fit after the keys gets a line of its own.
   if (s.toast !== undefined) {
+    if (used + columns(s.toast) > width) {
+      rows.push([]);
+    }
     rows.at(-1)?.push(paint(s.toast, { fg: theme.warn }));
   }
   return lines(rows);
@@ -161,6 +182,10 @@ export type Action =
   | "pageUp"
   | "quit"
   | "recheck"
+  | "scrollDown"
+  | "scrollPageDown"
+  | "scrollPageUp"
+  | "scrollUp"
   | "up";
 
 /** The parts of a key press that decide its action. */
