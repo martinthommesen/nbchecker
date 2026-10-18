@@ -48,17 +48,17 @@ const jsonDocument = (
 };
 
 /**
- * Prints one result as text, below the DNS filter line when it's the first
- * result to have found out the network.
+ * Prints one result as text, below the DNS filter line for `header`, the
+ * network this result was the first to find out, if it was.
  */
 const printText = (
   result: CheckResult,
-  found: Network | undefined,
+  header: Network | undefined,
   color: boolean
 ) =>
   Effect.gen(function* () {
-    if (found === undefined && result.network !== undefined) {
-      yield* print(dnsFilterLine(result.network));
+    if (header !== undefined) {
+      yield* print(dnsFilterLine(header));
     }
     yield* print(renderText(view(result), color));
   });
@@ -94,19 +94,23 @@ export const checkTargets = <E, R>(
     const color = yield* stdio.stdoutIsTerminal;
     const network = yield* Effect.cached(detectNetwork);
     const results: CheckResult[] = [];
-    let found: Network | undefined;
+    let detected: Network | undefined;
     yield* Stream.runForEach(targets, (target) =>
       Effect.gen(function* () {
         const result = yield* check(target, network);
         results.push(result);
-        if (!json) {
-          yield* printText(result, found, color);
+        let header: Network | undefined;
+        if (detected === undefined) {
+          detected = result.network;
+          header = detected;
         }
-        found ??= result.network;
+        if (!json) {
+          yield* printText(result, header, color);
+        }
       })
     );
     if (json) {
-      yield* print(jsonDocument(results, found));
+      yield* print(jsonDocument(results, detected));
     }
     const code = exitCode(results);
     if (code !== exitNotBlocked) {
