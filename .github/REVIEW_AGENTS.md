@@ -21,7 +21,7 @@ The automatic workflow uses a custom prompt because the bundled `code-review`
 plugin skips PRs that already have a Claude comment. Its independent passes
 validate findings and check the current head before publishing.
 
-OpenCode uses OpenCode Go with `opencode-go/deepseek-v4.1-flash` and the `max`
+OpenCode uses OpenCode Go with `opencode-go/deepseek-v4.1-flash` and the `low`
 reasoning variant. Its API key is confined to the `opencode-review` environment,
 whose deployment policy allows only `main`. It reviews sanitized immutable PR
 data with read-only tools; a separate step publishes the result with the Actions
