@@ -56,7 +56,7 @@ jobs:
           status=0
           ./dist/nbchecker --json 'not a name!' > result.json || status=$?
           test "$status" = 2
-          grep -q '"error"' result.json
+          jq -e '.results[0].error | length > 0' result.json
 
   dependency-review:
     name: Dependency review
