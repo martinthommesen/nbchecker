@@ -3,19 +3,61 @@
  * interface and plain text output.
  */
 import type { Verdict } from "../check/classify.ts";
-import { isRedirected, shouldAnswer } from "../check/evidence.ts";
-import type { Filter } from "../check/filters.ts";
-import {
-  type CheckResult,
-  type Outcome,
-  realAnswerKnown,
+import type {
+  CheckResult,
+  FilterResult,
+  Outcome,
+  RealAnswer,
 } from "../check/result.ts";
 import { byCategory } from "./categories.ts";
 import { verdictText } from "./reasons.ts";
+import {
+  filterState,
+  type ResolverState,
+  realAnswerState,
+  referenceSection,
+  systemState,
+} from "./resolver-state.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 
 const maxAnswers = 2;
 const maxRealAddresses = 4;
+
+interface Look {
+  readonly icon: string;
+  readonly tone: Tone;
+}
+
+/** What a row says, and the answers worth showing after it. */
+interface Said {
+  readonly detail?: string;
+  readonly text: string;
+}
+
+const looks: Record<ResolverState, Look> = {
+  blocked: { icon: "✗", tone: "blocked" },
+  cancelled: { icon: "–", tone: "dim" },
+  failed: { icon: "?", tone: "warn" },
+  inspected: { icon: "!", tone: "warn" },
+  missing: { icon: "–", tone: "dim" },
+  optional: { icon: "?", tone: "dim" },
+  pending: { icon: "…", tone: "dim" },
+  redirected: { icon: "?", tone: "warn" },
+  resolves: { icon: "✓", tone: "ok" },
+  unsure: { icon: "?", tone: "warn" },
+};
+
+/** The real answer is what the others are read against, not a verdict. */
+const realAnswerLooks: Record<ResolverState, Look> = {
+  ...looks,
+  resolves: { icon: "✓", tone: "plain" },
+};
+
+/** What a row says while there is nothing to show. */
+const waiting = {
+  cancelled: "cancelled before it answered",
+  pending: "asking…",
+} as const;
 
 /** The answers worth showing next to a block, such as the block page. */
 const blockDetail = (v: Verdict): string => {
@@ -25,123 +67,83 @@ const blockDetail = (v: Verdict): string => {
   return shortList(v.answers, maxAnswers);
 };
 
-type Failed = Extract<Outcome, { readonly kind: "failed" }>;
-
-const failedRow = (
-  name: string,
-  o: Failed,
-  r: CheckResult,
-  filter: Filter | undefined
-): Row => {
-  if (filter?.onlyAnswers !== undefined && !shouldAnswer(r, filter)) {
-    return {
-      icon: "?",
-      name,
-      text: `no answer (it only answers ${filter.onlyAnswers.customers})`,
-      tone: "dim",
-    };
+/** What the row of a resolver that answered says, by its state. */
+const answerSaid = (state: ResolverState, name: string, v: Verdict): Said => {
+  switch (state) {
+    case "redirected":
+      return {
+        detail: shortList(v.answers, maxAnswers),
+        text: `answers don't look like they come from ${name}: DNS may be redirected on this network`,
+      };
+    case "blocked":
+      return { detail: blockDetail(v), text: verdictText(v) };
+    case "inspected":
+      return { detail: shortList(v.answers, maxAnswers), text: verdictText(v) };
+    case "unsure":
+      return {
+        text: "says the domain doesn't exist; can't tell without the real answer",
+      };
+    default:
+      return { text: verdictText(v) };
   }
-  return { detail: o.error, icon: "?", name, text: "no answer", tone: "warn" };
 };
 
-/** The row for an answer that says the name doesn't exist. */
-const missingRow = (
-  name: string,
-  v: Verdict,
-  r: CheckResult,
-  system: boolean
-): Row => {
-  if (system) {
-    return {
-      icon: "–",
-      name,
-      text: "no address on this computer",
-      tone: "dim",
-    };
+/** What a filter's or this computer's row says, by its state. */
+const outcomeSaid = (state: ResolverState, o: Outcome, name: string): Said => {
+  if (o.kind === "answered") {
+    return answerSaid(state, name, o.verdict);
   }
-  if (!realAnswerKnown(r)) {
-    return {
-      icon: "?",
-      name,
-      text: "says the domain doesn't exist; can't tell without the real answer",
-      tone: "warn",
-    };
+  if (o.kind === "failed") {
+    return { detail: o.error, text: "no answer" };
   }
-  return { icon: "–", name, text: verdictText(v), tone: "dim" };
+  return { text: waiting[o.kind] };
 };
 
-const outcomeRow = (
-  name: string,
-  outcome: Outcome,
-  r: CheckResult,
-  filter?: Filter
-): Row => {
-  if (outcome.kind === "pending") {
-    return { icon: "…", name, text: "asking…", tone: "dim" };
-  }
-  if (outcome.kind === "cancelled") {
+const filterRow = (r: CheckResult, f: FilterResult): Row => {
+  const state = filterState(r, f);
+  const { name, onlyAnswers } = f.filter;
+  if (state === "optional" && onlyAnswers !== undefined) {
     return {
-      icon: "–",
+      ...looks.optional,
       name,
-      text: "cancelled before it answered",
-      tone: "dim",
+      text: `no answer (it only answers ${onlyAnswers.customers})`,
     };
   }
-  if (outcome.kind === "failed") {
-    return failedRow(name, outcome, r, filter);
-  }
-  const v = outcome.verdict;
-  if (v.blocked) {
-    return {
-      detail: blockDetail(v),
-      icon: "✗",
-      name,
-      text: verdictText(v),
-      tone: "blocked",
-    };
-  }
-  if (v.inspected) {
-    return {
-      detail: shortList(v.answers, maxAnswers),
-      icon: "!",
-      name,
-      text: verdictText(v),
-      tone: "warn",
-    };
-  }
-  if (v.missing) {
-    return missingRow(name, v, r, filter === undefined);
-  }
-  return { icon: "✓", name, text: verdictText(v), tone: "ok" };
+  return { ...looks[state], ...outcomeSaid(state, f.outcome, name), name };
 };
 
-/**
- * The row of a filter that failed the self-test: its answers seem to come
- * from another resolver, so they say nothing about the filter.
- */
-const redirectedRow = (name: string, outcome: Outcome): Row => {
-  let detail = "";
-  if (outcome.kind === "answered") {
-    detail = shortList(outcome.verdict.answers, maxAnswers);
+const systemRow = (r: CheckResult): Row => {
+  const state = systemState(r);
+  const name = referenceSection.system;
+  if (state === "missing") {
+    return { ...looks.missing, name, text: "no address on this computer" };
   }
-  return {
-    detail,
-    icon: "?",
-    name,
-    text: `answers don't look like they come from ${name}: DNS may be redirected on this network`,
-    tone: "warn",
-  };
+  return { ...looks[state], ...outcomeSaid(state, r.system, name), name };
 };
 
-const filterRow = (r: CheckResult, filter: Filter, outcome: Outcome): Row => {
-  // Only an answer can come from another resolver; no answer is just that.
-  if (outcome.kind === "answered" && isRedirected(r, filter)) {
-    return redirectedRow(filter.name, outcome);
+const realAnswerSaid = (o: Outcome<RealAnswer>): Said => {
+  if (o.kind === "failed") {
+    return { text: `could not reach an unfiltered resolver: ${o.error}` };
   }
-  return outcomeRow(filter.name, outcome, r, filter);
+  if (o.kind !== "answered") {
+    return { text: waiting[o.kind] };
+  }
+  if (!o.exists) {
+    return { text: "the domain doesn't exist" };
+  }
+  if (o.addresses.length === 0) {
+    return { text: "the domain exists, but has no addresses" };
+  }
+  return { text: shortList(o.addresses, maxRealAddresses) };
 };
 
-const summaryLooks: Record<StatusKind, { icon: string; tone: Tone }> = {
+const realAnswerRow = (r: CheckResult): Row => ({
+  ...realAnswerLooks[realAnswerState(r)],
+  ...realAnswerSaid(r.realAnswer),
+  name: referenceSection.realAnswer,
+});
+
+const summaryLooks: Record<StatusKind, Look> = {
   blocked: { icon: "✗", tone: "blocked" },
   "blocked-here": { icon: "✗", tone: "blocked" },
   cancelled: { icon: "?", tone: "warn" },
@@ -161,54 +163,6 @@ const summaryOf = (r: CheckResult): Line => {
   const { icon, tone } = summaryLooks[status.kind];
   return { text: [icon, statusText(status)].filter(Boolean).join(" "), tone };
 };
-
-const realAnswerRow = (r: CheckResult): Row => {
-  const name = "Real answer";
-  const o = r.realAnswer;
-  if (o.kind === "cancelled") {
-    return {
-      icon: "–",
-      name,
-      text: "cancelled before it answered",
-      tone: "dim",
-    };
-  }
-  if (o.kind === "failed") {
-    return {
-      icon: "?",
-      name,
-      text: `could not reach an unfiltered resolver: ${o.error}`,
-      tone: "warn",
-    };
-  }
-  if (o.kind === "pending") {
-    return { icon: "…", name, text: "asking…", tone: "dim" };
-  }
-  if (!o.exists) {
-    return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
-  }
-  if (o.addresses.length === 0) {
-    return {
-      icon: "✓",
-      name,
-      text: "the domain exists, but has no addresses",
-      tone: "plain",
-    };
-  }
-  return {
-    icon: "✓",
-    name,
-    text: shortList(o.addresses, maxRealAddresses),
-    tone: "plain",
-  };
-};
-
-const filterSections = (r: CheckResult): Section[] =>
-  byCategory(
-    r.filters,
-    (f) => f.filter.category,
-    (f) => filterRow(r, f.filter, f.outcome)
-  );
 
 export type Tone = "blocked" | "dim" | "ok" | "plain" | "warn";
 
@@ -251,9 +205,19 @@ export const view = (r: CheckResult): View => {
   if (!r.checked) {
     return { ...base, sections: [] };
   }
-  const reference = [outcomeRow("Your DNS", r.system, r), realAnswerRow(r)];
+  const reference = {
+    rows: [systemRow(r), realAnswerRow(r)],
+    title: referenceSection.title,
+  };
   return {
     ...base,
-    sections: [{ rows: reference, title: "REFERENCE" }, ...filterSections(r)],
+    sections: [
+      reference,
+      ...byCategory(
+        r.filters,
+        (f) => f.filter.category,
+        (f) => filterRow(r, f)
+      ),
+    ],
   };
 };

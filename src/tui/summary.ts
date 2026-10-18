@@ -1,7 +1,14 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
+import type { Reason } from "../check/classify.ts";
 import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
-import { type CheckResult, settled, unavailable } from "../check/result.ts";
+import {
+  type CheckResult,
+  type Outcome,
+  realAddresses,
+  settled,
+} from "../check/result.ts";
+import { realAnswerState, systemState } from "../report/resolver-state.ts";
 import { type Status, statusOf, statusPhrases } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
@@ -29,51 +36,66 @@ const progress = (r: CheckResult) => {
   return { finished, total: r.filters.length + extraResolvers };
 };
 
+/** The reason a lookup's answer gives, if it answered. */
+const reasonOf = (o: Outcome): Reason | undefined => {
+  if (o.kind === "answered") {
+    return o.verdict.reason;
+  }
+  return undefined;
+};
+
+/** "blocked", naming the ISP's filter whose block answer this computer gets. */
+const blockedPhrase = (r: CheckResult): string => {
+  const reason = reasonOf(r.system);
+  const same = trustedFilters(r).find(
+    (f) =>
+      f.outcome.kind === "answered" &&
+      f.outcome.verdict.reason === reason &&
+      f.filter.onlyAnswers !== undefined
+  );
+  if (same === undefined) {
+    return "blocked";
+  }
+  return `blocked (${same.filter.name})`;
+};
+
 const systemPhrase = (r: CheckResult): TextChunk => {
-  const o = r.system;
-  if (o.kind === "pending") {
-    return paint("asking…", { fg: theme.dim });
+  switch (systemState(r)) {
+    case "pending":
+      return paint("asking…", { fg: theme.dim });
+    case "blocked":
+      return paint(blockedPhrase(r), { fg: theme.block });
+    case "inspected":
+      return paint("inspected", { fg: theme.warn });
+    case "missing":
+      return paint("no address", { fg: theme.dim });
+    case "resolves":
+      return paint("resolves", { fg: theme.ok });
+    default:
+      // It failed, or the check was cancelled first.
+      return paint("no answer", { fg: theme.warn });
   }
-  if (unavailable(o)) {
-    return paint("no answer", { fg: theme.warn });
+};
+
+const addressesPhrase = (addresses: readonly string[]): string => {
+  if (addresses.length === 0) {
+    return "no addresses";
   }
-  if (o.verdict.blocked) {
-    const same = trustedFilters(r).find(
-      (f) =>
-        f.outcome.kind === "answered" &&
-        f.outcome.verdict.reason === o.verdict.reason &&
-        f.filter.onlyAnswers !== undefined
-    );
-    let text = "blocked";
-    if (same !== undefined) {
-      text = `blocked (${same.filter.name})`;
-    }
-    return paint(text, { fg: theme.block });
-  }
-  if (o.verdict.inspected) {
-    return paint("inspected", { fg: theme.warn });
-  }
-  if (o.verdict.missing) {
-    return paint("no address", { fg: theme.dim });
-  }
-  return paint("resolves", { fg: theme.ok });
+  return shortList(addresses, realAddressesShown);
 };
 
 const realAnswerPhrase = (r: CheckResult): TextChunk => {
-  const o = r.realAnswer;
-  if (unavailable(o)) {
-    return paint("unavailable", { fg: theme.warn });
+  switch (realAnswerState(r)) {
+    case "pending":
+      return paint("asking…", { fg: theme.dim });
+    case "missing":
+      return paint("doesn't exist", { fg: theme.dim });
+    case "resolves":
+      return paint(addressesPhrase(realAddresses(r)), { fg: theme.ok });
+    default:
+      // It failed, or the check was cancelled first.
+      return paint("unavailable", { fg: theme.warn });
   }
-  if (o.kind === "pending") {
-    return paint("asking…", { fg: theme.dim });
-  }
-  if (!o.exists) {
-    return paint("doesn't exist", { fg: theme.dim });
-  }
-  if (o.addresses.length === 0) {
-    return paint("no addresses", { fg: theme.ok });
-  }
-  return paint(shortList(o.addresses, realAddressesShown), { fg: theme.ok });
 };
 
 const counted = (n: number, of: number, color: string): TextChunk =>

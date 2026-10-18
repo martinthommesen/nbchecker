@@ -10,9 +10,8 @@ import { toJson } from "../report/json.ts";
 import type { Controller, ControllerDeps } from "./controller-deps.ts";
 import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
-import { flatRows } from "./rows.ts";
+import { flatRows, tableGroups } from "./rows.ts";
 import type { Screen, State } from "./state.ts";
-import { tableGroups } from "./table.ts";
 
 const pageStep = 5;
 const jsonIndent = 2;
@@ -202,7 +201,7 @@ const clamp = (n: number, most: number): number =>
 
 /** How many rows the selection moves through: those the table shows. */
 const rowCount = (s: State, items: readonly Filter[]): number =>
-  flatRows(tableGroups(s, items)).length;
+  flatRows(tableGroups(s.result, items)).length;
 
 const moveActions = (
   { filters, input, store }: ControllerDeps,

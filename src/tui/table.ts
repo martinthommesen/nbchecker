@@ -1,15 +1,7 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import type { Filter } from "../check/filters.ts";
 import { lines, paint, spinner } from "./paint.ts";
-import {
-  type Group,
-  idleGroups,
-  type RowState,
-  resultGroups,
-  type TableRow,
-} from "./rows.ts";
-import type { State } from "./state.ts";
+import type { Group, RowState, TableRow } from "./rows.ts";
 import { columns, fit, fitRight, wrap } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
@@ -28,14 +20,15 @@ const looks: Record<
   { readonly color: string; readonly glyph: string }
 > = {
   blocked: { color: theme.block, glyph: "✕" },
+  cancelled: { color: theme.faint, glyph: "·" },
   failed: { color: theme.warn, glyph: "?" },
   idle: { color: theme.faint, glyph: "·" },
   inspected: { color: theme.warn, glyph: "!" },
   missing: { color: theme.dim, glyph: "–" },
+  optional: { color: theme.faint, glyph: "·" },
   pending: { color: theme.dim, glyph: "" },
   redirected: { color: theme.warn, glyph: "?" },
   resolves: { color: theme.ok, glyph: "✓" },
-  unavailable: { color: theme.faint, glyph: "·" },
   unsure: { color: theme.warn, glyph: "?" },
 };
 
@@ -66,7 +59,7 @@ const rowLine = (
   return [
     paint(fit(glyph, glyphWidth), { ...back, fg: color }),
     paint(fit(row.name, nameWidth), { ...back, bold: selected }),
-    paint(fit(row.verdict, verdictWidth), { ...back, fg: color }),
+    paint(fit(row.word, verdictWidth), { ...back, fg: color }),
     paint(`${fit(row.answer, answer)} `, { ...back, fg: theme.answer }),
     paint(` ${fitRight(row.ms, msWidth - 1)}`, { ...back, fg: theme.dim }),
   ];
@@ -76,17 +69,6 @@ const field = (label: string, value: string): TextChunk[] => [
   paint(fit(label, labelWidth), { fg: theme.dim }),
   paint(value),
 ];
-
-/**
- * The table's groups of rows: the filters in `items` that will be asked,
- * until a check has a result. The selection moves through the same rows.
- */
-export const tableGroups = (s: State, items: readonly Filter[]): Group[] => {
-  if (s.result === undefined) {
-    return idleGroups(items);
-  }
-  return resultGroups(s.result);
-};
 
 /** The column titles above the table. */
 export const tableHeader = (width: number): StyledText =>
@@ -136,13 +118,13 @@ export const detailsText = (
     return lines([]);
   }
   const { color, glyph } = lookOf(row.state, tick);
-  const verdict = `${glyph} ${row.verdict}`.trim();
+  const said = `${glyph} ${row.word}`.trim();
   const out: TextChunk[][] = [
     [
-      paint(fit(row.name, Math.max(width - columns(verdict), 1)), {
+      paint(fit(row.name, Math.max(width - columns(said), 1)), {
         bold: true,
       }),
-      paint(verdict, { fg: color }),
+      paint(said, { fg: color }),
     ],
     [],
     field("category", row.category),

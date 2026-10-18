@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { type CheckResult, cancelPending, pending } from "../check/result.ts";
 import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
-import { flatRows, resultGroups, type TableRow } from "./rows.ts";
+import { flatRows, type TableRow, tableGroups } from "./rows.ts";
 
 const row = (r: CheckResult, name: string): TableRow | undefined =>
-  flatRows(resultGroups(r)).find((x) => x.name === name);
+  flatRows(tableGroups(r, [])).find((x) => x.name === name);
 
-describe("resultGroups", () => {
+describe("tableGroups", () => {
   test("Cisco's inspection proxy shows as inspected", async () => {
     const r = await runCheck("grey.example");
     expect(row(r, "Security filter")).toMatchObject({
       state: "inspected",
-      verdict: "inspected",
+      word: "inspected",
     });
   });
 
@@ -21,7 +21,16 @@ describe("resultGroups", () => {
     });
     expect(row(r, "Family filter")).toMatchObject({
       state: "unsure",
-      verdict: "can't tell",
+      word: "can't tell",
+    });
+  });
+
+  test("a filter's NXDOMAIN while the real answer is on its way is not found", async () => {
+    const r = await runCheck("nope.example");
+    const sofar: CheckResult = { ...r, realAnswer: pending };
+    expect(row(sofar, "Family filter")).toMatchObject({
+      state: "missing",
+      word: "not found",
     });
   });
 
@@ -34,7 +43,7 @@ describe("resultGroups", () => {
       response: [expect.stringContaining("timed out")],
       server: "DNS over HTTPS",
       state: "failed",
-      verdict: "no answer",
+      word: "no answer",
     });
   });
 
@@ -43,13 +52,13 @@ describe("resultGroups", () => {
     expect(row(r, "Your DNS")).toMatchObject({
       response: ["no answer records", "no address on this computer"],
       state: "missing",
-      verdict: "no address",
+      word: "no address",
     });
     expect(row(r, "Your DNS")?.why).toContain("not a block");
   });
 });
 
-describe("resultGroups after a cancel", () => {
+describe("tableGroups after a cancel", () => {
   test("the real answer that was still on its way says cancelled", async () => {
     const r = await runCheck("good.example");
     const waiting: CheckResult = { ...r, realAnswer: pending };
@@ -57,8 +66,8 @@ describe("resultGroups after a cancel", () => {
       ms: "",
       response: [],
       server: "DNS over HTTPS",
-      state: "unavailable",
-      verdict: "cancelled",
+      state: "cancelled",
+      word: "cancelled",
     });
   });
 
@@ -73,8 +82,8 @@ describe("resultGroups after a cancel", () => {
       answer: "",
       ms: "0",
       response: ["error: cancelled"],
-      state: "unavailable",
-      verdict: "cancelled",
+      state: "cancelled",
+      word: "cancelled",
     };
     const after = cancelPending(waiting);
     expect(row(after, "Your DNS")).toMatchObject(cancelled);

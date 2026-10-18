@@ -1,27 +1,36 @@
 /** Turns a check result into the grouped rows of the resolvers table. */
-
-import { isRedirected, shouldAnswer } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
-import {
-  type CheckResult,
-  type Outcome,
-  realAnswerUnavailable,
-} from "../check/result.ts";
+import type { CheckResult, FilterResult, Outcome } from "../check/result.ts";
+import { systemServer } from "../check/system.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { byCategory, categoryLabels } from "../report/categories.ts";
+import {
+  filterState,
+  type ResolverState,
+  realAnswerState,
+  referenceSection,
+  systemState,
+} from "../report/resolver-state.ts";
 import { filterWhy, realAnswerWhy, systemWhy } from "../report/why.ts";
 
-const verdictWords: Record<RowState, string> = {
+const words: Record<RowState, string> = {
   blocked: "blocked",
+  cancelled: "cancelled",
   failed: "no answer",
   idle: "",
   inspected: "inspected",
   missing: "not found",
+  optional: "no answer",
   pending: "asking…",
   redirected: "untrusted",
   resolves: "resolves",
-  unavailable: "no answer",
   unsure: "can't tell",
+};
+
+/** This computer finding no address doesn't say the name doesn't exist. */
+const systemWords: Record<RowState, string> = {
+  ...words,
+  missing: "no address",
 };
 
 interface RowBase {
@@ -31,69 +40,10 @@ interface RowBase {
   readonly transport: string;
 }
 
-/** How a row is asked about: by a filter, or this computer. */
-interface RowContext {
-  /** It needn't answer, as an ISP's filter elsewhere. */
-  readonly optional: boolean;
-  /** It failed the self-test, so its answers don't count. */
-  readonly redirected: boolean;
-  readonly result: CheckResult;
-  readonly system: boolean;
-}
-
-const stateOf = (o: Outcome, c: RowContext): RowState => {
-  if (o.kind === "pending") {
-    return "pending";
-  }
-  if (o.kind === "cancelled") {
-    return "unavailable";
-  }
-  if (c.redirected && o.kind === "answered") {
-    return "redirected";
-  }
-  if (o.kind === "failed" && c.optional) {
-    return "unavailable";
-  }
-  if (o.kind === "failed") {
-    return "failed";
-  }
-  if (o.verdict.blocked) {
-    return "blocked";
-  }
-  if (o.verdict.inspected) {
-    return "inspected";
-  }
-  // A filter's "doesn't exist" can only be judged against the real answer.
-  if (o.verdict.missing && !c.system && realAnswerUnavailable(c.result)) {
-    return "unsure";
-  }
-  if (o.verdict.missing) {
-    return "missing";
-  }
-  return "resolves";
-};
-
-const wordOf = (state: RowState, o: Outcome, c: RowContext): string => {
-  if (o.kind === "cancelled") {
-    return "cancelled";
-  }
-  if (state === "missing" && c.system) {
-    return "no address";
-  }
-  return verdictWords[state];
-};
-
-const outcomeRow = (
-  base: RowBase,
-  o: Outcome,
-  why: string,
-  c: RowContext
-): TableRow => {
-  const state = stateOf(o, c);
-  const row = { ...base, state, verdict: wordOf(state, o, c), why };
+/** What the details show of how asking a resolver went. */
+const lookupFields = (o: Outcome) => {
   if (o.kind === "answered") {
     return {
-      ...row,
       answer: answerSummary(o.exchange.answers, o.verdict.reason),
       ms: String(o.exchange.ms),
       response: [
@@ -104,57 +54,13 @@ const outcomeRow = (
     };
   }
   if (o.kind === "failed") {
-    return {
-      ...row,
-      answer: "",
-      ms: String(o.ms),
-      response: [`error: ${o.error}`],
-    };
+    return { answer: "", ms: String(o.ms), response: [`error: ${o.error}`] };
   }
   if (o.kind === "cancelled") {
     // The details read like a lookup that failed at once with this error.
-    return { ...row, answer: "", ms: "0", response: ["error: cancelled"] };
+    return { answer: "", ms: "0", response: ["error: cancelled"] };
   }
-  return { ...row, answer: "", ms: "", response: [] };
-};
-
-const realAnswerRow = (r: CheckResult): TableRow => {
-  const base = {
-    category: "reference",
-    name: "Real answer",
-    server: "DNS over HTTPS",
-    transport: "HTTPS 443",
-    why: realAnswerWhy(r),
-  };
-  const o = r.realAnswer;
-  if (o.kind === "answered") {
-    const { exchange: ex, exists } = o;
-    let state: RowState = "resolves";
-    if (!exists) {
-      state = "missing";
-    }
-    return {
-      ...base,
-      answer: answerSummary(ex.answers),
-      ms: String(ex.ms),
-      response: responseLines(ex.answers),
-      server: new URL(ex.server).host,
-      state,
-      verdict: verdictWords[state],
-    };
-  }
-  let state: RowState = "pending";
-  let verdict = verdictWords.pending;
-  let response: string[] = [];
-  if (o.kind === "cancelled") {
-    state = "unavailable";
-    verdict = "cancelled";
-  } else if (o.kind === "failed") {
-    state = "failed";
-    verdict = verdictWords.failed;
-    response = [`error: ${o.error}`];
-  }
-  return { ...base, answer: "", ms: "", response, state, verdict };
+  return { answer: "", ms: "", response: [] };
 };
 
 const filterBase = (f: Filter): RowBase => ({
@@ -164,29 +70,97 @@ const filterBase = (f: Filter): RowBase => ({
   transport: "UDP 53",
 });
 
+const filterRow = (r: CheckResult, f: FilterResult): TableRow => {
+  const state = filterState(r, f);
+  return {
+    ...filterBase(f.filter),
+    ...lookupFields(f.outcome),
+    state,
+    why: filterWhy(f.filter, f.outcome, r),
+    word: words[state],
+  };
+};
+
+const systemRow = (r: CheckResult): TableRow => {
+  const state = systemState(r);
+  return {
+    category: "reference",
+    name: referenceSection.system,
+    server: systemServer,
+    transport: "system resolver",
+    ...lookupFields(r.system),
+    state,
+    why: systemWhy(r.system, r),
+    word: systemWords[state],
+  };
+};
+
+/** The real answer's server is shown by its host, and only once it answered. */
+const realAnswerRow = (r: CheckResult): TableRow => {
+  const state = realAnswerState(r);
+  const row: TableRow = {
+    answer: "",
+    category: "reference",
+    ms: "",
+    name: referenceSection.realAnswer,
+    response: [],
+    server: "DNS over HTTPS",
+    state,
+    transport: "HTTPS 443",
+    why: realAnswerWhy(r),
+    word: words[state],
+  };
+  const o = r.realAnswer;
+  if (o.kind === "answered") {
+    return {
+      ...row,
+      answer: answerSummary(o.exchange.answers),
+      ms: String(o.exchange.ms),
+      response: responseLines(o.exchange.answers),
+      server: new URL(o.exchange.server).host,
+    };
+  }
+  if (o.kind === "failed") {
+    return { ...row, response: [`error: ${o.error}`] };
+  }
+  return row;
+};
+
 const idleRow = (f: Filter): TableRow => ({
   ...filterBase(f),
   answer: f.servers[0] ?? "",
   ms: "",
   response: [],
   state: "idle",
-  verdict: "",
   why: "Not checked yet. Type a domain, URL or IP address and press enter.",
+  word: "",
 });
 
-export type RowState =
-  | "blocked"
-  | "failed"
-  | "idle"
-  | "inspected"
-  | "missing"
-  | "pending"
-  /** Failed the self-test: its answers seem to come from another resolver. */
-  | "redirected"
-  | "resolves"
-  | "unavailable"
-  /** Says the name doesn't exist, but the real answer is unavailable. */
-  | "unsure";
+/** The table before anything is checked: the filters that will be asked. */
+const idleGroups = (items: readonly Filter[]): Group[] =>
+  byCategory(items, (f) => f.category, idleRow);
+
+/** The table for a result, complete or still arriving. */
+const resultGroups = (r: CheckResult): Group[] => {
+  if (!r.checked) {
+    return [];
+  }
+  const reference = {
+    rows: [systemRow(r), realAnswerRow(r)],
+    title: referenceSection.title,
+  };
+  return [
+    reference,
+    ...byCategory(
+      r.filters,
+      (f) => f.filter.category,
+      (f) => filterRow(r, f)
+    ),
+  ];
+};
+
+/** A resolver's state, or "idle" for a filter before anything is checked. */
+export type RowState = ResolverState | "idle";
 
 /** One row of the table, with everything the details pane shows. */
 export interface TableRow extends RowBase {
@@ -194,8 +168,9 @@ export interface TableRow extends RowBase {
   readonly ms: string;
   readonly response: readonly string[];
   readonly state: RowState;
-  readonly verdict: string;
   readonly why: string;
+  /** The state in a word, such as "blocked". */
+  readonly word: string;
 }
 
 export interface Group {
@@ -203,46 +178,19 @@ export interface Group {
   readonly title: string;
 }
 
-/** The table before anything is checked: the filters that will be asked. */
-export const idleGroups = (items: readonly Filter[]): Group[] =>
-  byCategory(items, (f) => f.category, idleRow);
-
-/** The table for a result, complete or still arriving. */
-export const resultGroups = (r: CheckResult): Group[] => {
-  if (!r.checked) {
-    return [];
+/**
+ * The table's groups of rows: those of `result`, or until a check has one,
+ * the filters in `items` that will be asked. The selection moves through
+ * the same rows.
+ */
+export const tableGroups = (
+  result: CheckResult | undefined,
+  items: readonly Filter[]
+): Group[] => {
+  if (result === undefined) {
+    return idleGroups(items);
   }
-  const reference: Group = {
-    rows: [
-      outcomeRow(
-        {
-          category: "reference",
-          name: "Your DNS",
-          server: "this computer",
-          transport: "system resolver",
-        },
-        r.system,
-        systemWhy(r.system, r),
-        { optional: false, redirected: false, result: r, system: true }
-      ),
-      realAnswerRow(r),
-    ],
-    title: "REFERENCE",
-  };
-  return [
-    reference,
-    ...byCategory(
-      r.filters,
-      (f) => f.filter.category,
-      ({ filter: f, outcome: o }) =>
-        outcomeRow(filterBase(f), o, filterWhy(f, o, r), {
-          optional: !shouldAnswer(r, f),
-          redirected: isRedirected(r, f),
-          result: r,
-          system: false,
-        })
-    ),
-  ];
+  return resultGroups(result);
 };
 
 /** All rows in table order, for moving the selection. */
