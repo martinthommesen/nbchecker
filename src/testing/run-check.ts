@@ -17,10 +17,11 @@ export interface RunOptions extends Partial<CheckerOptions> {
 }
 
 /**
- * Checks a target, detecting the network first as a run does. Left as an
- * effect for tests that move the clock; the others use `runCheck`.
+ * The real check of a target on the fake network, detecting the network
+ * first as a run does. Left as an effect for tests that move the clock; the
+ * others use `runCheck`.
  */
-export const fakeCheck = (
+export const checkOnFakeNetwork = (
   target: string,
   { dns = computer, transport = fakeTransport, ...options }: RunOptions = {}
 ) =>
@@ -31,15 +32,17 @@ export const fakeCheck = (
     Effect.orDie
   );
 
+/** Checks a target on the fake network, and gives its result. */
 export const runCheck = (
   target: string,
   options?: RunOptions
-): Promise<CheckResult> => Effect.runPromise(fakeCheck(target, options));
+): Promise<CheckResult> =>
+  Effect.runPromise(checkOnFakeNetwork(target, options));
 
 /** Checks a target, keeping each result reported on the way, as a screen. */
 export const progressOf = async (target: string, options?: RunOptions) => {
   const reports: CheckResult[] = [];
-  const result = await fakeCheck(target, options).pipe(
+  const result = await checkOnFakeNetwork(target, options).pipe(
     Effect.provideService(Progress, (sofar) =>
       Effect.sync(() => {
         reports.push(sofar);

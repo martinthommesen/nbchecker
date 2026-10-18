@@ -9,7 +9,11 @@ import {
   noAaaaRealAnswerUrl,
   realAnswerUrl,
 } from "../testing/fake-network.ts";
-import { fakeCheck, progressOf, runCheck } from "../testing/run-check.ts";
+import {
+  checkOnFakeNetwork,
+  progressOf,
+  runCheck,
+} from "../testing/run-check.ts";
 import { isBlocked } from "./evidence.ts";
 import { nameExists, realAddresses } from "./result.ts";
 
@@ -150,7 +154,7 @@ describe("check: IP addresses", () => {
     });
     const r = await Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
-        fakeCheck("192.0.2.98", { dns: stuck })
+        checkOnFakeNetwork("192.0.2.98", { dns: stuck })
       );
       yield* TestClock.adjust("5 seconds");
       return yield* Fiber.join(fiber);
