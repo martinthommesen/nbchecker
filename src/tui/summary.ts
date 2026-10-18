@@ -1,7 +1,7 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
 import { seemsIntercepted, trustedFilters } from "../check/evidence.ts";
-import { type CheckResult, settled } from "../check/result.ts";
+import { type CheckResult, settled, unavailable } from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
@@ -34,7 +34,7 @@ const systemPhrase = (r: CheckResult): TextChunk => {
   if (o.kind === "pending") {
     return paint("asking…", { fg: theme.dim });
   }
-  if (o.kind === "failed" || o.kind === "cancelled") {
+  if (unavailable(o)) {
     return paint("no answer", { fg: theme.warn });
   }
   if (o.verdict.blocked) {
@@ -61,7 +61,7 @@ const systemPhrase = (r: CheckResult): TextChunk => {
 
 const realAnswerPhrase = (r: CheckResult): TextChunk => {
   const o = r.realAnswer;
-  if (o.kind === "failed" || o.kind === "cancelled") {
+  if (unavailable(o)) {
     return paint("unavailable", { fg: theme.warn });
   }
   if (o.kind === "pending") {

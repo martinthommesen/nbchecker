@@ -7,19 +7,23 @@ import {
   type Network,
   type Outcome,
   realAnswerKnown,
+  type SelfTestResult,
+  settled,
+  unavailable,
 } from "./result.ts";
 
 /** One failed self-test marks that filter, not the whole network. */
 const minRedirected = 2;
 
+/** The self-tests that came out as `result`; none before any ran. */
+const selfTestsWith = (n: Network | undefined, result: SelfTestResult) =>
+  n?.selfTests.filter((t) => t.result === result) ?? [];
+
 /** How many filters passed the self-test, and how many failed it. */
-export const selfTestCounts = (n: Network | undefined) => {
-  const tests = n?.selfTests ?? [];
-  return {
-    passed: tests.filter((t) => t.result === "passed").length,
-    redirected: tests.filter((t) => t.result === "redirected").length,
-  };
-};
+export const selfTestCounts = (n: Network | undefined) => ({
+  passed: selfTestsWith(n, "passed").length,
+  redirected: selfTestsWith(n, "redirected").length,
+});
 
 /** Whether a resolver answered, and its verdict says `flag`. */
 export const answeredWith = (
@@ -42,7 +46,7 @@ export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
 
 /** The filters that failed the self-test. */
 export const redirectedFilters = (n: Network): readonly string[] =>
-  n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
+  selfTestsWith(n, "redirected").map((t) => t.filter);
 
 /**
  * Whether most filters that answered the self-test failed it, and more than
@@ -82,14 +86,14 @@ export const completionOf = (r: CheckResult): Completion => {
     return "complete";
   }
   const outcomes = [r.system, ...r.filters.map((f) => f.outcome)];
-  // A lookup cut short by a cancel didn't answer either.
-  const failed = (o: Outcome) => o.kind === "failed" || o.kind === "cancelled";
   if (
     r.network === undefined ||
     !realAnswerKnown(r) ||
-    outcomes.some((o) => o.kind === "pending") ||
-    failed(r.system) ||
-    r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter)) ||
+    !outcomes.every(settled) ||
+    unavailable(r.system) ||
+    r.filters.some(
+      (f) => unavailable(f.outcome) && shouldAnswer(r, f.filter)
+    ) ||
     r.filters.some((f) => isRedirected(r, f.filter))
   ) {
     return "incomplete";

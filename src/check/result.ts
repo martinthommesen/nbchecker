@@ -110,6 +110,12 @@ export const pending = { kind: "pending" } as const;
 /** Whether a lookup is over, whichever way it went. */
 export const settled = (o: Outcome<unknown>): boolean => o.kind !== "pending";
 
+/** Whether a lookup ended without an answer: it failed, or was cancelled. */
+export const unavailable = <A>(
+  o: Outcome<A>
+): o is Extract<Outcome<A>, { readonly kind: "cancelled" | "failed" }> =>
+  o.kind === "failed" || o.kind === "cancelled";
+
 /** Whether the real answer is still on its way. */
 export const realAnswerPending = (r: CheckResult): boolean =>
   r.checked && r.realAnswer.kind === "pending";
@@ -120,7 +126,7 @@ export const realAnswerKnown = (r: CheckResult): boolean =>
 
 /** Whether the real answer failed or was cut short by a cancel. */
 export const realAnswerUnavailable = (r: CheckResult): boolean =>
-  r.realAnswer.kind === "failed" || r.realAnswer.kind === "cancelled";
+  unavailable(r.realAnswer);
 
 /** Whether the real answer says the name exists. */
 export const nameExists = (r: CheckResult): boolean =>
