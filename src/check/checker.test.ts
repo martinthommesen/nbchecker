@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
-import { Dns } from "effect/net";
+import { Effect, Layer, Result } from "effect";
+import { Dns, NetAddress } from "effect/net";
 import type { DnsTransport } from "../dns/transport.ts";
 import {
   computer,
@@ -144,6 +144,30 @@ describe("check: IP addresses", () => {
   test("an invalid target is an error", async () => {
     const r = await run(check("not a name!"));
     expect(r.lookupError).toContain("not a domain");
+  });
+});
+
+describe("check: this computer", () => {
+  test("a failed CNAME query is a failure, not a missing CNAME", async () => {
+    const address = Result.getOrThrow(NetAddress.ipFromString("192.0.2.1"));
+    const flaky = Dns.make({
+      lookup: () => Effect.succeed([address]),
+      resolve: (name, type) =>
+        Effect.fail(
+          new Dns.DnsError({
+            hostname: String(name),
+            method: "resolve",
+            reason: "ServerFailure",
+            recordType: type,
+          })
+        ),
+    });
+    const r = await check("good.example").pipe(
+      Effect.provideService(Dns.Dns, flaky),
+      Effect.provide(fakeTransport),
+      Effect.runPromise
+    );
+    expect(r.system?.kind).toBe("failed");
   });
 });
 

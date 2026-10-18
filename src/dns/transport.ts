@@ -15,10 +15,13 @@ import {
 } from "./wire.ts";
 
 const dnsPort = 53;
-const maxId = 0xff_ff;
 const dnsMessage = "application/dns-message";
 
-const randomId = (): number => Math.floor(Math.random() * maxId);
+/** A random 16-bit ID; unpredictable IDs make forged answers harder. */
+const randomId = (): number => {
+  const [id = 0] = globalThis.crypto.getRandomValues(new Uint16Array(1));
+  return id;
+};
 
 const malformed = (server: string) => (error: MalformedResponse) =>
   new QueryError({ reason: error.reason, server });

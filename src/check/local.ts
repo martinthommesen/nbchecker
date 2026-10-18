@@ -38,7 +38,11 @@ export const lookupSystem = (host: string) =>
           })
         )
       ),
-      Effect.orElseSucceed((): DnsRecord[] => [])
+      // A name without a CNAME is normal; any other failure is not.
+      Effect.catchIf(
+        (error) => error.reason === "NotFound",
+        (): Effect.Effect<DnsRecord[]> => Effect.succeed([])
+      )
     );
     const addresses = yield* dns.lookup(host).pipe(Effect.result);
     if (Result.isSuccess(addresses)) {

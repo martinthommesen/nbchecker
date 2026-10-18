@@ -65,8 +65,9 @@ export const sendUdp = (
       connect: { hostname: server, port },
       hostname: bindAddress(server),
       socket: {
-        data: (_socket, data) => {
+        data: (socket, data) => {
           if (responseId(data) === id) {
+            socket.close();
             resume(Effect.succeed(data));
           }
         },
@@ -106,6 +107,7 @@ export const sendTcp = (
           }
           if (responseId(message) === id) {
             resume(Effect.succeed(message));
+            close?.();
           } else {
             fail("answer was for a different query");
           }

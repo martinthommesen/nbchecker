@@ -1,4 +1,5 @@
 /** Renders a result view as text, with ANSI colors for terminals. */
+import { printable } from "./printable.ts";
 import type { Line, Row, Tone, View } from "./view.ts";
 
 const csi = "\u001B[";
@@ -15,10 +16,11 @@ const hostCode = "1";
 const indent = "  ";
 
 const paint = (color: boolean, code: string, s: string): string => {
+  const safe = printable(s);
   if (!color || code === "") {
-    return s;
+    return safe;
   }
-  return `${csi}${code}m${s}${reset}`;
+  return `${csi}${code}m${safe}${reset}`;
 };
 
 const nameWidth = (v: View): number =>
@@ -30,7 +32,7 @@ const rowText = (color: boolean, width: number, r: Row): string => {
   if (r.detail !== undefined && r.detail !== "") {
     text += paint(color, toneCodes.dim, ` → ${r.detail}`);
   }
-  return `${indent}${paint(color, tone, r.icon)} ${r.name.padEnd(width)}  ${text}`;
+  return `${indent}${paint(color, tone, r.icon)} ${printable(r.name).padEnd(width)}  ${text}`;
 };
 
 const lineText = (color: boolean, l: Line): string =>
