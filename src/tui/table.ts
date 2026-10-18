@@ -15,17 +15,23 @@ const labelWidth = 11;
 const responseIndent = 1;
 const responseHang = 2;
 
+/**
+ * Rows whose lack of an answer says nothing: the check was cancelled, or the
+ * filter needn't answer here.
+ */
+const unavailable = { color: theme.faint, glyph: "·" } as const;
+
 const looks: Record<
   RowState,
   { readonly color: string; readonly glyph: string }
 > = {
   blocked: { color: theme.block, glyph: "✕" },
-  cancelled: { color: theme.faint, glyph: "·" },
+  cancelled: unavailable,
   failed: { color: theme.warn, glyph: "?" },
   idle: { color: theme.faint, glyph: "·" },
   inspected: { color: theme.warn, glyph: "!" },
   missing: { color: theme.dim, glyph: "–" },
-  optional: { color: theme.faint, glyph: "·" },
+  optional: unavailable,
   pending: { color: theme.dim, glyph: "" },
   redirected: { color: theme.warn, glyph: "?" },
   resolves: { color: theme.ok, glyph: "✓" },

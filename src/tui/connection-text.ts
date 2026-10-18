@@ -87,12 +87,12 @@ const telenorMark = (c: Connection | undefined, name: string): Mark => {
   if (c === undefined) {
     return mark.cantSee;
   }
-  const seen = testMarks[connectionState(c)];
+  const state = connectionState(c);
   // Seeing one of Telenor's filters is not seeing the others.
-  if (seen === mark.detected && c.filter !== name) {
+  if (state === "detected" && c.filter !== name) {
     return mark.notSeen;
   }
-  return seen;
+  return testMarks[state];
 };
 
 /** Whether Telenor's test page can tell that this computer uses `f`. */
