@@ -115,6 +115,9 @@ const testMark = (c: Connection): Mark => {
   if (c.network !== undefined) {
     return mark.noFilter;
   }
+  if (c.error !== undefined) {
+    return mark.cantSee;
+  }
   return mark.notSeen;
 };
 

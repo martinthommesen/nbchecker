@@ -251,7 +251,6 @@ export const inputHint = (s: State): StyledText => {
   ]);
 };
 
-/** What the header says about this computer's connection. */
 /** The box at the top right: which filter this computer's DNS uses. */
 export const connectionBadge = (s: State): StyledText =>
   lines([[paint("your connection  ", { fg: theme.dim }), connectionStatus(s)]]);

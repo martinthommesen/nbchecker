@@ -17,6 +17,8 @@ import { OpenRenderer, runTui } from "./run.ts";
 const width = 120;
 /** The narrowest terminal the README promises to fit. */
 const narrowWidth = 80;
+/** The blocked count, unbroken by wrapping. */
+const blockedSoFar = /blocked so far: \d/u;
 const height = 40;
 const pollMs = 10;
 const pollTries = 200;
@@ -141,6 +143,6 @@ describe("tui on a narrow terminal", () => {
     const screen = await s.until("answered");
     const line = screen.split("\n").find((l) => l.includes("answered"));
     expect(line).toContain("Checking");
-    expect(screen).toContain("blocked so far:");
+    expect(screen).toMatch(blockedSoFar);
   });
 });
