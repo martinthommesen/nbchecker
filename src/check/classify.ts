@@ -5,41 +5,17 @@ import { Result } from "effect";
 import { NetAddress } from "effect/net";
 import { extendedErrorName, isBlockingError, Rcode } from "../dns/codes.ts";
 import type { DnsAnswer } from "../dns/wire.ts";
-
-/** Telenor answers a blocked name with a CNAME to one of these hosts. */
-const telenorTargets = new Map<string, Reason>([
-  ["dns-block.telenor.net", "legal"],
-  ["kid.telenor.net", "kripos"],
-  ["nettvern-info.telenor.net", "nettvern"],
-  ["nettvernpluss-info.telenor.net", "nettvern+"],
-]);
-
-/** Cisco Umbrella block-page addresses and what each one means. */
-const umbrellaBlockPages = new Map<string, string>([
-  ["146.112.61.104", "domain list"],
-  ["146.112.61.105", "command and control"],
-  ["146.112.61.106", "content category"],
-  ["146.112.61.107", "malware"],
-  ["146.112.61.108", "phishing"],
-  ["146.112.61.109", "blocked"],
-  ["146.112.61.110", "security"],
-]);
-
-/**
- * Cisco Umbrella's inspection proxy. A name sent there isn't blocked by DNS;
- * the proxy checks the pages as they load, and may block some URLs.
- */
-const umbrellaProxyPrefix = "146.112.56.";
-
-/** AdGuard Family's block page, which it answers adult sites with. */
-const adguardBlockPages = new Set(["94.140.14.35"]);
+import {
+  adguardBlockPages,
+  nullAddresses,
+  telenorBlockCnames,
+  umbrellaBlockPages,
+  umbrellaProxyPrefix,
+} from "./known-answers.ts";
 
 /** The first 12 bytes of an IPv4-mapped IPv6 address, ::ffff:a.b.c.d. */
 const ff = 0xff;
 const ipv4MappedPrefix = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ff, ff];
-
-const isUnspecified = (address: string): boolean =>
-  address === "0.0.0.0" || address === "::";
 
 interface Draft {
   answers: string[];
@@ -66,7 +42,7 @@ const addAddress = (v: Draft, raw: string, real: ReadonlySet<string>): void => {
     return;
   }
   const category = umbrellaBlockPages.get(address);
-  if (isUnspecified(address)) {
+  if (nullAddresses.includes(address)) {
     block(v, "null-ip");
   } else if (category !== undefined) {
     block(v, "umbrella", category);
@@ -185,7 +161,7 @@ export const classify = (answer: DnsAnswer, reference: Reference): Verdict => {
   for (const r of answer.records) {
     if (r.type === "CNAME") {
       v.answers.push(r.value);
-      const reason = telenorTargets.get(r.value);
+      const reason = telenorBlockCnames.get(r.value);
       if (reason !== undefined) {
         block(v, reason);
       }

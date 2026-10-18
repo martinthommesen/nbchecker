@@ -1,11 +1,8 @@
 /** The "your connection" screen: which filter this computer's DNS uses. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import {
-  type Connection,
-  testPage,
-  testPageMeaning,
-} from "../check/connection.ts";
+import type { Connection } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
+import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
 import { categoryOrder } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
@@ -141,7 +138,7 @@ const howText = (c: Connection | undefined, width: number): StyledText => {
     ],
     [
       paint(`${glyph.glyph} `, { fg: glyph.color }),
-      paint(fit(testPage, lookupWidth - 2)),
+      paint(fit(telenorTestPage.name, lookupWidth - 2)),
       paint(testAnswerText(c)),
     ],
     [],
@@ -154,7 +151,7 @@ const howText = (c: Connection | undefined, width: number): StyledText => {
         }
       ),
     ],
-    ...testPageMeaning.map(([ip, meaning]) => [
+    ...telenorTestPage.answers.map(({ ip, meaning }) => [
       paint(fill(`   ${fit(ip, addressWidth)}${meaning}`, width), {
         ...block,
         fg: theme.answer,

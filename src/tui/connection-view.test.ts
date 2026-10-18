@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Dns } from "effect/net";
-import {
-  type Connection,
-  detectConnection,
-  testPage,
-} from "../check/connection.ts";
+import { type Connection, detectConnection } from "../check/connection.ts";
+import { telenorTestPage } from "../check/known-answers.ts";
 import { detectedText, howText } from "./connection-view.ts";
 
 const failed: Connection = {
@@ -35,7 +32,7 @@ describe("howText", () => {
 test("the test page's public answer is not shown as Telenor's DNS", async () => {
   const c = await detectConnection.pipe(
     Effect.provide(
-      Dns.layerStatic({ hosts: { [testPage]: ["148.123.15.37"] } })
+      Dns.layerStatic({ hosts: { [telenorTestPage.name]: ["148.123.15.37"] } })
     ),
     Effect.runPromise
   );

@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { Dns } from "effect/net";
-import { connectionText, detectConnection, testPage } from "./connection.ts";
+import { connectionText, detectConnection } from "./connection.ts";
+import { telenorTestPage } from "./known-answers.ts";
+
+const testPage = telenorTestPage.name;
 
 const detect = (hosts: Record<string, readonly string[]>) =>
   detectConnection.pipe(

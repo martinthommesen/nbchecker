@@ -1,15 +1,11 @@
 /** Short and long forms of a resolver's raw answer, for display. */
 import type { Reason, Verdict } from "../check/classify.ts";
+import { telenorBlockCnames } from "../check/known-answers.ts";
 import { extendedErrorName, rcodeName } from "../dns/codes.ts";
 import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
 
 /** Blocks that answer with a CNAME to a block page. */
-const cnameReasons = new Set<Reason>([
-  "kripos",
-  "legal",
-  "nettvern",
-  "nettvern+",
-]);
+const cnameReasons: ReadonlySet<Reason> = new Set(telenorBlockCnames.values());
 
 const unique = (answers: readonly DnsAnswer[]): DnsRecord[] => {
   const seen = new Set<string>();
