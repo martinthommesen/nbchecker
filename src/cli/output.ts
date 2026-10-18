@@ -26,10 +26,11 @@ const writeLine = (text: string) =>
   });
 
 /**
- * Any other write failure, such as a full disk, ends the run with its own
- * status, so a script doesn't take missing results for a clean check.
+ * Ignores a reader that has gone away. Any other write failure, such as a
+ * full disk, ends the run with its own status, so a script doesn't take
+ * missing results for a clean check.
  */
-const writeFailed = (error: unknown) => {
+const onWriteError = (error: unknown) => {
   if (readerGone(error)) {
     return Effect.void;
   }
@@ -38,4 +39,4 @@ const writeFailed = (error: unknown) => {
 
 /** Prints a line of results before going on, so none are lost at exit. */
 export const print = (text: string) =>
-  writeLine(text).pipe(Effect.catch(writeFailed));
+  writeLine(text).pipe(Effect.catch(onWriteError));

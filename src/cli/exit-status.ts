@@ -19,8 +19,8 @@ export const exitOutput = 74;
 
 /**
  * Ends the program with an exit status. The runtime reads the status from
- * the error and, because `errorReported` is false, logs nothing: the result
- * has already been printed.
+ * the error and, because `errorReported` is false, logs nothing: whatever
+ * needs saying has already been printed.
  */
 export class ExitStatus extends Data.TaggedError("ExitStatus")<{
   readonly code: number;
@@ -36,8 +36,9 @@ export class ExitStatus extends Data.TaggedError("ExitStatus")<{
 
 /**
  * Blocked if anything is blocked, even when a check was incomplete;
- * otherwise incomplete if a check was, so that nbchecker couldn't tell.
- * See `completionOf` for what makes a check incomplete.
+ * otherwise incomplete if a check was, so that nbchecker couldn't tell;
+ * otherwise not blocked. See `completionOf` for what makes a check
+ * incomplete.
  */
 export const exitCode = (results: readonly CheckResult[]): number => {
   if (results.some(isBlocked)) {
