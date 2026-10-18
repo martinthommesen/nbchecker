@@ -3,7 +3,7 @@
  * the opcode and the question (RFC 5452).
  */
 import { Rcode } from "./codes.ts";
-import { MalformedResponse } from "./malformed.ts";
+import { MalformedMessage } from "./malformed.ts";
 import { headerLength } from "./protocol.ts";
 import { type Header, Reader } from "./reader.ts";
 
@@ -28,7 +28,7 @@ interface Message extends Header {
 const read = (bytes: Uint8Array): Message => {
   // A reply without a whole header can't be checked, even an empty one.
   if (bytes.length < headerLength) {
-    throw new MalformedResponse({ reason: "bad answer: header cut short" });
+    throw new MalformedMessage({ reason: "bad answer: header cut short" });
   }
   const r = new Reader(bytes);
   const header = r.header();
@@ -70,7 +70,7 @@ export const mismatch = (
   try {
     return compare(read(query), read(reply));
   } catch (error) {
-    if (error instanceof MalformedResponse) {
+    if (error instanceof MalformedMessage) {
       return error.reason;
     }
     throw error;

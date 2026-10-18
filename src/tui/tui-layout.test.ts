@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import type { DnsAnswer } from "../dns/wire.ts";
+import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import { blockedName } from "../testing/design-network.ts";
 import { startTui, type TuiSession } from "../testing/tui-session.ts";
 
@@ -23,7 +23,7 @@ const addresses = new Map([
   ["AAAA", [longAddress]],
 ]);
 
-const answerOf = (name: string, type: "A" | "AAAA"): DnsAnswer => ({
+const answerOf = (name: string, type: QueryType): DnsAnswer => ({
   extendedErrors: [],
   rcode: Rcode.noError,
   records: (addresses.get(type) ?? []).map((value) => ({ name, type, value })),

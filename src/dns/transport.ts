@@ -9,7 +9,7 @@ import {
   type HttpClientResponse,
 } from "effect/http";
 import { concat } from "./bytes.ts";
-import type { MalformedResponse } from "./malformed.ts";
+import type { MalformedMessage } from "./malformed.ts";
 import { mismatch } from "./match.ts";
 import { QueryError, timeoutAfter } from "./query-error.ts";
 import { sendTcp, sendUdp } from "./sockets.ts";
@@ -41,7 +41,7 @@ const randomId = (): number => {
 /** A message that can't be encoded or decoded fails the query to `server`. */
 const asQueryError = (server: string) =>
   Effect.mapError(
-    (error: MalformedResponse) =>
+    (error: MalformedMessage) =>
       new QueryError({ reason: error.reason, server })
   );
 

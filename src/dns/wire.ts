@@ -6,7 +6,7 @@
 import { Effect } from "effect";
 import { NetAddress } from "effect/net";
 import { concat, uint16s } from "./bytes.ts";
-import { MalformedResponse } from "./malformed.ts";
+import { MalformedMessage } from "./malformed.ts";
 import {
   classIn,
   extendedErrorOption,
@@ -27,17 +27,17 @@ const ipv6Length = 16;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const asMalformed = (error: unknown): MalformedResponse => {
-  if (error instanceof MalformedResponse) {
+const asMalformed = (error: unknown): MalformedMessage => {
+  if (error instanceof MalformedMessage) {
     return error;
   }
-  return new MalformedResponse({ reason: String(error) });
+  return new MalformedMessage({ reason: String(error) });
 };
 
 const labelBytes = (label: string): Uint8Array[] => {
   const bytes = encoder.encode(label);
   if (bytes.length > maxLabelLength) {
-    throw new MalformedResponse({ reason: `label too long: ${label}` });
+    throw new MalformedMessage({ reason: `label too long: ${label}` });
   }
   return [Uint8Array.of(bytes.length), bytes];
 };
@@ -88,7 +88,7 @@ const readRecord = (r: Reader): RawRecord => {
 interface AddressType {
   readonly length: number;
   readonly parse: (data: Uint8Array) => NetAddress.IpAddress;
-  readonly type: "A" | "AAAA";
+  readonly type: QueryType;
 }
 
 const addressTypes = new Map<number, AddressType>([
@@ -116,11 +116,11 @@ const readCname = (bytes: Uint8Array, raw: RawRecord): string => {
       return value;
     }
   } catch (error) {
-    if (!(error instanceof MalformedResponse)) {
+    if (!(error instanceof MalformedMessage)) {
       throw error;
     }
   }
-  throw new MalformedResponse({ reason: "bad CNAME record" });
+  throw new MalformedMessage({ reason: "bad CNAME record" });
 };
 
 const toRecord = (bytes: Uint8Array, raw: RawRecord): DnsRecord | undefined => {
@@ -132,7 +132,7 @@ const toRecord = (bytes: Uint8Array, raw: RawRecord): DnsRecord | undefined => {
     return;
   }
   if (raw.data.length !== address.length) {
-    throw new MalformedResponse({ reason: `bad ${address.type} record` });
+    throw new MalformedMessage({ reason: `bad ${address.type} record` });
   }
   const value = NetAddress.formatIp(address.parse(raw.data));
   return { name: raw.name, type: address.type, value };
@@ -164,7 +164,7 @@ export type QueryType = "A" | "AAAA";
 /** One record from the answer section. */
 export interface DnsRecord {
   readonly name: string;
-  readonly type: "A" | "AAAA" | "CNAME";
+  readonly type: QueryType | "CNAME";
   /** The address, or the CNAME target without its trailing dot. */
   readonly value: string;
 }
@@ -194,7 +194,7 @@ export const typeCode = (type: DnsRecord["type"]): number => {
 };
 
 /**
- * Writes a name as length-prefixed labels. Throws a `MalformedResponse` for
+ * Writes a name as length-prefixed labels. Throws a `MalformedMessage` for
  * a label longer than 63 bytes.
  */
 export const encodeName = (name: string): Uint8Array => {
@@ -207,11 +207,11 @@ export const encodeQuery = (
   id: number,
   name: string,
   type: QueryType
-): Effect.Effect<Uint8Array, MalformedResponse> =>
+): Effect.Effect<Uint8Array, MalformedMessage> =>
   Effect.try({ catch: asMalformed, try: () => encode(id, name, type) });
 
 /** Decodes a DNS response message. */
 export const decodeResponse = (
   bytes: Uint8Array
-): Effect.Effect<DnsAnswer, MalformedResponse> =>
+): Effect.Effect<DnsAnswer, MalformedMessage> =>
   Effect.try({ catch: asMalformed, try: () => decode(bytes) });

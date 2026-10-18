@@ -1,6 +1,6 @@
 import { Data } from "effect";
 
 /** A DNS message that could not be encoded or decoded. */
-export class MalformedResponse extends Data.TaggedError("MalformedResponse")<{
+export class MalformedMessage extends Data.TaggedError("MalformedMessage")<{
   readonly reason: string;
 }> {}

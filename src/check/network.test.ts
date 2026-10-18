@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
 import { Rcode } from "../dns/codes.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import type { DnsAnswer } from "../dns/wire.ts";
+import type { DnsAnswer, QueryType } from "../dns/wire.ts";
 import {
   blockingRedirectTransport,
   computer,
@@ -39,7 +39,7 @@ const detect = (
 
 const dnsAnswer = (
   name: string,
-  type: "A" | "AAAA",
+  type: QueryType,
   value: string
 ): DnsAnswer => ({
   extendedErrors: [],

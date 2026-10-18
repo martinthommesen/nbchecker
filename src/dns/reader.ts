@@ -1,4 +1,4 @@
-import { MalformedResponse } from "./malformed.ts";
+import { MalformedMessage } from "./malformed.ts";
 import {
   Flag,
   maxLabelLength,
@@ -96,7 +96,7 @@ export class Reader {
       if (len >= pointerTag) {
         jumps += 1;
         if (jumps > maxPointerJumps) {
-          throw new MalformedResponse({ reason: "name compression loop" });
+          throw new MalformedMessage({ reason: "name compression loop" });
         }
         resumeAt ??= at + uint16Bytes;
         at = (len - pointerTag) * byteValues + this.byteAt(at + 1);
@@ -140,29 +140,29 @@ export class Reader {
 
   private checkLabel(len: number, size: number): void {
     if (len > maxLabelLength) {
-      throw new MalformedResponse({ reason: "bad label length" });
+      throw new MalformedMessage({ reason: "bad label length" });
     }
     if (size > maxNameBytes) {
-      throw new MalformedResponse({ reason: "name is too long" });
+      throw new MalformedMessage({ reason: "name is too long" });
     }
   }
 
   private need(n: number): void {
     if (this.offset + n > this.bytes.length) {
-      throw new MalformedResponse({ reason: "response is cut short" });
+      throw new MalformedMessage({ reason: "response is cut short" });
     }
   }
 
   private byteAt(at: number): number {
     if (at >= this.bytes.length) {
-      throw new MalformedResponse({ reason: "name runs past the end" });
+      throw new MalformedMessage({ reason: "name runs past the end" });
     }
     return this.view.getUint8(at);
   }
 
   private slice(at: number, n: number): Uint8Array {
     if (at + n > this.bytes.length) {
-      throw new MalformedResponse({ reason: "label runs past the end" });
+      throw new MalformedMessage({ reason: "label runs past the end" });
     }
     return this.bytes.subarray(at, at + n);
   }

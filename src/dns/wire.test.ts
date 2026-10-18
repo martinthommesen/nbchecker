@@ -43,7 +43,7 @@ describe("encodeQuery", () => {
     const error = Effect.runSync(
       Effect.flip(encodeQuery(1, `${"a".repeat(longestLabel + 1)}.no`, "A"))
     );
-    expect(error._tag).toBe("MalformedResponse");
+    expect(error._tag).toBe("MalformedMessage");
   });
 });
 
@@ -101,7 +101,7 @@ describe("decodeResponse: flags and errors", () => {
     const whole = response({
       records: [{ name: "example.com", type: "A", value: "192.0.2.1" }],
     });
-    expect(decodeError(whole.subarray(0, -1))._tag).toBe("MalformedResponse");
+    expect(decodeError(whole.subarray(0, -1))._tag).toBe("MalformedMessage");
   });
 
   test("fails on a compression loop", () => {
