@@ -9,6 +9,7 @@ import {
   type ResolverState,
   realAnswerState,
   referenceSection,
+  resultSections,
   systemState,
 } from "../report/resolver-state.ts";
 import { filterWhy, realAnswerWhy, systemWhy } from "../report/why.ts";
@@ -141,23 +142,12 @@ const idleGroups = (items: readonly Filter[]): Group[] =>
   byCategory(items, (f) => f.category, idleRow);
 
 /** The table for a result, complete or still arriving. */
-const resultGroups = (r: CheckResult): Group[] => {
-  if (!r.checked) {
-    return [];
-  }
-  const reference = {
-    rows: [systemRow(r), realAnswerRow(r)],
-    title: referenceSection.title,
-  };
-  return [
-    reference,
-    ...byCategory(
-      r.filters,
-      (f) => f.filter.category,
-      (f) => filterRow(r, f)
-    ),
-  ];
-};
+const resultGroups = (r: CheckResult): Group[] =>
+  resultSections(r, {
+    filter: filterRow,
+    realAnswer: realAnswerRow,
+    system: systemRow,
+  });
 
 /** A resolver's state, or "idle" for a filter before anything is checked. */
 export type RowState = ResolverState | "idle";

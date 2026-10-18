@@ -1,6 +1,7 @@
 /**
  * What each resolver's row says happened, decided once for the text output,
- * the table and the screen's summary, which each show it in their own way.
+ * the table and the screen's summary, which each show it in their own way,
+ * and the order the rows come in.
  */
 import type { Verdict } from "../check/classify.ts";
 import { isRedirected, shouldAnswer } from "../check/evidence.ts";
@@ -9,6 +10,7 @@ import {
   type FilterResult,
   realAnswerUnavailable,
 } from "../check/result.ts";
+import { byCategory } from "./categories.ts";
 
 /** What an answer says: a block, the inspection proxy, no name, or addresses. */
 const answerState = (v: Verdict): ResolverState => {
@@ -23,6 +25,13 @@ const answerState = (v: Verdict): ResolverState => {
   }
   return "resolves";
 };
+
+/** How an output builds each kind of row. */
+interface RowBuilders<R> {
+  readonly filter: (r: CheckResult, f: FilterResult) => R;
+  readonly realAnswer: (r: CheckResult) => R;
+  readonly system: (r: CheckResult) => R;
+}
 
 /**
  * - blocked: a known block answer
@@ -99,4 +108,30 @@ export const realAnswerState = (r: CheckResult): ResolverState => {
     return "resolves";
   }
   return "missing";
+};
+
+/**
+ * A result's rows in the sections every output shows them in: the
+ * reference rows first, then the filters by category. A result that wasn't
+ * checked has none.
+ */
+export const resultSections = <R>(
+  r: CheckResult,
+  rows: RowBuilders<R>
+): { readonly rows: R[]; readonly title: string }[] => {
+  if (!r.checked) {
+    return [];
+  }
+  const reference = {
+    rows: [rows.system(r), rows.realAnswer(r)],
+    title: referenceSection.title,
+  };
+  return [
+    reference,
+    ...byCategory(
+      r.filters,
+      (f) => f.filter.category,
+      (f) => rows.filter(r, f)
+    ),
+  ];
 };

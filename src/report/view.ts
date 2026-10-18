@@ -9,13 +9,13 @@ import type {
   Outcome,
   RealAnswer,
 } from "../check/result.ts";
-import { byCategory } from "./categories.ts";
 import { verdictText } from "./reasons.ts";
 import {
   filterState,
   type ResolverState,
   realAnswerState,
   referenceSection,
+  resultSections,
   systemState,
 } from "./resolver-state.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
@@ -200,24 +200,13 @@ export const shortList = (items: readonly string[], n: number): string => {
   return `${items.slice(0, n).join(", ")} and ${items.length - n} more`;
 };
 
-export const view = (r: CheckResult): View => {
-  const base = { host: r.host, notes: r.notes, summary: summaryOf(r) };
-  if (!r.checked) {
-    return { ...base, sections: [] };
-  }
-  const reference = {
-    rows: [systemRow(r), realAnswerRow(r)],
-    title: referenceSection.title,
-  };
-  return {
-    ...base,
-    sections: [
-      reference,
-      ...byCategory(
-        r.filters,
-        (f) => f.filter.category,
-        (f) => filterRow(r, f)
-      ),
-    ],
-  };
-};
+export const view = (r: CheckResult): View => ({
+  host: r.host,
+  notes: r.notes,
+  sections: resultSections(r, {
+    filter: filterRow,
+    realAnswer: realAnswerRow,
+    system: systemRow,
+  }),
+  summary: summaryOf(r),
+});
