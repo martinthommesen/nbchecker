@@ -22,6 +22,14 @@ describe("wrap", () => {
     }
   });
 
+  test("keeps the indent a line starts with", () => {
+    expect(wrap(`  CNAME ${address}`, width, hang)).toEqual([
+      "  CNAME",
+      `    ${address.slice(0, width - hang - hang)}`,
+      `    ${address.slice(width - hang - hang)}`,
+    ]);
+  });
+
   test("leaves a line that fits alone", () => {
     expect(wrap("example.com. A 192.0.2.1", width)).toEqual([
       "example.com. A 192.0.2.1",

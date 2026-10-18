@@ -44,10 +44,16 @@ export const fit = (s: string, n: number): string => {
 
 /**
  * Breaks `s` into lines of at most `n` columns, at spaces where it can and
- * inside a word too long for a line. Lines after the first are indented by
- * `hang` columns, so they read as part of the first.
+ * inside a word too long for a line. Every line keeps the indent `s` starts
+ * with, and lines after the first are indented by `hang` more columns, so
+ * they read as part of the first.
  */
 export const wrap = (s: string, n: number, hang = 0): string[] => {
+  const text = s.trimStart();
+  const indent = s.slice(0, s.length - text.length);
+  if (indent !== "") {
+    return wrap(text, n - columns(indent), hang).map((l) => indent + l);
+  }
   const out: string[] = [];
   const room = () => n - Math.min(out.length, 1) * hang;
   let line = "";
