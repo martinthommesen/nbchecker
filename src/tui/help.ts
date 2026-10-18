@@ -8,6 +8,7 @@ const keyWidth = 10;
 const keys: readonly (readonly [string, string])[] = [
   ["enter", "check what you typed"],
   ["↑ ↓", "select a row, or recall earlier checks while typing"],
+  ["pgup pgdn", "move a page in the table, or scroll help and connection"],
   ["/", "type a new domain, URL or IP address"],
   ["r", "check the same target again"],
   ["c", "show which filter this computer's DNS uses"],

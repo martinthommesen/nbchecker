@@ -1,6 +1,14 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import { columns, fit, fitRight, lines, paint, spinner } from "./paint.ts";
+import {
+  columns,
+  fit,
+  fitRight,
+  lines,
+  paint,
+  spinner,
+  wrap,
+} from "./paint.ts";
 import type { Group, RowState, TableRow } from "./rows.ts";
 import { theme } from "./theme.ts";
 
@@ -10,6 +18,9 @@ const verdictWidth = 10;
 const msWidth = 4;
 const gaps = 1;
 const labelWidth = 11;
+/** Response lines start one column in, and wrap two further in. */
+const responseIndent = 1;
+const responseHang = 2;
 
 const looks: Record<
   RowState,
@@ -134,8 +145,13 @@ export const detailsText = (
       [],
       [paint(fit(" RESPONSE", width), { ...block, fg: theme.faint })]
     );
+    // Wrapped, not cut: the exact address is what the details are for.
     for (const line of row.response) {
-      out.push([paint(fit(` ${line}`, width), { ...block, fg: theme.answer })]);
+      for (const part of wrap(line, width - responseIndent, responseHang)) {
+        out.push([
+          paint(fit(` ${part}`, width), { ...block, fg: theme.answer }),
+        ]);
+      }
     }
   }
   out.push([], [paint("WHY", { fg: theme.faint })], [paint(row.why)]);
