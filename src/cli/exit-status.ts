@@ -1,5 +1,5 @@
 /** Every exit status nbchecker ends with, so scripts can act on the result. */
-import { Data, Runtime } from "effect";
+import { Console, Data, Effect, Runtime } from "effect";
 import { type CheckResult, isBlocked } from "../check/result.ts";
 
 /** Nothing was blocked, and every check was complete. */
@@ -48,3 +48,9 @@ export const exitCode = (results: readonly CheckResult[]): number => {
   }
   return exitNotBlocked;
 };
+
+/** Says on standard error why nbchecker stops, then ends it with `code`. */
+export const stop = (code: number, why: string) =>
+  Console.error(`nbchecker: ${why}`).pipe(
+    Effect.andThen(Effect.fail(new ExitStatus({ code })))
+  );

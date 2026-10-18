@@ -33,6 +33,8 @@ bun run fix      # fixes formatting and the lint problems it can
 The code is TypeScript with [Effect](https://effect.website) and
 [OpenTUI](https://github.com/sst/opentui):
 
+- `src/cli` is the command: it prints results for scripts, with an exit
+  status, or opens the interactive screen.
 - `src/dns` sends DNS queries and reads the answers.
 - `src/check` asks every filter and works out what each answer means.
 - `src/report` turns a result into text and JSON.

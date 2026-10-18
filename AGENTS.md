@@ -5,6 +5,8 @@ compares DNS filters with the computer's resolver and an unfiltered DoH referenc
 
 ## Working in the repository
 
+- `src/cli/`: the command, checks of targets from arguments or standard input,
+  and exit statuses.
 - `src/dns/`: DNS wire format and UDP, TCP, and DoH transports.
 - `src/check/`: target normalization, provider queries, and verdicts.
 - `src/report/`: text and JSON output. `src/tui/`: interactive terminal UI.

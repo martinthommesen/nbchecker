@@ -10,7 +10,7 @@ import { env } from "bun";
 import { Console, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import { CheckerOptions } from "../check/checker.ts";
-import { cli } from "../cli.ts";
+import { cli } from "../cli/command.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import {
   computer,

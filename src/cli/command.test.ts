@@ -3,20 +3,20 @@ import { BunServices } from "@effect/platform-bun";
 import { argv, env, file, sleep, spawn, spawnSync } from "bun";
 import { Console, Effect, Exit, Layer, Stdio, Stream } from "effect";
 import {
+  computer,
+  fakeFilters,
+  fakeTransport,
+} from "../testing/fake-network.ts";
+import { cli } from "./command.ts";
+import {
   ExitStatus,
   exitIncomplete,
   exitOutput,
   exitUsage,
-} from "./cli/exit-status.ts";
-import { cli } from "./cli.ts";
-import {
-  computer,
-  fakeFilters,
-  fakeTransport,
-} from "./testing/fake-network.ts";
+} from "./exit-status.ts";
 
 const bun = argv[0] ?? "bun";
-const fakeCli = `${import.meta.dir}/testing/fake-cli.ts`;
+const fakeCli = `${import.meta.dir}/../testing/fake-cli.ts`;
 
 /** What a pipe holds on Linux; output beyond it was lost. */
 const pipeBuffer = 65_536;
