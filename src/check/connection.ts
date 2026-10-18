@@ -9,7 +9,7 @@ const detectedBy = (ip: string): Detected | undefined => {
   if (filter === undefined) {
     return;
   }
-  return { filter, network: "Telenor" };
+  return { filter, network: telenorTestPage.network };
 };
 
 interface Detected {

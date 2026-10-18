@@ -5,6 +5,12 @@ import {
   umbrellaBlockPages,
 } from "./known-answers.ts";
 
+/** Telenor's filters only answer its own customers. */
+const telenorCustomers = {
+  customers: "Telenor customers",
+  network: telenorTestPage.network,
+};
+
 /** Telenor's test page as a canary: only `filter`'s own address passes. */
 const telenorCanary = (filter: string): Canary => ({
   answers: telenorTestPage.answers
@@ -60,7 +66,7 @@ export const filters: readonly Filter[] = [
     canary: telenorCanary("Telenor Nettvern"),
     category: "security",
     name: "Telenor Nettvern",
-    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
+    onlyAnswers: telenorCustomers,
     servers: [
       "148.122.16.253",
       "148.122.164.253",
@@ -72,7 +78,7 @@ export const filters: readonly Filter[] = [
     canary: telenorCanary("Telenor Nettvern+"),
     category: "family",
     name: "Telenor Nettvern+",
-    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
+    onlyAnswers: telenorCustomers,
     servers: [
       "148.122.16.252",
       "148.122.164.252",

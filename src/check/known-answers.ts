@@ -16,6 +16,8 @@ interface TestPage {
   /** In the order the connection screen lists them. */
   readonly answers: readonly TestPageAnswer[];
   readonly name: string;
+  /** The network its filters serve, as connection detection names it. */
+  readonly network: string;
 }
 
 /**
@@ -31,6 +33,7 @@ export const telenorTestPage: TestPage = {
     { ip: "148.123.15.37", meaning: "public answer (no filter)" },
   ],
   name: "nettvern.telenor.net",
+  network: "Telenor",
 };
 
 /** Telenor answers a blocked name with a CNAME to one of these hosts. */
