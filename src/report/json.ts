@@ -1,12 +1,15 @@
 /** The --json output and the exit status. */
 import type { Verdict } from "../check/classify.ts";
 import { type CheckResult, isBlocked, type Outcome } from "../check/result.ts";
+import { statusOf } from "./status.ts";
 
 interface JsonVerdict {
   readonly answers?: readonly string[];
   readonly blocked: boolean;
   readonly detail?: string;
   readonly error?: string;
+  /** Sent through an inspection proxy, which may still block some URLs. */
+  readonly inspected?: boolean;
   readonly reason?: string;
   readonly server?: string;
 }
@@ -17,6 +20,9 @@ const verdictFields = (v: Verdict) => {
   };
   if (v.answers.length > 0) {
     out.answers = v.answers;
+  }
+  if (v.inspected) {
+    out.inspected = true;
   }
   if (v.reason !== undefined) {
     out.reason = v.reason;
@@ -39,6 +45,7 @@ const outcomeJson = (o: Outcome): JsonVerdict => {
 
 const resultJson = (r: CheckResult) => ({
   blocked: isBlocked(r),
+  completion: r.completion,
   // JSON.stringify leaves out fields that are undefined.
   error: r.lookupError,
   exists: r.exists,
@@ -52,34 +59,25 @@ const resultJson = (r: CheckResult) => ({
   notes: r.notes,
   realAnswer: r.truth,
   realAnswerError: r.truthError,
+  status: statusOf(r).kind,
   target: r.target,
   thisComputer: r.system && outcomeJson(r.system),
 });
 
-/**
- * A check is incomplete when something that should have answered didn't:
- * the real answer, this computer's resolver or a filter. A
- * filter that only answers some networks, such as an ISP's, doesn't count.
- */
-const incomplete = (r: CheckResult): boolean =>
-  r.lookupError !== undefined ||
-  (r.checked &&
-    (r.truthError !== undefined ||
-      r.system?.kind === "failed" ||
-      r.filters.some(
-        (f) => f.outcome.kind === "failed" && f.filter.onlyAnswers === undefined
-      )));
-
 export const exitBlocked = 1;
 export const exitIncomplete = 2;
 
-/** 0 if nothing is blocked, 1 if anything is, 2 if a check was incomplete. */
+/**
+ * 1 if anything is blocked, even when a check was incomplete; otherwise 2 if
+ * a check was incomplete, so that nbchecker couldn't tell; otherwise 0.
+ * See `completionOf` for what makes a check incomplete.
+ */
 export const exitCode = (results: readonly CheckResult[]): number => {
-  if (results.some(incomplete)) {
-    return exitIncomplete;
-  }
   if (results.some(isBlocked)) {
     return exitBlocked;
+  }
+  if (results.some((r) => r.completion !== "complete")) {
+    return exitIncomplete;
   }
   return 0;
 };

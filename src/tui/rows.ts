@@ -4,7 +4,9 @@ import {
   type CheckResult,
   type Exchange,
   type Outcome,
+  shouldAnswer,
   truthPending,
+  wasCancelled,
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { categoryOrder, categoryTitles } from "../report/view.ts";
@@ -20,10 +22,12 @@ const verdictWords: Record<RowState, string> = {
   blocked: "blocked",
   failed: "no answer",
   idle: "",
+  inspected: "inspected",
   missing: "not found",
   pending: "asking…",
   resolves: "resolves",
   unavailable: "no answer",
+  unsure: "can't tell",
 };
 
 interface RowBase {
@@ -33,11 +37,23 @@ interface RowBase {
   readonly transport: string;
 }
 
-const stateOf = (o: Outcome, onlySome: boolean): RowState => {
+/** How a row is asked about: by a filter, or this computer. */
+interface RowContext {
+  /** It needn't answer, as an ISP's filter elsewhere. */
+  readonly optional: boolean;
+  readonly result: CheckResult;
+  readonly system: boolean;
+}
+
+/** A filter's "doesn't exist" can only be judged against the real answer. */
+const truthUnknown = (r: CheckResult): boolean =>
+  r.truthExchange === undefined && !truthPending(r);
+
+const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.kind === "pending") {
     return "pending";
   }
-  if (o.kind === "failed" && onlySome) {
+  if (o.kind === "failed" && (c.optional || wasCancelled(o))) {
     return "unavailable";
   }
   if (o.kind === "failed") {
@@ -46,26 +62,45 @@ const stateOf = (o: Outcome, onlySome: boolean): RowState => {
   if (o.verdict.blocked) {
     return "blocked";
   }
+  if (o.verdict.inspected) {
+    return "inspected";
+  }
+  if (o.verdict.missing && !c.system && truthUnknown(c.result)) {
+    return "unsure";
+  }
   if (o.verdict.missing) {
     return "missing";
   }
   return "resolves";
 };
 
+const wordOf = (state: RowState, o: Outcome, c: RowContext): string => {
+  if (o.kind === "failed" && wasCancelled(o)) {
+    return "cancelled";
+  }
+  if (state === "missing" && c.system) {
+    return "no address";
+  }
+  return verdictWords[state];
+};
+
 const outcomeRow = (
   base: RowBase,
   o: Outcome,
   why: string,
-  onlySome = false
+  c: RowContext
 ): TableRow => {
-  const state = stateOf(o, onlySome);
-  const row = { ...base, state, verdict: verdictWords[state], why };
+  const state = stateOf(o, c);
+  const row = { ...base, state, verdict: wordOf(state, o, c), why };
   if (o.kind === "answered") {
     return {
       ...row,
       answer: answerSummary(o.exchange.answers, o.verdict),
       ms: String(o.exchange.ms),
-      response: responseLines(o.exchange.answers),
+      response: [
+        ...responseLines(o.exchange.answers),
+        ...(o.exchange.notes ?? []),
+      ],
       server: o.exchange.server,
     };
   }
@@ -98,6 +133,7 @@ const truthRow = (r: CheckResult): TableRow => {
       answers: r.truth,
       blocked: false,
       detail: "",
+      inspected: false,
       missing: !r.exists,
       reason: undefined,
     };
@@ -164,10 +200,13 @@ export type RowState =
   | "blocked"
   | "failed"
   | "idle"
+  | "inspected"
   | "missing"
   | "pending"
   | "resolves"
-  | "unavailable";
+  | "unavailable"
+  /** Says the name doesn't exist, but the real answer is unavailable. */
+  | "unsure";
 
 /** One row of the table, with everything the details pane shows. */
 export interface TableRow extends RowBase {
@@ -204,7 +243,8 @@ export const resultGroups = (r: CheckResult): Group[] => {
           transport: "system resolver",
         },
         system,
-        systemWhy(system, r)
+        systemWhy(system, r),
+        { optional: false, result: r, system: true }
       ),
       truthRow(r),
     ],
@@ -215,12 +255,11 @@ export const resultGroups = (r: CheckResult): Group[] => {
     reference,
     ...byCategory(filters, (f, i) => {
       const o = r.filters[i]?.outcome ?? { kind: "pending" };
-      return outcomeRow(
-        filterBase(f),
-        o,
-        filterWhy(f, o, r),
-        f.onlyAnswers !== undefined
-      );
+      return outcomeRow(filterBase(f), o, filterWhy(f, o, r), {
+        optional: !shouldAnswer(r, f),
+        result: r,
+        system: false,
+      });
     }),
   ];
 };

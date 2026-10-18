@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Fiber, Layer, Result } from "effect";
 import { Dns, NetAddress } from "effect/net";
+import { TestClock } from "effect/testing";
 import type { DnsTransport } from "../dns/transport.ts";
 import {
   computer,
@@ -50,6 +51,36 @@ describe("check: names", () => {
     ]);
     expect(r.system).toMatchObject({ verdict: { reason: "null-ip" } });
     expect(isBlocked(r)).toBe(true);
+  });
+
+  test("a URL is checked for the host a browser would open", async () => {
+    const r = await run(check("https://good.example\\@bad.example/"));
+    expect(r.host).toBe("good.example");
+    expect(isBlocked(r)).toBe(false);
+  });
+
+  test("a trailing dot is kept for this computer's lookup only", async () => {
+    const asked: string[] = [];
+    const address = Result.getOrThrow(NetAddress.ipFromString("192.0.2.20"));
+    const recording = Dns.make({
+      lookup: (host) =>
+        Effect.sync(() => {
+          asked.push(host);
+          return [address];
+        }),
+    });
+    const r = await check("good.example.").pipe(
+      Effect.provideService(CheckerOptions, {
+        filters,
+        truthUrls: ["https://truth.example/dns-query"],
+      }),
+      Effect.provideService(Dns.Dns, recording),
+      Effect.provide(fakeTransport),
+      Effect.runPromise
+    );
+    expect(r.host).toBe("good.example");
+    expect(r.exists).toBe(true);
+    expect(asked).toContain("good.example.");
   });
 
   test("a name that doesn't exist anywhere is not a block", async () => {
@@ -141,6 +172,24 @@ describe("check: IP addresses", () => {
     expect(r.lookupError).toBeDefined();
   });
 
+  test("a reverse lookup that never ends times out", async () => {
+    const stuck = Dns.make({
+      lookup: () => Effect.succeed([]),
+      reverse: () => Effect.never,
+    });
+    const r = await Effect.gen(function* () {
+      const fiber = yield* check("192.0.2.98").pipe(
+        Effect.provideService(Dns.Dns, stuck),
+        Effect.provide(fakeTransport),
+        Effect.forkChild
+      );
+      yield* TestClock.adjust("5 seconds");
+      return yield* Fiber.join(fiber);
+    }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+    expect(r.lookupError).toContain("Timeout");
+    expect(r.completion).toBe("incomplete");
+  });
+
   test("an invalid target is an error", async () => {
     const r = await run(check("not a name!"));
     expect(r.lookupError).toContain("not a domain");
@@ -148,7 +197,7 @@ describe("check: IP addresses", () => {
 });
 
 describe("check: this computer", () => {
-  test("a failed CNAME query is a failure, not a missing CNAME", async () => {
+  test("a failed CNAME query doesn't hide this computer's address", async () => {
     const address = Result.getOrThrow(NetAddress.ipFromString("192.0.2.1"));
     const flaky = Dns.make({
       lookup: () => Effect.succeed([address]),
@@ -167,7 +216,11 @@ describe("check: this computer", () => {
       Effect.provide(fakeTransport),
       Effect.runPromise
     );
-    expect(r.system?.kind).toBe("failed");
+    expect(r.system).toMatchObject({
+      exchange: { notes: [expect.stringContaining("CNAME query failed")] },
+      kind: "answered",
+      verdict: { answers: ["192.0.2.1"], blocked: false },
+    });
   });
 });
 
@@ -183,8 +236,10 @@ describe("check: progress", () => {
         )
       )
     );
-    // One report before any answer, then one per filter, system and truth.
-    const reports = filters.length + ["start", "system", "truth"].length;
+    // One report before any answer, then one per filter, system and truth,
+    // and one when the connection is detected.
+    const reports =
+      filters.length + ["start", "system", "truth", "connection"].length;
     expect(seen).toHaveLength(reports);
     expect(seen[0]?.filters.every((f) => f.outcome.kind === "pending")).toBe(
       true

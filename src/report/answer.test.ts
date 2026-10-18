@@ -17,6 +17,7 @@ const verdict = (fields: Partial<Verdict>): Verdict => ({
   answers: [],
   blocked: false,
   detail: "",
+  inspected: false,
   missing: false,
   reason: undefined,
   ...fields,

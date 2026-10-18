@@ -4,10 +4,16 @@
  */
 import { Context, Duration, Effect, Ref, Result } from "effect";
 import { QueryError } from "../dns/query-error.ts";
-import type { DnsAnswer } from "../dns/wire.ts";
-import { classify, merge, type Verdict } from "./classify.ts";
+import {
+  classify,
+  classifySystem,
+  merge,
+  noReference,
+  type Reference,
+} from "./classify.ts";
+import { type Connection, detectConnection } from "./connection.ts";
 import { type Filter, filters, truthResolvers } from "./filters.ts";
-import { lookupSystem, reverseName } from "./local.ts";
+import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
 import { normalize } from "./normalize.ts";
 import { Progress } from "./progress.ts";
 import {
@@ -18,6 +24,7 @@ import {
 } from "./remote.ts";
 import {
   type CheckResult,
+  completionOf,
   type Outcome,
   pending,
   unchecked,
@@ -31,15 +38,17 @@ interface Asked<A> {
 
 /** Everything that has answered so far. */
 interface Gathered {
+  readonly connection: Connection | undefined;
   readonly filters: readonly (Asked<FilterAnswer> | undefined)[];
-  readonly system: Asked<FilterAnswer> | undefined;
+  readonly system: Asked<SystemAnswer> | undefined;
   readonly truth: Asked<Truth> | undefined;
 }
 
-const outcomeOf = (
+const systemServer = "this computer";
+
+const filterOutcome = (
   asked: Asked<FilterAnswer> | undefined,
-  transport: string,
-  exists: boolean
+  reference: Reference
 ): Outcome => {
   if (asked === undefined) {
     return pending;
@@ -49,12 +58,48 @@ const outcomeOf = (
     return { error: result.failure.message, kind: "failed", ms };
   }
   const { answers, server } = result.success;
-  const verdict: Verdict = merge(...answers.map((a) => classify(a, exists)));
   return {
-    exchange: { answers, ms, server, transport },
+    exchange: { answers, ms, server, transport: "UDP 53" },
     kind: "answered",
-    verdict,
+    verdict: merge(...answers.map((a) => classify(a, reference))),
   };
+};
+
+const systemOutcome = (
+  asked: Asked<SystemAnswer> | undefined,
+  reference: Reference
+): Outcome => {
+  if (asked === undefined) {
+    return pending;
+  }
+  const { ms, result } = asked;
+  if (Result.isFailure(result)) {
+    return { error: result.failure.message, kind: "failed", ms };
+  }
+  const { answer, noAddress, notes } = result.success;
+  return {
+    exchange: {
+      answers: [answer],
+      ms,
+      notes,
+      server: systemServer,
+      transport: "system resolver",
+    },
+    kind: "answered",
+    verdict: classifySystem(answer, noAddress, reference),
+  };
+};
+
+/**
+ * What every answer is compared with. Until the real answer arrives, or if
+ * it can't be fetched, a missing name is not a block.
+ */
+const referenceOf = (g: Gathered): Reference => {
+  const truth = g.truth?.result;
+  if (truth === undefined || Result.isFailure(truth)) {
+    return noReference;
+  }
+  return truth.success;
 };
 
 /** Builds the result from what has answered, classifying it afresh. */
@@ -64,36 +109,35 @@ const assemble = (
   g: Gathered
 ): CheckResult => {
   const truth = g.truth?.result;
-  // Classify once the truth is known, so an NXDOMAIN can be judged. Until
-  // then, or if the truth is unknown, a missing name is not a block.
-  const exists =
-    truth !== undefined && Result.isSuccess(truth) && truth.success.exists;
-  const result: CheckResult = {
+  const reference = referenceOf(g);
+  let result: CheckResult = {
     ...base,
     checked: true,
-    exists,
+    connection: g.connection,
+    exists: reference.exists,
     filters: asked.map((filter, i) => ({
       filter,
-      outcome: outcomeOf(g.filters[i], "UDP 53", exists),
+      outcome: filterOutcome(g.filters[i], reference),
     })),
-    system: outcomeOf(g.system, "system resolver", exists),
+    system: systemOutcome(g.system, reference),
   };
-  if (g.truth === undefined || truth === undefined) {
-    return result;
+  if (g.truth !== undefined && truth !== undefined) {
+    if (Result.isFailure(truth)) {
+      result = { ...result, truthError: truth.failure.message };
+    } else {
+      result = {
+        ...result,
+        truth: truth.success.addresses,
+        truthExchange: {
+          answers: truth.success.answers,
+          ms: g.truth.ms,
+          server: truth.success.server,
+          transport: "HTTPS 443",
+        },
+      };
+    }
   }
-  if (Result.isFailure(truth)) {
-    return { ...result, truthError: truth.failure.message };
-  }
-  return {
-    ...result,
-    truth: truth.success.addresses,
-    truthExchange: {
-      answers: truth.success.answers,
-      ms: g.truth.ms,
-      server: truth.success.server,
-      transport: "HTTPS 443",
-    },
-  };
+  return { ...result, completion: completionOf(result) };
 };
 
 const timedResult = <A, E extends { readonly message: string }, R>(
@@ -121,46 +165,51 @@ const systemAnswer = (host: string) =>
         Effect.fail(
           new QueryError({
             reason: "no answer (timed out)",
-            server: "this computer",
+            server: systemServer,
           })
         ),
-    }),
-    Effect.map(
-      (answer: DnsAnswer): FilterAnswer => ({
-        answers: [answer],
-        server: "this computer",
-      })
-    )
+    })
   );
 
-/** Asks everything about one name at once, reporting each answer. */
-const checkName = (base: CheckResult) =>
+/**
+ * Asks everything about one name at once, reporting each answer. `query` is
+ * the name as looked up, which can end in a dot that the shown name drops.
+ */
+const checkName = (base: CheckResult, query = base.host) =>
   Effect.gen(function* () {
     const options = yield* CheckerOptions;
     const progress = yield* Progress;
     const state = yield* Ref.make<Gathered>({
+      connection: undefined,
       filters: options.filters.map(() => undefined),
       system: undefined,
       truth: undefined,
     });
+    const report = (update: (g: Gathered) => Gathered) =>
+      Ref.updateAndGet(state, update).pipe(
+        Effect.flatMap((g) => progress(assemble(base, options.filters, g)))
+      );
     const record = <A, E extends { readonly message: string }, R>(
       effect: Effect.Effect<A, E, R>,
       update: (g: Gathered, a: Asked<A>) => Gathered
     ) =>
       timedResult(effect).pipe(
-        Effect.flatMap((a) => Ref.updateAndGet(state, (g) => update(g, a))),
-        Effect.flatMap((g) => progress(assemble(base, options.filters, g)))
+        Effect.flatMap((a) => report((g) => update(g, a)))
       );
     yield* progress(assemble(base, options.filters, yield* Ref.get(state)));
     yield* Effect.all(
       [
-        record(lookupTruth(options.truthUrls, base.host), (g, truth) => ({
+        record(lookupTruth(options.truthUrls, query), (g, truth) => ({
           ...g,
           truth,
         })),
-        record(systemAnswer(base.host), (g, system) => ({ ...g, system })),
+        record(systemAnswer(query), (g, system) => ({ ...g, system })),
+        // Says whether an ISP's filter should have answered this computer.
+        detectConnection.pipe(
+          Effect.flatMap((connection) => report((g) => ({ ...g, connection })))
+        ),
         ...options.filters.map((f, i) =>
-          record(askFilter(f, base.host), (g, a) => ({
+          record(askFilter(f, query), (g, a) => ({
             ...g,
             filters: g.filters.with(i, a),
           }))
@@ -190,16 +239,17 @@ export const check = (target: string) =>
       const error = `${t.host} is not a domain, URL or IP address`;
       return {
         ...unchecked(target, t.host, false),
+        completion: "incomplete",
         lookupError: error,
         notes: [error],
       } satisfies CheckResult;
     }
     if (t.kind === "domain") {
-      return yield* checkName(unchecked(target, t.host, false));
+      return yield* checkName(unchecked(target, t.host, false), t.query);
     }
     const named = yield* reverseName(target, t.host);
     if (named.host === t.host || named.lookupError !== undefined) {
-      return named;
+      return { ...named, completion: completionOf(named) };
     }
     return yield* checkName(named);
   });
