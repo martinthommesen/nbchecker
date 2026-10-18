@@ -62,9 +62,28 @@ const redirectedIpv6 = Layer.succeed(DnsTransport, {
 const results = async (...args: Parameters<typeof detect>) =>
   (await detect(...args)).selfTests.map((t) => t.result);
 
+/** Umbrella answers AAAA queries with its IPv4 block page, mapped to IPv6. */
+const umbrellaLike = Layer.succeed(DnsTransport, {
+  ask: (_server, name, type) => {
+    if (type === "A") {
+      return Effect.succeed(dnsAnswer(name, type, "146.112.61.106"));
+    }
+    return Effect.succeed(dnsAnswer(name, type, "::ffff:146.112.61.106"));
+  },
+  doh: (_url, name, type) => Effect.succeed(dnsAnswer(name, type, "192.0.2.5")),
+});
+
 describe("self-test: every address counts", () => {
   test("one address that isn't the block answer fails it", async () => {
     expect(await results(redirectedIpv6)).toEqual(["redirected", "redirected"]);
+  });
+
+  test("a block page mapped to IPv6 is the same block", async () => {
+    const filters = fakeFilters.map((f) => ({
+      ...f,
+      canary: { answers: ["146.112.61.106"], name: "canary.example" },
+    }));
+    expect(await results(umbrellaLike, filters)).toEqual(["passed", "passed"]);
   });
 });
 

@@ -147,10 +147,14 @@ const checkActions = (
         if (session.detections !== generation) {
           return;
         }
-        deps.store.set({ network: found });
-        for (const waiting of session.waiting.splice(0)) {
-          yield* Deferred.succeed(waiting, found);
-        }
+        // In one step, so a newer detection can't interrupt it halfway and
+        // leave a check waiting for a network that was taken off the list.
+        yield* Effect.sync(() => {
+          deps.store.set({ network: found });
+          for (const waiting of session.waiting.splice(0)) {
+            Deferred.doneUnsafe(waiting, Effect.succeed(found));
+          }
+        });
       })
     );
   };
