@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { argv, env, file, sleep, spawn, spawnSync } from "bun";
 import { Console, Effect, Exit, Layer, Stdio, Stream } from "effect";
+import {
+  ExitStatus,
+  exitIncomplete,
+  exitOutput,
+  exitUsage,
+} from "./cli/exit-status.ts";
 import { cli } from "./cli.ts";
-import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
-import { exitIncomplete } from "./report/json.ts";
 import {
   computer,
   fakeFilters,

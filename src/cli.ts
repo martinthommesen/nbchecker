@@ -10,8 +10,13 @@ import {
   type Network,
   redirectedFilters,
 } from "./check/result.ts";
-import { ExitStatus, exitOutput, exitUsage } from "./exit-status.ts";
-import { exitCode, toJson } from "./report/json.ts";
+import {
+  ExitStatus,
+  exitCode,
+  exitOutput,
+  exitUsage,
+} from "./cli/exit-status.ts";
+import { toJson } from "./report/json.ts";
 import { renderText } from "./report/text.ts";
 import { view } from "./report/view.ts";
 import { runTui } from "./tui/run.ts";

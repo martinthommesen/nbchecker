@@ -6,6 +6,7 @@ import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
 import { type CheckResult, cancelPending } from "../check/result.ts";
+import { exitBlocked, exitCode, exitIncomplete } from "../cli/exit-status.ts";
 import {
   computer,
   computerWith,
@@ -15,7 +16,7 @@ import {
   publicTestPage,
 } from "../testing/fake-network.ts";
 import { downTruthUrl, runCheck, truthUrl } from "../testing/run-check.ts";
-import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
+import { toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 

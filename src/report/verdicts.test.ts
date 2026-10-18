@@ -6,11 +6,12 @@ import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import type { Category, Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
+import { exitBlocked, exitCode, exitIncomplete } from "../cli/exit-status.ts";
 import { fakeCanary } from "../testing/fake-network.ts";
 import { downTruthUrl, runCheck } from "../testing/run-check.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
-import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
+import { toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 

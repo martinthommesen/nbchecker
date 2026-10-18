@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import type { Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
+import { exitBlocked, exitCode, exitIncomplete } from "../cli/exit-status.ts";
 import {
   blockingRedirectTransport,
   computerWith,
@@ -17,7 +18,7 @@ import {
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
 import { systemWhy } from "../tui/why.ts";
-import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
+import { toJson } from "./json.ts";
 import { statusOf } from "./status.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
