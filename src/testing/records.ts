@@ -1,6 +1,16 @@
 /** Builds the DNS records and answers that the fake networks give. */
 import { Rcode } from "../dns/codes.ts";
-import type { DnsAnswer, DnsRecord } from "../dns/wire.ts";
+import type { DnsAnswer, DnsRecord, ExtendedError } from "../dns/wire.ts";
+
+/** An Extended DNS Error, or just its code when its text doesn't matter. */
+type ErrorSpec = ExtendedError | number;
+
+const extendedError = (spec: ErrorSpec): ExtendedError => {
+  if (typeof spec === "number") {
+    return { code: spec, text: "" };
+  }
+  return spec;
+};
 
 export const a = (name: string, value: string): DnsRecord => ({
   name,
@@ -28,12 +38,12 @@ export const answer = (records: readonly DnsRecord[]): DnsAnswer => ({
   truncated: false,
 });
 
-/** An answer without records: an rcode, and Extended DNS Errors by code. */
+/** An answer without records: an rcode and any Extended DNS Errors. */
 export const noRecords = (
   rcode: number,
-  ...extendedErrors: readonly number[]
+  ...errors: readonly ErrorSpec[]
 ): DnsAnswer => ({
-  extendedErrors: extendedErrors.map((code) => ({ code, text: "" })),
+  extendedErrors: errors.map(extendedError),
   rcode,
   records: [],
   truncated: false,

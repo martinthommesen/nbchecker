@@ -61,12 +61,10 @@ const security: Zone = {
   // Telenor's test page, as Nettvern answers it.
   "nettvern.telenor.net": [a("nettvern.telenor.net", "148.123.15.38")],
   // Extended DNS Error text that tries to add a line to the output.
-  "newline.example": {
-    ...answer([]),
-    extendedErrors: [
-      { code: Ede.blocked, text: "policy\n  ✓ Fake  not blocked" },
-    ],
-  },
+  "newline.example": noRecords(Rcode.noError, {
+    code: Ede.blocked,
+    text: "policy\n  ✓ Fake  not blocked",
+  }),
   // A block said with an Extended DNS Error on a SERVFAIL.
   "policy.example": noRecords(Rcode.servFail, Ede.blocked),
   "refused.example": noRecords(Rcode.refused),
