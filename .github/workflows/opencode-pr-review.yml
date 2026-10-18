@@ -31,6 +31,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Reject symlink checkouts
+        run: |
+          if git ls-files --stage | awk '$1 == "120000" { found = 1 } END { exit !found }'; then
+            echo "::error::Automated review requires a checkout without symbolic links."
+            exit 1
+          fi
+
       - name: Prepare the changes for review
         env:
           REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -42,9 +49,11 @@ jobs:
 
       - name: Install OpenCode
         run: |
-          curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/60c9be092129745688bb3c3a752affc6cbd66ede/install -o "$RUNNER_TEMP/install-opencode.sh"
-          bash "$RUNNER_TEMP/install-opencode.sh" --version 1.19.3 --no-modify-path
-          printf '%s\n' "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+          curl -fsSL --retry 3 https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-linux-x64.tar.gz -o "$RUNNER_TEMP/opencode.tar.gz"
+          printf '%s  %s\n' '13a8fb2978302071b86f9d7e00da9c8895f9cd846978379c3bdc6a5333536c9b' "$RUNNER_TEMP/opencode.tar.gz" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/opencode-bin"
+          tar -xzf "$RUNNER_TEMP/opencode.tar.gz" -C "$RUNNER_TEMP/opencode-bin"
+          printf '%s\n' "$RUNNER_TEMP/opencode-bin" >> "$GITHUB_PATH"
 
       - name: Review the changes
         run: opencode github run
@@ -52,6 +61,8 @@ jobs:
           MODEL: opencode-go/deepseek-v4.1-flash
           VARIANT: max
           SHARE: "false"
+          OPENCODE_DISABLE_PROJECT_CONFIG: "1"
+          OPENCODE_DISABLE_AUTOUPDATE: "1"
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_PR_REVIEW_API_KEY }}
           OPENCODE_CONFIG_CONTENT: |
             {
