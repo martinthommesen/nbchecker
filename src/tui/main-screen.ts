@@ -11,10 +11,10 @@ import {
 } from "@opentui/core";
 import type { Filter } from "../check/filters.ts";
 import { lines, paint } from "./paint.ts";
-import { flatRows, idleGroups, resultGroups } from "./rows.ts";
+import { flatRows } from "./rows.ts";
 import type { State } from "./state.ts";
 import { inputHint, summaryText } from "./summary.ts";
-import { detailsText, tableHeader, tableText } from "./table.ts";
+import { detailsText, tableGroups, tableHeader, tableText } from "./table.ts";
 import { theme } from "./theme.ts";
 import {
   addAll,
@@ -152,10 +152,7 @@ const drawResults = (
   results.details.visible = layout.wide;
   results.details.width = detailsWidth;
   const tableWidth = tableWidthOf(layout);
-  let groups = idleGroups(items);
-  if (s.result !== undefined) {
-    groups = resultGroups(s.result);
-  }
+  const groups = tableGroups(s, items);
   const table = tableText(groups, s.selected, tableWidth, s.tick);
   results.head.content = tableHeader(tableWidth);
   results.table.content = table.text;
