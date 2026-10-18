@@ -2,7 +2,7 @@
  * Checks one target against every filter, this computer's DNS and an
  * unfiltered resolver.
  */
-import { Context, Duration, Effect, Ref, Result } from "effect";
+import { Duration, Effect, Ref, Result } from "effect";
 import { timeoutAfter } from "../dns/query-error.ts";
 import {
   classifyAll,
@@ -10,9 +10,10 @@ import {
   noReference,
   type Reference,
 } from "./classify.ts";
-import { type Filter, filters, truthResolvers } from "./filters.ts";
+import type { Filter } from "./filters.ts";
 import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
 import { normalize } from "./normalize.ts";
+import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
 import {
   askFilter,
@@ -212,17 +213,6 @@ const checkName = <NetworkNeeds>(
     );
     return assemble(base, options.filters, yield* Ref.get(state));
   });
-
-export interface CheckerOptions {
-  readonly filters: readonly Filter[];
-  readonly truthUrls: readonly string[];
-}
-
-/** Which filters and resolvers to ask; tests swap them for fakes. */
-export const CheckerOptions = Context.Reference<CheckerOptions>(
-  "nbchecker/CheckerOptions",
-  { defaultValue: () => ({ filters, truthUrls: truthResolvers }) }
-);
 
 /**
  * Checks a domain, URL or IP address. `network` is found out once per run,

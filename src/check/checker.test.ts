@@ -9,8 +9,9 @@ import {
   fakeTransport,
   fakeFilters as filters,
 } from "../testing/fake-network.ts";
-import { CheckerOptions, check } from "./checker.ts";
+import { check } from "./checker.ts";
 import { detectNetwork } from "./network.ts";
+import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
 import { type CheckResult, isBlocked } from "./result.ts";
 

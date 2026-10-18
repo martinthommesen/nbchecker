@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Layer } from "effect";
-import { CheckerOptions, check } from "../check/checker.ts";
+import { check } from "../check/checker.ts";
 import { detectNetwork } from "../check/network.ts";
+import { CheckerOptions } from "../check/options.ts";
 import { Progress } from "../check/progress.ts";
 import { type CheckResult, cancelPending } from "../check/result.ts";
 import { exitCode, exitIncomplete } from "../cli/exit-status.ts";

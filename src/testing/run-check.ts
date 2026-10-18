@@ -1,8 +1,9 @@
 /** Runs a whole check against the fake network, for tests across layers. */
 import { Effect, type Layer } from "effect";
 import type { Dns } from "effect/net";
-import { CheckerOptions, check } from "../check/checker.ts";
+import { check } from "../check/checker.ts";
 import { detectNetwork } from "../check/network.ts";
+import { CheckerOptions } from "../check/options.ts";
 import type { CheckResult } from "../check/result.ts";
 import type { DnsTransport } from "../dns/transport.ts";
 import { computer, fakeFilters, fakeTransport } from "./fake-network.ts";

@@ -12,7 +12,7 @@ import {
   FiberSet,
   Schedule,
 } from "effect";
-import { CheckerOptions } from "../check/checker.ts";
+import { CheckerOptions } from "../check/options.ts";
 import { makeController } from "./controller.ts";
 import type { Needs, Store } from "./controller-deps.ts";
 import { actionFor } from "./keys.ts";

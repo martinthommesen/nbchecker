@@ -9,7 +9,7 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { env } from "bun";
 import { Console, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
-import { CheckerOptions } from "../check/checker.ts";
+import { CheckerOptions } from "../check/options.ts";
 import { cli } from "../cli/command.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import {

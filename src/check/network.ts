@@ -4,10 +4,10 @@
  */
 import { Effect, Result } from "effect";
 import { addressesIn, canonicalAddress } from "./address.ts";
-import { CheckerOptions } from "./checker.ts";
 import { classifyAll, type Reference } from "./classify.ts";
 import { detectConnection } from "./connection.ts";
 import type { Filter } from "./filters.ts";
+import { CheckerOptions } from "./options.ts";
 import { askFilter } from "./remote.ts";
 import type { Network, SelfTest } from "./result.ts";
 
