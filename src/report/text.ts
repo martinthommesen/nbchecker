@@ -51,3 +51,7 @@ export const renderText = (v: View, color: boolean): string => {
   }
   return `${out.join("\n")}\n`;
 };
+
+/** The line above text results that says which DNS filter this computer uses. */
+export const dnsFilterLine = (name: string): string =>
+  `DNS filter on this computer: ${name}`;

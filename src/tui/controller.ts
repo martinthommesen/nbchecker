@@ -1,20 +1,17 @@
 /** What each action does: checks, copying, saving and moving around. */
 import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
-import { redirectedFilters } from "../check/evidence.ts";
 import type { Filter } from "../check/filters.ts";
 import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
 import { cancelPending, type Network } from "../check/result.ts";
-import { toJson } from "../report/json.ts";
 import type { Controller, ControllerDeps } from "./controller-deps.ts";
-import { copyText, dnsFilterOf, networkOf } from "./copy-text.ts";
+import { copyText, exportedJson } from "./copy-text.ts";
 import type { Action } from "./keys.ts";
 import { flatRows, tableGroups } from "./rows.ts";
 import type { Screen, State } from "./state.ts";
 
 const pageStep = 5;
-const jsonIndent = 2;
 
 /** What the controller remembers between key presses. */
 interface Session {
@@ -160,20 +157,11 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
       return toast("nothing to export yet");
     }
     const path = `nbchecker-${result.host}.json`;
-    const network = networkOf(s);
-    const meta = {
-      dnsFilter: dnsFilterOf(network),
-      intercepted: network && redirectedFilters(network),
-      version: s.version,
-    };
-    const json = toJson(meta, [result]);
+    const json = exportedJson(s, result);
     deps.run.background(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        yield* fs.writeFileString(
-          path,
-          `${JSON.stringify(json, null, jsonIndent)}\n`
-        );
+        yield* fs.writeFileString(path, `${json}\n`);
         toast(`saved ${path}`);
       }).pipe(
         Effect.catch((e) =>

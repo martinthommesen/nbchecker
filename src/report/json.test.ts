@@ -17,7 +17,7 @@ import {
   fakeTransport,
 } from "../testing/fake-network.ts";
 import { realAnswerUrl, runCheck } from "../testing/run-check.ts";
-import { toJson } from "./json.ts";
+import { jsonMeta, jsonText, toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 
@@ -113,6 +113,28 @@ describe("a checked result in JSON", () => {
     expect(exported({ ...r, system: pending })?.thisComputer).toEqual({
       blocked: false,
       error: "not asked",
+    });
+  });
+});
+
+describe("the document's meta", () => {
+  test("leaves the self-test out until the network is known", async () => {
+    const before = JSON.parse(
+      jsonText(jsonMeta(undefined, "unknown", "1"), [])
+    );
+    expect(Object.keys(before)).toEqual(["dnsFilter", "version", "results"]);
+    expect(before.dnsFilter).toBe("unknown");
+    const { network } = await runCheck("good.example");
+    const after = JSON.parse(jsonText(jsonMeta(network, "unknown", "1"), []));
+    expect(Object.keys(after)).toEqual([
+      "dnsFilter",
+      "intercepted",
+      "version",
+      "results",
+    ]);
+    expect(after).toMatchObject({
+      dnsFilter: "Telenor Nettvern+",
+      intercepted: [],
     });
   });
 });
