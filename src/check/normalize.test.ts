@@ -30,11 +30,6 @@ describe("normalize", () => {
     ["https://%67ood.example/", "good.example"],
     ["HTTPS://GOOD.EXAMPLE/", "good.example"],
     ["https://192.0.2.1:8443/", "192.0.2.1"],
-    ["https:good.example/path", "good.example"],
-    ["HTTP:good.example", "good.example"],
-    ["https:/good.example/path", "good.example"],
-    ["https:\\good.example/path", "good.example"],
-    ["http:///good.example", "good.example"],
   ] as const)("checks the host a browser would open for %s", (input, host) => {
     expect(normalize(input).host).toBe(host);
   });
@@ -58,5 +53,18 @@ describe("normalize", () => {
       query: "example.com.",
     });
     expect(normalize("example.com").query).toBe("example.com");
+  });
+});
+
+describe("normalize: web URLs without two slashes", () => {
+  // The URL parser takes any number of slashes or backslashes, even none.
+  test.each([
+    ["https:good.example/path", "good.example"],
+    ["HTTP:good.example", "good.example"],
+    ["https:/good.example/path", "good.example"],
+    ["https:\\good.example/path", "good.example"],
+    ["http:///good.example", "good.example"],
+  ] as const)("checks the host a browser would open for %s", (input, host) => {
+    expect(normalize(input).host).toBe(host);
   });
 });
