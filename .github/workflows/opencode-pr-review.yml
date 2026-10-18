@@ -47,6 +47,9 @@ jobs:
         run: |
           python3 -I review-control/.github/scripts/opencode_review.py prepare \
             review-source "$RUNNER_TEMP/opencode-review-input"
+          # Load review guidance only from the same trusted commit as this workflow.
+          cat review-control/AGENTS.md review-control/REVIEW.md \
+            > "$RUNNER_TEMP/opencode-review-input/review-guidance.md"
 
       - name: Install OpenCode
         run: |
@@ -108,7 +111,8 @@ jobs:
               }
             }
           REVIEW_PROMPT: |
-            Review this pull request. Read changes.diff for the changes, then
+            Review this pull request. Follow review-guidance.md, which comes
+            from the trusted base branch. Read changes.diff for the changes, then
             read the complete affected files under source/ and relevant callers
             for context before reporting a problem. Configuration,
             plugin, skill and instruction files are included in the diff but

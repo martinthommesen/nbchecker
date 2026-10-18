@@ -10,7 +10,7 @@ import urllib.request
 
 
 CONFIG_DIRS = {".git", ".opencode", ".claude", ".agents"}
-INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md", "CONTEXT.md"}
+INSTRUCTION_FILES = {"AGENTS.md", "CLAUDE.md", "CONTEXT.md", "REVIEW.md"}
 
 
 def is_private_env(path):
