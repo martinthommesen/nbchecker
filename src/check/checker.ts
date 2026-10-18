@@ -42,10 +42,14 @@ interface Gathered {
 
 const systemServer = "this computer";
 
-const filterOutcome = (
-  asked: Asked<FilterAnswer> | undefined,
-  reference: Reference
-): Outcome => {
+/**
+ * How one lookup stands: pending until it is asked, failed with its error,
+ * or answered with what `toAnswered` makes of the answer and its time.
+ */
+const outcomeOf = <A, B>(
+  asked: Asked<A> | undefined,
+  toAnswered: (answer: A, ms: number) => B
+): Outcome<B> => {
   if (asked === undefined) {
     return pending;
   }
@@ -53,62 +57,18 @@ const filterOutcome = (
   if (Result.isFailure(result)) {
     return { error: result.failure.message, kind: "failed", ms };
   }
-  const { answers, server } = result.success;
-  return {
-    exchange: { answers, ms, server },
-    kind: "answered",
-    verdict: classifyAll(answers, reference),
-  };
-};
-
-const systemOutcome = (
-  asked: Asked<SystemAnswer> | undefined,
-  reference: Reference
-): Outcome => {
-  if (asked === undefined) {
-    return pending;
-  }
-  const { ms, result } = asked;
-  if (Result.isFailure(result)) {
-    return { error: result.failure.message, kind: "failed", ms };
-  }
-  const { answer, noAddress, notes } = result.success;
-  return {
-    exchange: { answers: [answer], ms, notes, server: systemServer },
-    kind: "answered",
-    verdict: classifySystem(answer, noAddress, reference),
-  };
-};
-
-const realAnswerOutcome = (
-  asked: Asked<FilterAnswer & Reference> | undefined
-): Outcome<RealAnswer> => {
-  if (asked === undefined) {
-    return pending;
-  }
-  const { ms, result } = asked;
-  if (Result.isFailure(result)) {
-    return { error: result.failure.message, kind: "failed", ms };
-  }
-  const { addresses, answers, exists, server } = result.success;
-  return {
-    addresses,
-    exchange: { answers, ms, server },
-    exists,
-    kind: "answered",
-  };
+  return { ...toAnswered(result.success, ms), kind: "answered" };
 };
 
 /**
  * What every answer is compared with. Until the real answer arrives, or if
  * it can't be fetched, a missing name is not a block.
  */
-const referenceOf = (g: Gathered): Reference => {
-  const real = g.realAnswer?.result;
-  if (real === undefined || Result.isFailure(real)) {
+const referenceOf = (realAnswer: Outcome<RealAnswer>): Reference => {
+  if (realAnswer.kind !== "answered") {
     return noReference;
   }
-  return real.success;
+  return realAnswer;
 };
 
 /** Builds the result from what has answered, classifying it afresh. */
@@ -117,17 +77,30 @@ const assemble = (
   asked: readonly Filter[],
   g: Gathered
 ): CheckResult => {
-  const reference = referenceOf(g);
+  const realAnswer = outcomeOf(g.realAnswer, (a, ms) => ({
+    addresses: a.addresses,
+    exchange: { answers: a.answers, ms, server: a.server },
+    exists: a.exists,
+  }));
+  const reference = referenceOf(realAnswer);
+  const filterAnswered = (a: FilterAnswer, ms: number) => ({
+    exchange: { answers: a.answers, ms, server: a.server },
+    verdict: classifyAll(a.answers, reference),
+  });
+  const systemAnswered = (a: SystemAnswer, ms: number) => ({
+    exchange: { answers: [a.answer], ms, notes: a.notes, server: systemServer },
+    verdict: classifySystem(a.answer, a.noAddress, reference),
+  });
   const result: CheckResult = {
     ...base,
     checked: true,
     filters: asked.map((filter, i) => ({
       filter,
-      outcome: filterOutcome(g.filters[i], reference),
+      outcome: outcomeOf(g.filters[i], filterAnswered),
     })),
     network: g.network,
-    realAnswer: realAnswerOutcome(g.realAnswer),
-    system: systemOutcome(g.system, reference),
+    realAnswer,
+    system: outcomeOf(g.system, systemAnswered),
   };
   return { ...result, completion: completionOf(result) };
 };
