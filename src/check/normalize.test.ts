@@ -13,6 +13,7 @@ describe("normalize", () => {
     ["2001:db8::1", "2001:db8::1", "ip"],
     ["example.com:8443", "example.com", "domain"],
     ["me@example.com", "example.com", "domain"],
+    ["http:8080", "http", "domain"],
     ["not a name!", "not a name!", "invalid"],
   ] as const)("reads %s", (input, host, kind) => {
     expect(normalize(input)).toMatchObject({ host, kind });
@@ -29,6 +30,8 @@ describe("normalize", () => {
     ["https://%67ood.example/", "good.example"],
     ["HTTPS://GOOD.EXAMPLE/", "good.example"],
     ["https://192.0.2.1:8443/", "192.0.2.1"],
+    ["https:good.example/path", "good.example"],
+    ["HTTP:good.example", "good.example"],
   ] as const)("checks the host a browser would open for %s", (input, host) => {
     expect(normalize(input).host).toBe(host);
   });

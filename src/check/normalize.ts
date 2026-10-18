@@ -3,6 +3,11 @@ import { Host, NetAddress } from "effect/net";
 
 /** A URL scheme such as "https://", only at the very start. */
 const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+/**
+ * "http:" or "https:" without the slashes, which a browser still opens as a
+ * URL, unless what follows is a port, as in "http:8080".
+ */
+const webScheme = /^https?:(?!\d*(?:[/?#\\]|$))/i;
 /** Where the host of a schemeless input ends, as in a browser's address bar. */
 const pathStart = /[/?#\\]/;
 const trailingDot = /\.$/;
@@ -16,7 +21,7 @@ const urlHost = (input: string): string | undefined => {
   let url = input;
   if (input.startsWith("//")) {
     url = `https:${input}`;
-  } else if (!scheme.test(input)) {
+  } else if (!(scheme.test(input) || webScheme.test(input))) {
     return;
   }
   if (!URL.canParse(url)) {
