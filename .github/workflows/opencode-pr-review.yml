@@ -74,9 +74,17 @@ jobs:
                   "steps": 30,
                   "permission": {
                     "*": "deny",
-                    "read": "allow",
-                    "glob": "allow",
-                    "grep": "allow"
+                    "read": {
+                      "*": "allow",
+                      "*.env": "deny",
+                      "*.env.*": "deny",
+                      "*.env.example": "allow",
+                      ".git": "deny",
+                      ".git/**": "deny",
+                      "**/.git/**": "deny",
+                      ".git/opencode-review.diff": "allow"
+                    },
+                    "glob": "allow"
                   }
                 }
               }
