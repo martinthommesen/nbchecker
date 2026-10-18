@@ -47,6 +47,16 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun test
+      # The standalone binary for this runner, the way users get it. An
+      # invalid target needs no network and exits 2.
+      - name: Run the compiled binary
+        run: |
+          bun run build
+          ./dist/nbchecker --version
+          status=0
+          ./dist/nbchecker --json 'not a name!' > result.json || status=$?
+          test "$status" = 2
+          grep -q '"error"' result.json
 
   dependency-review:
     name: Dependency review
