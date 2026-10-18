@@ -1,5 +1,11 @@
 import { Data, Runtime } from "effect";
 
+/** EX_USAGE from sysexits.h: nbchecker was run with a mistyped flag or nothing to check. */
+export const exitUsage = 64;
+
+/** EX_IOERR from sysexits.h: the results couldn't be written. */
+export const exitOutput = 74;
+
 /**
  * Ends the program with an exit status. The runtime reads the status from
  * the error and, because `errorReported` is false, logs nothing: the result
