@@ -17,9 +17,12 @@ const bigRecord = {
   value: "192.0.2.2",
 } as const;
 const lengthPrefix = 2;
+/** The TCP server says answers for this name are truncated too. */
+const cutName = "cut.example";
+const decoder = new TextDecoder();
 
 // One port for both servers: a UDP server that says every answer is
-// truncated, and a TCP server with the full answer.
+// truncated, and a TCP server with the full answer, except for `cutName`.
 let port = 0;
 const closers: (() => void)[] = [];
 
@@ -46,8 +49,10 @@ beforeAll(async () => {
     socket: {
       binaryType: "uint8array",
       data: (socket, data) => {
-        const id = responseId(data.subarray(lengthPrefix)) ?? 0;
-        const body = response({ id, records: [bigRecord] });
+        const query = data.subarray(lengthPrefix);
+        const id = responseId(query) ?? 0;
+        const truncated = decoder.decode(query).includes("cut");
+        const body = response({ id, records: [bigRecord], truncated });
         const framed = new Uint8Array(body.length + lengthPrefix);
         new DataView(framed.buffer).setUint16(0, body.length);
         framed.set(body, lengthPrefix);
@@ -72,6 +77,14 @@ test("ask retries a truncated UDP answer over TCP", async () => {
     return yield* t.ask("127.0.0.1", "example.com", "A");
   }).pipe(Effect.provide(transport()), Effect.runPromise);
   expect(answer.records).toEqual([bigRecord]);
+});
+
+test("ask fails when the TCP answer is truncated too", async () => {
+  const error = await Effect.gen(function* () {
+    const t = yield* DnsTransport;
+    return yield* t.ask("127.0.0.1", cutName, "A");
+  }).pipe(Effect.provide(transport()), Effect.flip, Effect.runPromise);
+  expect(error.reason).toContain("truncated");
 });
 
 test("ask fails when nothing answers", async () => {

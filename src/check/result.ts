@@ -5,6 +5,15 @@ import type { Filter } from "./filters.ts";
 const outcomeBlocks = (o: Outcome | undefined): boolean =>
   o?.kind === "answered" && o.verdict.blocked;
 
+const cancelled: Outcome = { error: "cancelled", kind: "failed", ms: 0 };
+
+const settle = (o: Outcome): Outcome => {
+  if (o.kind === "pending") {
+    return cancelled;
+  }
+  return o;
+};
+
 /** How one resolver was asked, and what it said. */
 export interface Exchange {
   /** The raw answers to the A and AAAA queries. */
@@ -60,6 +69,23 @@ export const isBlocked = (r: CheckResult): boolean =>
 /** Whether the unfiltered answer is still on its way. */
 export const truthPending = (r: CheckResult): boolean =>
   r.checked && r.truthError === undefined && r.truthExchange === undefined;
+
+/** Marks everything that hadn't answered when a check was cancelled. */
+export const cancelPending = (r: CheckResult): CheckResult => {
+  let { system, truthError } = r;
+  if (system !== undefined) {
+    system = settle(system);
+  }
+  if (truthPending(r)) {
+    truthError = "cancelled";
+  }
+  return {
+    ...r,
+    filters: r.filters.map((f) => ({ ...f, outcome: settle(f.outcome) })),
+    system,
+    truthError,
+  };
+};
 
 /** A result with nothing looked up yet. */
 export const unchecked = (

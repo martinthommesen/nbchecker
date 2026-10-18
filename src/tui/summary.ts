@@ -165,6 +165,19 @@ const checkingSummary = (
   ]);
 };
 
+/** A cancelled check has no verdict, only what answered before. */
+const cancelledSummary = (r: CheckResult): StyledText => {
+  const { answered, blocked } = tally(r);
+  return lines([
+    [
+      badge("CANCELLED", theme.warn),
+      paint(
+        `  ${answered} of ${r.filters.length} filters answered first, ${blocked} of them blocking`
+      ),
+    ],
+  ]);
+};
+
 /**
  * The line under the input: the verdict, or progress while checking. On a
  * narrow screen the reference answers go on a line of their own.
@@ -172,6 +185,9 @@ const checkingSummary = (
 export const summaryText = (s: State, wide: boolean): StyledText => {
   if (s.checking) {
     return checkingSummary(s.result, s.tick);
+  }
+  if (s.cancelled && s.result?.checked === true) {
+    return cancelledSummary(s.result);
   }
   if (s.result === undefined) {
     return lines([

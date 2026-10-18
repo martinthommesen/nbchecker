@@ -10,6 +10,7 @@ import {
   blockedName,
   designComputer,
   designTransport,
+  slowDesignTransport,
 } from "../testing/design-network.ts";
 import { OpenRenderer, runTui } from "./run.ts";
 
@@ -28,12 +29,12 @@ interface Session {
 
 let current: Session | undefined;
 
-const start = async (): Promise<Session> => {
+const start = async (transport = designTransport): Promise<Session> => {
   const setup = await createTestRenderer({ height, width });
   const fiber = runTui("0.0.0").pipe(
     Effect.provideService(OpenRenderer, () => Promise.resolve(setup.renderer)),
     Effect.provide(
-      Layer.mergeAll(BunServices.layer, designTransport, designComputer)
+      Layer.mergeAll(BunServices.layer, transport, designComputer)
     ),
     Effect.runFork
   );
@@ -93,6 +94,17 @@ describe("tui", () => {
     s.input.pressArrow("down");
     const screen = await s.until("cloudflare-dns.com");
     expect(screen).toContain("HTTPS 443");
+  });
+
+  test("a cancelled check shows no verdict", async () => {
+    const s = await start(slowDesignTransport);
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    await s.until("answered");
+    s.input.pressEscape();
+    const screen = await s.until("CANCELLED");
+    expect(screen).not.toContain("NOT BLOCKED");
+    expect(screen).toContain("cancelled");
   });
 
   test("shows the connection screen and goes back", async () => {

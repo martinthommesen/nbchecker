@@ -5,6 +5,7 @@ import { check } from "../check/checker.ts";
 import { connectionText, detectConnection } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
 import { Progress } from "../check/progress.ts";
+import { cancelPending } from "../check/result.ts";
 import { toJson } from "../report/json.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
@@ -52,6 +53,7 @@ const toaster =
 const checkTarget = ({ store }: ControllerDeps, target: string) =>
   Effect.gen(function* () {
     store.set({
+      cancelled: false,
       checking: true,
       elapsedMs: undefined,
       focus: "table",
@@ -71,7 +73,16 @@ const checkTarget = ({ store }: ControllerDeps, target: string) =>
       result,
     });
   }).pipe(
-    Effect.onInterrupt(() => Effect.sync(() => store.set({ checking: false })))
+    Effect.onInterrupt(() =>
+      Effect.sync(() => {
+        const { result } = store.get();
+        store.set({
+          cancelled: true,
+          checking: false,
+          result: result && cancelPending(result),
+        });
+      })
+    )
   );
 
 const checkActions = (

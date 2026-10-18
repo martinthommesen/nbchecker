@@ -3,6 +3,7 @@
  * unfiltered resolver.
  */
 import { Context, Duration, Effect, Ref, Result } from "effect";
+import { QueryError } from "../dns/query-error.ts";
 import type { DnsAnswer } from "../dns/wire.ts";
 import { classify, merge, type Verdict } from "./classify.ts";
 import { type Filter, filters, truthResolvers } from "./filters.ts";
@@ -109,8 +110,21 @@ const timedResult = <A, E extends { readonly message: string }, R>(
     )
   );
 
+/** The system resolver retries on its own, so it gets longer than a filter. */
+const systemTimeout = "5 seconds";
+
 const systemAnswer = (host: string) =>
   lookupSystem(host).pipe(
+    Effect.timeoutOrElse({
+      duration: systemTimeout,
+      orElse: () =>
+        Effect.fail(
+          new QueryError({
+            reason: "no answer (timed out)",
+            server: "this computer",
+          })
+        ),
+    }),
     Effect.map(
       (answer: DnsAnswer): FilterAnswer => ({
         answers: [answer],

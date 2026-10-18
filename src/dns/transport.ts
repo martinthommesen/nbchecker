@@ -51,7 +51,7 @@ const ask = (port: number) => (server: string, name: string, type: QueryType) =>
     if (!answer.truncated) {
       return answer;
     }
-    return yield* sendTcp(server, port, packet).pipe(
+    const full = yield* sendTcp(server, port, packet).pipe(
       Effect.flatMap(decodeResponse),
       Effect.mapError((e) => {
         if (e._tag === "MalformedResponse") {
@@ -60,6 +60,13 @@ const ask = (port: number) => (server: string, name: string, type: QueryType) =>
         return e;
       })
     );
+    if (full.truncated) {
+      // Classifying part of an answer could miss a block.
+      return yield* Effect.fail(
+        new QueryError({ reason: "answer was truncated over TCP too", server })
+      );
+    }
+    return full;
   }).pipe(
     Effect.timeoutOrElse({ duration: "2 seconds", orElse: timedOut(server) })
   );
