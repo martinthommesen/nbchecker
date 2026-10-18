@@ -4,8 +4,9 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
-import type { Filter } from "../check/filters.ts";
+import type { Category, Filter } from "../check/filters.ts";
 import { type CheckResult, isBlocked } from "../check/result.ts";
+import { fakeCanary } from "../testing/fake-network.ts";
 import { downTruthUrl, runCheck } from "../testing/run-check.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
@@ -19,6 +20,14 @@ const screen = (r: CheckResult): string =>
   summaryText({ ...initialState("0.0.0"), result: r }, true)
     .chunks.map((c) => c.text)
     .join("");
+
+/** A filter with one server, which blocks the fake canary. */
+const fake = (category: Category, name: string, server: string): Filter => ({
+  canary: fakeCanary,
+  category,
+  name,
+  servers: [server],
+});
 
 const json = (r: CheckResult) => toJson({ dnsFilter: "", version: "" }, [r]);
 
@@ -102,11 +111,7 @@ describe("verdicts: block answers", () => {
   });
 
   test("a plain REFUSED is a failure, named as such", async () => {
-    const refusing: Filter = {
-      category: "security",
-      name: "Refusing",
-      servers: ["192.0.2.53"],
-    };
+    const refusing = fake("security", "Refusing", "192.0.2.53");
     const r = await runCheck("refused.example", { filters: [refusing] });
     expect(r.filters[0]?.outcome).toMatchObject({
       error: "192.0.2.53: REFUSED",
@@ -148,8 +153,8 @@ describe("verdicts: block answers", () => {
   test("blocked by counts only the filters that answered", async () => {
     const r = await runCheck("bad.example", {
       filters: [
-        { category: "ads", name: "Down", servers: ["203.0.113.1"] },
-        { category: "family", name: "Family", servers: ["198.51.100.53"] },
+        fake("ads", "Down", "203.0.113.1"),
+        fake("family", "Family", "198.51.100.53"),
       ],
     });
     expect(text(r)).toContain("✗ blocked by 1 of 1 filters");

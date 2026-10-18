@@ -1,11 +1,16 @@
 /** What each action does: checks, copying, saving and moving around. */
 import type { CliRenderer, InputRenderable } from "@opentui/core";
-import { Duration, Effect, FileSystem } from "effect";
+import { Deferred, Duration, Effect, FileSystem } from "effect";
 import { check } from "../check/checker.ts";
-import { connectionText, detectConnection } from "../check/connection.ts";
+import { connectionText } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
+import { detectNetwork } from "../check/network.ts";
 import { Progress } from "../check/progress.ts";
-import { cancelPending } from "../check/result.ts";
+import {
+  cancelPending,
+  type Network,
+  redirectedFilters,
+} from "../check/result.ts";
 import { toJson } from "../report/json.ts";
 import { renderText } from "../report/text.ts";
 import { view } from "../report/view.ts";
@@ -21,20 +26,25 @@ const jsonIndent = 2;
 interface Session {
   readonly history: string[];
   lastTarget: string | undefined;
+  /**
+   * The network, found out once when the screen opens and again on "detect
+   * again"; checks wait for it.
+   */
+  network: Deferred.Deferred<Network>;
   recalled: number;
 }
 
-const dnsFilterOf = (s: State): string =>
-  (s.connection && connectionText(s.connection)) ?? "unknown";
+const dnsFilterOf = (n: Network | undefined): string =>
+  (n && connectionText(n.connection)) ?? "unknown";
 
 const copyText = (s: State, filters: readonly Filter[]): string | undefined => {
   if (s.screen === "connection") {
-    return connectionCopy(s.connection, filters);
+    return connectionCopy(s.network, filters);
   }
   if (s.result === undefined || s.checking) {
     return;
   }
-  return `DNS filter on this computer: ${dnsFilterOf(s)}\n\n${renderText(view(s.result), false)}`;
+  return `DNS filter on this computer: ${dnsFilterOf(s.result.network)}\n\n${renderText(view(s.result), false)}`;
 };
 
 const toaster =
@@ -50,7 +60,11 @@ const toaster =
       })
     );
 
-const checkTarget = ({ store }: ControllerDeps, target: string) =>
+const checkTarget = (
+  { store }: ControllerDeps,
+  target: string,
+  network: Deferred.Deferred<Network>
+) =>
   Effect.gen(function* () {
     store.set({
       cancelled: false,
@@ -61,7 +75,10 @@ const checkTarget = ({ store }: ControllerDeps, target: string) =>
       screen: "main",
       selected: 0,
     });
-    const [duration, result] = yield* check(target).pipe(
+    const [duration, result] = yield* check(
+      target,
+      Deferred.await(network)
+    ).pipe(
       Effect.provideService(Progress, (sofar) =>
         Effect.sync(() => store.set({ result: sofar }))
       ),
@@ -98,11 +115,11 @@ const checkActions = (
     session.lastTarget = target;
     deps.input.value = target;
     deps.input.blur();
-    deps.run.check(checkTarget(deps, target));
+    deps.run.check(checkTarget(deps, target, session.network));
   };
   const recheck = () => {
     if (session.lastTarget !== undefined) {
-      deps.run.check(checkTarget(deps, session.lastTarget));
+      deps.run.check(checkTarget(deps, session.lastTarget, session.network));
     }
   };
   const cancel = () => {
@@ -111,13 +128,21 @@ const checkActions = (
       toast("cancelled");
     }
   };
-  const detect = () =>
+  const detect = () => {
+    const network = Deferred.makeUnsafe<Network>();
+    session.network = network;
     deps.run.background(
       Effect.gen(function* () {
-        deps.store.set({ connection: undefined });
-        deps.store.set({ connection: yield* detectConnection });
+        deps.store.set({ network: undefined });
+        const found = yield* detectNetwork;
+        // A detection started later has the say.
+        if (session.network === network) {
+          deps.store.set({ network: found });
+        }
+        yield* Deferred.succeed(network, found);
       })
     );
+  };
   return { cancel, detect, recheck, submit };
 };
 
@@ -129,9 +154,12 @@ const outputActions = (deps: ControllerDeps, toast: (m: string) => void) => {
       return toast("nothing to export yet");
     }
     const path = `nbchecker-${result.host}.json`;
-    const json = toJson({ dnsFilter: dnsFilterOf(s), version: s.version }, [
-      result,
-    ]);
+    const meta = {
+      dnsFilter: dnsFilterOf(result.network),
+      intercepted: result.network && redirectedFilters(result.network),
+      version: s.version,
+    };
+    const json = toJson(meta, [result]);
     deps.run.background(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -203,7 +231,12 @@ const moveActions = (
 };
 
 const makeController = (deps: ControllerDeps): Controller => {
-  const session: Session = { history: [], lastTarget: undefined, recalled: 0 };
+  const session: Session = {
+    history: [],
+    lastTarget: undefined,
+    network: Deferred.makeUnsafe(),
+    recalled: 0,
+  };
   const toast = toaster(deps);
   const checks = checkActions(deps, session, toast);
   const output = outputActions(deps, toast);
@@ -240,10 +273,10 @@ export interface Store {
   readonly set: (patch: Partial<State>) => void;
 }
 
+/** Checks ask the same resolvers as the network detection. */
 export type Needs =
   | FileSystem.FileSystem
-  | Effect.Services<ReturnType<typeof check>>
-  | Effect.Services<typeof detectConnection>;
+  | Effect.Services<typeof detectNetwork>;
 
 /** Runs effects from key handlers: one for checks, one for the rest. */
 export interface Runners {

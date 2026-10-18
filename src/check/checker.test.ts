@@ -5,10 +5,12 @@ import { TestClock } from "effect/testing";
 import type { DnsTransport } from "../dns/transport.ts";
 import {
   computer,
+  fakeCanary,
   fakeTransport,
   fakeFilters as filters,
 } from "../testing/fake-network.ts";
 import { CheckerOptions, check } from "./checker.ts";
+import { detectNetwork } from "./network.ts";
 import { Progress } from "./progress.ts";
 import { type CheckResult, isBlocked } from "./result.ts";
 
@@ -32,7 +34,7 @@ const verdicts = (r: {
 
 describe("check: names", () => {
   test("a name no filter blocks", async () => {
-    const r = await run(check("https://good.example/page"));
+    const r = await run(check("https://good.example/page", detectNetwork));
     expect(r.host).toBe("good.example");
     expect(r.exists).toBe(true);
     expect(r.truth).toEqual(["192.0.2.20"]);
@@ -40,7 +42,7 @@ describe("check: names", () => {
   });
 
   test("blocks are read per filter, using the first server that answers", async () => {
-    const r = await run(check("bad.example"));
+    const r = await run(check("bad.example", detectNetwork));
     expect(verdicts(r)).toMatchObject([
       {
         exchange: { server: "192.0.2.53", transport: "UDP 53" },
@@ -54,7 +56,9 @@ describe("check: names", () => {
   });
 
   test("a URL is checked for the host a browser would open", async () => {
-    const r = await run(check("https://good.example\\@bad.example/"));
+    const r = await run(
+      check("https://good.example\\@bad.example/", detectNetwork)
+    );
     expect(r.host).toBe("good.example");
     expect(isBlocked(r)).toBe(false);
   });
@@ -69,7 +73,7 @@ describe("check: names", () => {
           return [address];
         }),
     });
-    const r = await check("good.example.").pipe(
+    const r = await check("good.example.", detectNetwork).pipe(
       Effect.provideService(CheckerOptions, {
         filters,
         truthUrls: ["https://truth.example/dns-query"],
@@ -84,7 +88,7 @@ describe("check: names", () => {
   });
 
   test("a name that doesn't exist anywhere is not a block", async () => {
-    const r = await run(check("nope.example"));
+    const r = await run(check("nope.example", detectNetwork));
     expect(r.exists).toBe(false);
     expect(isBlocked(r)).toBe(false);
     expect(verdicts(r)).toMatchObject([
@@ -96,9 +100,10 @@ describe("check: names", () => {
 
 describe("check: failures", () => {
   test("a filter whose servers all fail is reported as failed", async () => {
-    const r = await run(check("good.example"), {
+    const r = await run(check("good.example", detectNetwork), {
       filters: [
         {
+          canary: fakeCanary,
           category: "ads",
           name: "Broken",
           servers: ["203.0.113.1", "203.0.113.2"],
@@ -109,7 +114,7 @@ describe("check: failures", () => {
   });
 
   test("falls back to the next unfiltered resolver", async () => {
-    const r = await run(check("good.example"), {
+    const r = await run(check("good.example", detectNetwork), {
       truthUrls: [
         "https://down.example/dns-query",
         "https://truth.example/dns-query",
@@ -120,7 +125,7 @@ describe("check: failures", () => {
   });
 
   test("a resolver that fails the AAAA query is skipped", async () => {
-    const r = await run(check("good.example"), {
+    const r = await run(check("good.example", detectNetwork), {
       truthUrls: [
         "https://no-aaaa.example/dns-query",
         "https://truth.example/dns-query",
@@ -130,7 +135,7 @@ describe("check: failures", () => {
   });
 
   test("reports when no unfiltered resolver answers", async () => {
-    const r = await run(check("good.example"), {
+    const r = await run(check("good.example", detectNetwork), {
       truthUrls: ["https://down.example/dns-query"],
     });
     expect(r.truthError).toContain("timed out");
@@ -139,14 +144,14 @@ describe("check: failures", () => {
 
 describe("check: IP addresses", () => {
   test("an IP address is checked by its reverse name", async () => {
-    const r = await run(check("192.0.2.99"));
+    const r = await run(check("192.0.2.99", detectNetwork));
     expect(r.isIp).toBe(true);
     expect(r.host).toBe("host.example");
     expect(r.checked).toBe(true);
   });
 
   test("an IP address without a reverse name is not checked", async () => {
-    const r = await run(check("192.0.2.98"));
+    const r = await run(check("192.0.2.98", detectNetwork));
     expect(r.checked).toBe(false);
     expect(r.lookupError).toBeUndefined();
   });
@@ -163,7 +168,7 @@ describe("check: IP addresses", () => {
           })
         ),
     });
-    const r = await check("192.0.2.98").pipe(
+    const r = await check("192.0.2.98", detectNetwork).pipe(
       Effect.provideService(Dns.Dns, failing),
       Effect.provide(fakeTransport),
       Effect.runPromise
@@ -178,7 +183,7 @@ describe("check: IP addresses", () => {
       reverse: () => Effect.never,
     });
     const r = await Effect.gen(function* () {
-      const fiber = yield* check("192.0.2.98").pipe(
+      const fiber = yield* check("192.0.2.98", detectNetwork).pipe(
         Effect.provideService(Dns.Dns, stuck),
         Effect.provide(fakeTransport),
         Effect.forkChild
@@ -191,7 +196,7 @@ describe("check: IP addresses", () => {
   });
 
   test("an invalid target is an error", async () => {
-    const r = await run(check("not a name!"));
+    const r = await run(check("not a name!", detectNetwork));
     expect(r.lookupError).toContain("not a domain");
   });
 });
@@ -211,7 +216,7 @@ describe("check: this computer", () => {
           })
         ),
     });
-    const r = await check("good.example").pipe(
+    const r = await check("good.example", detectNetwork).pipe(
       Effect.provideService(Dns.Dns, flaky),
       Effect.provide(fakeTransport),
       Effect.runPromise
@@ -228,7 +233,7 @@ describe("check: progress", () => {
   test("reports each answer as it arrives, starting with none", async () => {
     const seen: CheckResult[] = [];
     const r = await run(
-      check("bad.example").pipe(
+      check("bad.example", detectNetwork).pipe(
         Effect.provideService(Progress, (sofar) =>
           Effect.sync(() => {
             seen.push(sofar);
@@ -237,9 +242,9 @@ describe("check: progress", () => {
       )
     );
     // One report before any answer, then one per filter, system and truth,
-    // and one when the connection is detected.
+    // and one when the network is known.
     const reports =
-      filters.length + ["start", "system", "truth", "connection"].length;
+      filters.length + ["start", "system", "truth", "network"].length;
     expect(seen).toHaveLength(reports);
     expect(seen[0]?.filters.every((f) => f.outcome.kind === "pending")).toBe(
       true

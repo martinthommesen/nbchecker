@@ -3,6 +3,7 @@ import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   type Exchange,
+  isRedirected,
   type Outcome,
   shouldAnswer,
   truthPending,
@@ -25,6 +26,7 @@ const verdictWords: Record<RowState, string> = {
   inspected: "inspected",
   missing: "not found",
   pending: "asking…",
+  redirected: "untrusted",
   resolves: "resolves",
   unavailable: "no answer",
   unsure: "can't tell",
@@ -41,6 +43,8 @@ interface RowBase {
 interface RowContext {
   /** It needn't answer, as an ISP's filter elsewhere. */
   readonly optional: boolean;
+  /** It failed the self-test, so its answers don't count. */
+  readonly redirected: boolean;
   readonly result: CheckResult;
   readonly system: boolean;
 }
@@ -52,6 +56,9 @@ const truthUnknown = (r: CheckResult): boolean =>
 const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.kind === "pending") {
     return "pending";
+  }
+  if (c.redirected) {
+    return "redirected";
   }
   if (o.kind === "failed" && (c.optional || wasCancelled(o))) {
     return "unavailable";
@@ -203,6 +210,8 @@ export type RowState =
   | "inspected"
   | "missing"
   | "pending"
+  /** Failed the self-test: its answers seem to come from another resolver. */
+  | "redirected"
   | "resolves"
   | "unavailable"
   /** Says the name doesn't exist, but the real answer is unavailable. */
@@ -244,7 +253,7 @@ export const resultGroups = (r: CheckResult): Group[] => {
         },
         system,
         systemWhy(system, r),
-        { optional: false, result: r, system: true }
+        { optional: false, redirected: false, result: r, system: true }
       ),
       truthRow(r),
     ],
@@ -257,6 +266,7 @@ export const resultGroups = (r: CheckResult): Group[] => {
       const o = r.filters[i]?.outcome ?? { kind: "pending" };
       return outcomeRow(filterBase(f), o, filterWhy(f, o, r), {
         optional: !shouldAnswer(r, f),
+        redirected: isRedirected(r, f),
         result: r,
         system: false,
       });

@@ -21,6 +21,7 @@ const looks: Record<
   inspected: { color: theme.warn, glyph: "!" },
   missing: { color: theme.dim, glyph: "–" },
   pending: { color: theme.dim, glyph: "" },
+  redirected: { color: theme.warn, glyph: "?" },
   resolves: { color: theme.ok, glyph: "✓" },
   unavailable: { color: theme.faint, glyph: "·" },
   unsure: { color: theme.warn, glyph: "?" },

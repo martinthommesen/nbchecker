@@ -11,7 +11,6 @@ import {
   noReference,
   type Reference,
 } from "./classify.ts";
-import { type Connection, detectConnection } from "./connection.ts";
 import { type Filter, filters, truthResolvers } from "./filters.ts";
 import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
 import { normalize } from "./normalize.ts";
@@ -25,6 +24,7 @@ import {
 import {
   type CheckResult,
   completionOf,
+  type Network,
   type Outcome,
   pending,
   unchecked,
@@ -38,8 +38,8 @@ interface Asked<A> {
 
 /** Everything that has answered so far. */
 interface Gathered {
-  readonly connection: Connection | undefined;
   readonly filters: readonly (Asked<FilterAnswer> | undefined)[];
+  readonly network: Network | undefined;
   readonly system: Asked<SystemAnswer> | undefined;
   readonly truth: Asked<Truth> | undefined;
 }
@@ -113,12 +113,12 @@ const assemble = (
   let result: CheckResult = {
     ...base,
     checked: true,
-    connection: g.connection,
     exists: reference.exists,
     filters: asked.map((filter, i) => ({
       filter,
       outcome: filterOutcome(g.filters[i], reference),
     })),
+    network: g.network,
     system: systemOutcome(g.system, reference),
   };
   if (g.truth !== undefined && truth !== undefined) {
@@ -175,13 +175,17 @@ const systemAnswer = (host: string) =>
  * Asks everything about one name at once, reporting each answer. `query` is
  * the name as looked up, which can end in a dot that the shown name drops.
  */
-const checkName = (base: CheckResult, query = base.host) =>
+const checkName = <NetworkNeeds>(
+  base: CheckResult,
+  network: Effect.Effect<Network, never, NetworkNeeds>,
+  query = base.host
+) =>
   Effect.gen(function* () {
     const options = yield* CheckerOptions;
     const progress = yield* Progress;
     const state = yield* Ref.make<Gathered>({
-      connection: undefined,
       filters: options.filters.map(() => undefined),
+      network: undefined,
       system: undefined,
       truth: undefined,
     });
@@ -204,9 +208,10 @@ const checkName = (base: CheckResult, query = base.host) =>
           truth,
         })),
         record(systemAnswer(query), (g, system) => ({ ...g, system })),
-        // Says whether an ISP's filter should have answered this computer.
-        detectConnection.pipe(
-          Effect.flatMap((connection) => report((g) => ({ ...g, connection })))
+        // Says whether an ISP's filter should have answered this computer,
+        // and which filters' answers can be trusted.
+        network.pipe(
+          Effect.flatMap((n) => report((g) => ({ ...g, network: n })))
         ),
         ...options.filters.map((f, i) =>
           record(askFilter(f, query), (g, a) => ({
@@ -231,8 +236,14 @@ export const CheckerOptions = Context.Reference<CheckerOptions>(
   { defaultValue: () => ({ filters, truthUrls: truthResolvers }) }
 );
 
-/** Checks a domain, URL or IP address. */
-export const check = (target: string) =>
+/**
+ * Checks a domain, URL or IP address. `network` is found out once per run,
+ * by `detectNetwork`, and shared by every check.
+ */
+export const check = <NetworkNeeds>(
+  target: string,
+  network: Effect.Effect<Network, never, NetworkNeeds>
+) =>
   Effect.gen(function* () {
     const t = normalize(target);
     if (t.kind === "invalid") {
@@ -245,11 +256,15 @@ export const check = (target: string) =>
       } satisfies CheckResult;
     }
     if (t.kind === "domain") {
-      return yield* checkName(unchecked(target, t.host, false), t.query);
+      return yield* checkName(
+        unchecked(target, t.host, false),
+        network,
+        t.query
+      );
     }
     const named = yield* reverseName(target, t.host);
     if (named.host === t.host || named.lookupError !== undefined) {
       return { ...named, completion: completionOf(named) };
     }
-    return yield* checkName(named);
+    return yield* checkName(named, network);
   });

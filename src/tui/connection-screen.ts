@@ -86,9 +86,10 @@ const drawConnection = (
     );
   }
   const { bodies } = parts;
-  bodies.detected.content = detectedText(s.connection, s.tick);
-  bodies.how.content = howText(s.connection, howWidth);
-  bodies.filters.content = filtersText(s.connection, items);
+  const c = s.network?.connection;
+  bodies.detected.content = detectedText(c, s.tick);
+  bodies.how.content = howText(c, howWidth);
+  bodies.filters.content = filtersText(s.network, items);
 };
 
 export { buildConnection, drawConnection };

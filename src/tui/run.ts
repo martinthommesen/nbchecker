@@ -48,7 +48,7 @@ const makeStore = (initial: State, draw: (s: State) => void): Store => {
 const ticker = (store: Store) =>
   Effect.sync(() => {
     const s = store.get();
-    if (s.checking || s.connection === undefined) {
+    if (s.checking || s.network === undefined) {
       store.set({ tick: s.tick + 1 });
     }
   }).pipe(Effect.repeat(Schedule.spaced("80 millis")), Effect.asVoid);

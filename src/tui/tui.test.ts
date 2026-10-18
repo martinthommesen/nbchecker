@@ -10,6 +10,7 @@ import {
   blockedName,
   designComputer,
   designTransport,
+  redirectedDesignTransport,
   slowDesignTransport,
 } from "../testing/design-network.ts";
 import { OpenRenderer, runTui } from "./run.ts";
@@ -19,6 +20,10 @@ const width = 120;
 const narrowWidth = 80;
 /** The blocked count, unbroken by wrapping. */
 const blockedSoFar = /blocked so far: \d/u;
+const adguardNoAnswer = /· AdGuard DNS\s+no test page\s+· no answer/u;
+const cloudflarePassed = /· Cloudflare Family\s+no test page\s+✓ passed/u;
+const cloudflareRedirected =
+  /Cloudflare Family\s+no test page\s+\? redirected\?/u;
 const height = 40;
 const pollMs = 10;
 const pollTries = 200;
@@ -132,6 +137,33 @@ describe("tui", () => {
     expect(screen).toContain("can't see");
     s.input.pressEscape();
     await s.until("BLOCKED");
+  });
+});
+
+describe("tui: the self-test", () => {
+  test("the connection screen lists each filter's self-test", async () => {
+    const s = await start();
+    await checkBlocked(s);
+    s.input.pressKey("c");
+    const screen = await s.until("✓ passed");
+    expect(screen).toMatch(cloudflarePassed);
+    // AdGuard DNS is down on the design network.
+    expect(screen).toMatch(adguardNoAnswer);
+    expect(screen).not.toContain("? redirected?");
+  });
+
+  test("a redirecting network is flagged on every screen", async () => {
+    const s = await start(redirectedDesignTransport);
+    await s.input.typeText(blockedName);
+    s.input.pressEnter();
+    const screen = await s.until("INTERCEPTED?");
+    expect(screen).toContain("results can't be trusted");
+    expect(screen).toContain("? DNS intercepted");
+    expect(screen).toContain("untrusted");
+    expect(screen).not.toContain("NOT BLOCKED");
+    s.input.pressKey("c");
+    const connection = await s.until("self-test");
+    expect(connection).toMatch(cloudflareRedirected);
   });
 });
 

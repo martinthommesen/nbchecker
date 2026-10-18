@@ -1,6 +1,10 @@
 /** The one-line summaries: the verdict, progress, connection and keys. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import type { CheckResult, Outcome } from "../check/result.ts";
+import {
+  type CheckResult,
+  type Outcome,
+  seemsIntercepted,
+} from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
 import { lines, paint, spinner } from "./paint.ts";
@@ -80,6 +84,21 @@ const truthPhrase = (r: CheckResult): TextChunk => {
 const counted = (n: number, of: number, color: string): TextChunk =>
   paint(`${n} of ${of}`, { bold: true, fg: color });
 
+const inspectedBadge = (status: Status): TextChunk[] => {
+  if (status.inspected === 0) {
+    return [
+      badge("INSPECTED", theme.warn),
+      paint("  your DNS sends it through Cisco's proxy, not blocked"),
+    ];
+  }
+  return [
+    badge("INSPECTED", theme.warn),
+    paint("  "),
+    counted(status.inspected, status.answered, theme.warn),
+    paint(" filters send it through Cisco's proxy"),
+  ];
+};
+
 /** The verdict's badge and the words after it. */
 const verdictBadge = (status: Status): TextChunk[] => {
   switch (status.kind) {
@@ -101,17 +120,11 @@ const verdictBadge = (status: Status): TextChunk[] => {
         paint("  the real answer is unavailable"),
       ];
     case "inspected":
-      if (status.inspected === 0) {
-        return [
-          badge("INSPECTED", theme.warn),
-          paint("  your DNS sends it through Cisco's proxy, not blocked"),
-        ];
-      }
+      return inspectedBadge(status);
+    case "intercepted":
       return [
-        badge("INSPECTED", theme.warn),
-        paint("  "),
-        counted(status.inspected, status.answered, theme.warn),
-        paint(" filters send it through Cisco's proxy"),
+        badge("INTERCEPTED?", theme.warn),
+        paint("  DNS here seems redirected; results can't be trusted"),
       ];
     case "local-only":
       return [
@@ -205,9 +218,12 @@ const cancelledSummary = (r: CheckResult): StyledText => {
 };
 
 const connectionStatus = (s: State): TextChunk => {
-  const c = s.connection;
+  const c = s.network?.connection;
   if (c === undefined) {
     return paint(`${spinner(s.tick)} detecting…`, { fg: theme.dim });
+  }
+  if (seemsIntercepted(s.network)) {
+    return paint("? DNS intercepted", { fg: theme.warn });
   }
   if (c.filter !== undefined) {
     return paint(`✕ ${c.filter}`, { fg: theme.block });

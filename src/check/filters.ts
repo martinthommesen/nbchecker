@@ -4,11 +4,23 @@
 export type Category = "ads" | "family" | "security";
 
 /**
+ * A name a filter documents as blocked. nbchecker asks for it once per run,
+ * to see that the answers really come from the filter: some networks send
+ * every DNS query to their own resolver, whatever server it was sent to.
+ */
+export interface Canary {
+  /** The address it must answer, for a test page; otherwise any block. */
+  readonly answer?: string;
+  readonly name: string;
+}
+
+/**
  * A filtering DNS service. Each is reachable over IPv4 and IPv6; nbchecker
  * asks all of its addresses at once and uses the first answer, because a
  * VPN or firewall often blocks one address family.
  */
 export interface Filter {
+  readonly canary: Canary;
   readonly category: Category;
   readonly name: string;
   /**
@@ -23,6 +35,8 @@ export interface Filter {
 
 export const filters: readonly Filter[] = [
   {
+    // Telenor's test page, which each of its filters answers differently.
+    canary: { answer: "148.123.15.38", name: "nettvern.telenor.net" },
     category: "security",
     name: "Telenor Nettvern",
     network: "Telenor",
@@ -35,6 +49,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { answer: "148.123.15.1", name: "nettvern.telenor.net" },
     category: "family",
     name: "Telenor Nettvern+",
     network: "Telenor",
@@ -47,6 +62,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "malware.testcategory.com" },
     category: "security",
     name: "Cloudflare Security",
     servers: [
@@ -57,6 +73,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "pornography.testcategory.com" },
     category: "family",
     name: "Cloudflare Family",
     servers: [
@@ -67,11 +84,13 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "isitblocked.org" },
     category: "security",
     name: "Quad9",
     servers: ["9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"],
   },
   {
+    canary: { name: "internetbadguys.com" },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [
@@ -82,6 +101,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "doubleclick.net" },
     category: "family",
     name: "AdGuard Family",
     servers: [
@@ -92,6 +112,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "internetbadguys.com" },
     category: "family",
     name: "CleanBrowsing Family",
     servers: [
@@ -102,6 +123,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "doubleclick.net" },
     category: "ads",
     name: "AdGuard DNS",
     servers: [
@@ -112,6 +134,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
+    canary: { name: "internetbadguys.com" },
     category: "security",
     name: "CleanBrowsing Security",
     servers: [

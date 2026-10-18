@@ -3,6 +3,7 @@ import type { Reason, Verdict } from "../check/classify.ts";
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
+  isRedirected,
   type Outcome,
   shouldAnswer,
   truthCancelled,
@@ -71,10 +72,17 @@ const verdictWhy = (name: string, v: Verdict, r: CheckResult): string => {
   return resolvesWhy(name, v, r);
 };
 
+/** Why a filter that failed the self-test doesn't count. */
+const redirectedWhy = (f: Filter): string =>
+  `nbchecker asked ${f.name} for its test name ${f.canary.name} and didn't get the answer ${f.name} gives for it. So its answers don't look like they come from ${f.name}: DNS may be redirected on this network, to a resolver of its own. They don't count, and the check is incomplete.`;
+
 /** Why a filter's row reads as it does. */
 const filterWhy = (f: Filter, o: Outcome, r: CheckResult): string => {
   if (o.kind === "pending") {
     return "Waiting for an answer.";
+  }
+  if (isRedirected(r, f)) {
+    return redirectedWhy(f);
   }
   if (o.kind === "failed" && wasCancelled(o)) {
     return "The check was cancelled before it answered.";

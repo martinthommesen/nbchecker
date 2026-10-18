@@ -43,7 +43,7 @@ table fills in as the answers arrive.
 | `↑` `↓` | Select a row and see its details: the server asked, the raw answer and why it counts as blocked or not |
 | `/` | Type a new check |
 | `r` | Check the same target again |
-| `c` | Show which filter your computer's DNS uses |
+| `c` | Show which filter your computer's DNS uses, and the self-test |
 | `y` | Copy the result as text |
 | `e` | Save the result as JSON in the current folder |
 | `?` | Help |
@@ -76,7 +76,10 @@ SECURITY · MALWARE, PHISHING
 | `--help` | Show all options |
 
 Without arguments, and when standard input isn't a terminal, nbchecker reads
-targets from it, one per line.
+targets from it, one per line. It only looks up which DNS filter your
+computer uses, and runs the self-test, once a target can be checked, so a
+list of invalid targets needs no network; the JSON then says
+`"dnsFilter": "not checked"`.
 
 "Blocked by 4 of 8 filters" counts the filters that answered. When the real
 answer can't be fetched, a filter saying the domain doesn't exist could be a
@@ -85,7 +88,8 @@ block or not, so the result says it couldn't tell.
 When it checks targets from arguments or standard input, the exit status is 1
 if anything is blocked, even when a check was incomplete. Otherwise it is 2 if
 a check was incomplete, for example because a filter, your own DNS or the real
-answer could not be reached, and 0 if nothing is blocked. A filter that only
+answer could not be reached, or a filter failed the self-test, and 0 if
+nothing is blocked. A filter that only
 answers some networks, such as Telenor's, doesn't make a check incomplete when
 you are elsewhere; when nbchecker detects Nettvern or Nettvern+ on your DNS,
 it expects them to answer. The interactive app always exits with 0, since one
@@ -133,6 +137,30 @@ still block some of its URLs.
 The block answers of the public filters come from their documentation and
 haven't all been confirmed on a live network yet. If a result looks wrong,
 please [report it](https://github.com/martinthommesen/nbchecker/issues/new/choose).
+
+### The self-test
+
+Some networks, such as some hotels, routers, workplaces and VPNs, send every
+DNS query to their own resolver, whatever server it was sent to. Every filter
+then seems to give that resolver's answers. So once per run, and once per
+session in the interactive app, nbchecker asks each filter for a test name it
+documents as blocked, such as Cloudflare's `malware.testcategory.com` or
+Telenor's test page, and checks that the answer is its block. That is an A
+and an AAAA query to each of a filter's four servers: up to 80 small
+queries per run.
+
+- **passed**: the filter's answers count as usual.
+- **no answer**: nothing can be told either way, so its answers count as
+  usual. Telenor's filters don't answer outside Telenor's network.
+- **redirected?**: the answer wasn't the filter's block, so its answers seem
+  to come from another resolver. Its row says so, it counts as neither
+  blocked nor not blocked, and the check is incomplete. When most filters
+  fail, the result says DNS on this network seems to be intercepted.
+
+The `c` screen shows each filter's self-test. In the JSON, such a filter
+has `"intercepted": true`, the result's `status` is `"intercepted"` when
+most filters failed, and the top-level `"intercepted"` lists the filters
+that failed.
 
 ### Things to know
 

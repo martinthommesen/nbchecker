@@ -39,6 +39,25 @@ export type Outcome =
       readonly verdict: Verdict;
     };
 
+/**
+ * How a filter answered the self-test, which asks it for a name it
+ * documents as blocked: "redirected" when the answer isn't its block.
+ */
+export type SelfTestResult = "no-answer" | "passed" | "redirected";
+
+export interface SelfTest {
+  /** What it answered, for display. */
+  readonly answers: readonly string[];
+  readonly filter: string;
+  readonly result: SelfTestResult;
+}
+
+/** What is found out about this computer's network, once per run. */
+export interface Network {
+  readonly connection: Connection;
+  readonly selfTests: readonly SelfTest[];
+}
+
 export interface FilterResult {
   readonly filter: Filter;
   readonly outcome: Outcome;
@@ -55,12 +74,6 @@ export interface CheckResult {
   /** DNS was checked; false for an IP address with no reverse name. */
   readonly checked: boolean;
   readonly completion: Completion;
-  /**
-   * Which filter this computer's DNS goes through, detected during the
-   * check; undefined until it is. It says whether an ISP's filter that only
-   * answers its own customers should have answered.
-   */
-  readonly connection: Connection | undefined;
   /** An unfiltered resolver found the name. */
   readonly exists: boolean;
   readonly filters: readonly FilterResult[];
@@ -69,6 +82,12 @@ export interface CheckResult {
   readonly isIp: boolean;
   /** The target could not be looked up at all. */
   readonly lookupError: string | undefined;
+  /**
+   * Which filter this computer's DNS goes through, and which filters passed
+   * the self-test; undefined until known. The connection says whether an
+   * ISP's filter that only answers its own customers should have answered.
+   */
+  readonly network: Network | undefined;
   readonly notes: readonly string[];
   /** What this computer's own DNS says; undefined when not checked. */
   readonly system: Outcome | undefined;
@@ -96,14 +115,46 @@ export const wasCancelled = (o: Outcome): boolean =>
  * or the connection couldn't be detected, so nobody can tell.
  */
 export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
-  const c = r.connection;
+  const c = r.network?.connection;
   if (f.network === undefined || c === undefined || c.error !== undefined) {
     return true;
   }
   return c.network === f.network;
 };
 
-/** Works out whether everything that should have answered did. */
+/**
+ * Whether a filter failed the self-test, so its answers seem to come from
+ * somewhere else and say nothing about the filter.
+ */
+export const isRedirected = (r: CheckResult, f: Filter): boolean =>
+  r.network?.selfTests.some(
+    (t) => t.filter === f.name && t.result === "redirected"
+  ) ?? false;
+
+/** The filters whose answers count: all but those that failed the self-test. */
+export const trustedFilters = (r: CheckResult): readonly FilterResult[] =>
+  r.filters.filter((f) => !isRedirected(r, f.filter));
+
+/** The filters that failed the self-test. */
+export const redirectedFilters = (n: Network): readonly string[] =>
+  n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
+
+/**
+ * Whether most filters that answered the self-test failed it, so DNS on
+ * this network seems to be intercepted.
+ */
+export const seemsIntercepted = (n: Network | undefined): boolean => {
+  if (n === undefined) {
+    return false;
+  }
+  const passed = n.selfTests.filter((t) => t.result === "passed").length;
+  return redirectedFilters(n).length > passed;
+};
+
+/**
+ * Works out whether everything that should have answered did, with answers
+ * that can be trusted.
+ */
 export const completionOf = (r: CheckResult): Completion => {
   if (r.lookupError !== undefined) {
     return "incomplete";
@@ -114,20 +165,22 @@ export const completionOf = (r: CheckResult): Completion => {
   const outcomes = [r.system, ...r.filters.map((f) => f.outcome)];
   const failed = (o: Outcome | undefined) => o?.kind === "failed";
   if (
-    r.connection === undefined ||
+    r.network === undefined ||
     r.truthExchange === undefined ||
     outcomes.some((o) => o === undefined || o.kind === "pending") ||
     failed(r.system) ||
-    r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter))
+    r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter)) ||
+    r.filters.some((f) => isRedirected(r, f.filter))
   ) {
     return "incomplete";
   }
   return "complete";
 };
 
-/** Whether any filter, or this computer, blocks the target. */
+/** Whether any trusted filter, or this computer, blocks the target. */
 export const isBlocked = (r: CheckResult): boolean =>
-  r.filters.some((f) => outcomeBlocks(f.outcome)) || outcomeBlocks(r.system);
+  trustedFilters(r).some((f) => outcomeBlocks(f.outcome)) ||
+  outcomeBlocks(r.system);
 
 /** Whether the unfiltered answer is still on its way. */
 export const truthPending = (r: CheckResult): boolean =>
@@ -159,12 +212,12 @@ export const unchecked = (
 ): CheckResult => ({
   checked: false,
   completion: "complete",
-  connection: undefined,
   exists: false,
   filters: [],
   host,
   isIp,
   lookupError: undefined,
+  network: undefined,
   notes: [],
   system: undefined,
   target,

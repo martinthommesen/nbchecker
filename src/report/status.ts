@@ -2,7 +2,13 @@
  * The overall verdict of a check, worked out once and shared by the text
  * output, the interactive screen, copied text and JSON, so they agree.
  */
-import type { CheckResult, Outcome } from "../check/result.ts";
+import {
+  type CheckResult,
+  isRedirected,
+  type Outcome,
+  seemsIntercepted,
+  trustedFilters,
+} from "../check/result.ts";
 
 const answeredWith = (o: Outcome | undefined, test: keyof Flags): boolean =>
   o?.kind === "answered" && o.verdict[test];
@@ -22,7 +28,7 @@ const resolvesHere = (r: CheckResult): boolean =>
 /** Some answer says the name doesn't exist, which only the real answer can judge. */
 const someMissing = (r: CheckResult): boolean =>
   answeredWith(r.system, "missing") ||
-  r.filters.some((f) => answeredWith(f.outcome, "missing"));
+  trustedFilters(r).some((f) => answeredWith(f.outcome, "missing"));
 
 const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (r.lookupError !== undefined) {
@@ -33,6 +39,9 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   }
   if (r.completion === "cancelled") {
     return "cancelled";
+  }
+  if (seemsIntercepted(r.network)) {
+    return "intercepted";
   }
   if (s.blocked > 0) {
     return "blocked";
@@ -67,6 +76,8 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
  *   answer that can't be judged
  * - error: the target couldn't be looked up at all
  * - inspected: not blocked, but sent through Cisco's inspection proxy
+ * - intercepted: most filters failed the self-test, so DNS on this network
+ *   seems to be sent to another resolver and nothing can be trusted
  * - local-only: the real answer says the name doesn't exist, but this
  *   computer resolves it, as with private or split DNS
  * - missing: the name doesn't exist
@@ -81,6 +92,7 @@ export type StatusKind =
   | "cant-tell"
   | "error"
   | "inspected"
+  | "intercepted"
   | "local-only"
   | "missing"
   | "no-answer"
@@ -88,7 +100,7 @@ export type StatusKind =
   | "unchecked";
 
 export interface Status {
-  /** Filters that answered. */
+  /** Filters that answered and passed or skipped the self-test. */
   readonly answered: number;
   /** Filters that block the name. */
   readonly blocked: number;
@@ -97,19 +109,24 @@ export interface Status {
   /** This computer's DNS sends it through an inspection proxy. */
   readonly inspectedHere: boolean;
   readonly kind: StatusKind;
+  /** Filters whose answers don't count, as they failed the self-test. */
+  readonly redirected: number;
   /** Filters asked. */
   readonly total: number;
 }
 
 /** Works out a check's overall verdict. */
 export const statusOf = (r: CheckResult): Status => {
-  const answered = r.filters.filter((f) => f.outcome.kind === "answered");
+  const answered = trustedFilters(r).filter(
+    (f) => f.outcome.kind === "answered"
+  );
   const counts = {
     answered: answered.length,
     blocked: answered.filter((f) => answeredWith(f.outcome, "blocked")).length,
     inspected: answered.filter((f) => answeredWith(f.outcome, "inspected"))
       .length,
     inspectedHere: answeredWith(r.system, "inspected"),
+    redirected: r.filters.filter((f) => isRedirected(r, f.filter)).length,
     total: r.filters.length,
   };
   return { ...counts, kind: kindOf(r, counts) };
@@ -133,6 +150,8 @@ export const statusText = (s: Status): string => {
         return "not blocked, but your DNS sends it through Cisco's inspection proxy";
       }
       return `not blocked, but ${s.inspected} of ${s.answered} filters send it through Cisco's inspection proxy`;
+    case "intercepted":
+      return `DNS on this network seems to be intercepted: ${s.redirected} of ${s.total} filters failed the self-test, so these results can't be trusted`;
     case "local-only":
       return "only resolves on this computer (private or split DNS)";
     case "missing":
