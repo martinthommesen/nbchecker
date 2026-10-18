@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type CheckResult, cancelPending } from "../check/result.ts";
+import { type CheckResult, cancelPending, pending } from "../check/result.ts";
 import { downRealAnswerUrl, runCheck } from "../testing/run-check.ts";
 import { flatRows, resultGroups, type TableRow } from "./rows.ts";
 
@@ -25,6 +25,19 @@ describe("resultGroups", () => {
     });
   });
 
+  test("a real answer that failed shows the error, not the resolver", async () => {
+    const r = await runCheck("good.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
+    });
+    expect(row(r, "Real answer")).toMatchObject({
+      ms: "",
+      response: [expect.stringContaining("timed out")],
+      server: "DNS over HTTPS",
+      state: "failed",
+      verdict: "no answer",
+    });
+  });
+
   test("this computer finding no address says so", async () => {
     const r = await runCheck("mail.example");
     expect(row(r, "Your DNS")).toMatchObject({
@@ -39,15 +52,32 @@ describe("resultGroups", () => {
 describe("resultGroups after a cancel", () => {
   test("the real answer that was still on its way says cancelled", async () => {
     const r = await runCheck("good.example");
-    const waiting = {
-      ...r,
-      realAnswerError: undefined,
-      realAnswerExchange: undefined,
-    };
+    const waiting: CheckResult = { ...r, realAnswer: pending };
     expect(row(cancelPending(waiting), "Real answer")).toMatchObject({
+      ms: "",
       response: [],
+      server: "DNS over HTTPS",
       state: "unavailable",
       verdict: "cancelled",
     });
+  });
+
+  test("a filter or this computer still on its way says cancelled", async () => {
+    const r = await runCheck("good.example");
+    const waiting: CheckResult = {
+      ...r,
+      filters: r.filters.map((f) => ({ ...f, outcome: pending })),
+      system: pending,
+    };
+    const cancelled = {
+      answer: "",
+      ms: "0",
+      response: ["error: cancelled"],
+      state: "unavailable",
+      verdict: "cancelled",
+    };
+    const after = cancelPending(waiting);
+    expect(row(after, "Your DNS")).toMatchObject(cancelled);
+    expect(row(after, "Security filter")).toMatchObject(cancelled);
   });
 });

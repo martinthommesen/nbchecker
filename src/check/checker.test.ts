@@ -13,7 +13,12 @@ import { check } from "./checker.ts";
 import { detectNetwork } from "./network.ts";
 import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
-import { type CheckResult, isBlocked } from "./result.ts";
+import {
+  type CheckResult,
+  isBlocked,
+  nameExists,
+  realAddresses,
+} from "./result.ts";
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, Dns.Dns | DnsTransport>,
@@ -37,8 +42,8 @@ describe("check: names", () => {
   test("a name no filter blocks", async () => {
     const r = await run(check("https://good.example/page", detectNetwork));
     expect(r.host).toBe("good.example");
-    expect(r.exists).toBe(true);
-    expect(r.realAddresses).toEqual(["192.0.2.20"]);
+    expect(nameExists(r)).toBe(true);
+    expect(realAddresses(r)).toEqual(["192.0.2.20"]);
     expect(isBlocked(r)).toBe(false);
   });
 
@@ -46,7 +51,7 @@ describe("check: names", () => {
     const r = await run(check("bad.example", detectNetwork));
     expect(verdicts(r)).toMatchObject([
       {
-        exchange: { server: "192.0.2.53", transport: "UDP 53" },
+        exchange: { server: "192.0.2.53" },
         kind: "answered",
         verdict: { reason: "nettvern" },
       },
@@ -84,13 +89,13 @@ describe("check: names", () => {
       Effect.runPromise
     );
     expect(r.host).toBe("good.example");
-    expect(r.exists).toBe(true);
+    expect(nameExists(r)).toBe(true);
     expect(asked).toContain("good.example.");
   });
 
   test("a name that doesn't exist anywhere is not a block", async () => {
     const r = await run(check("nope.example", detectNetwork));
-    expect(r.exists).toBe(false);
+    expect(nameExists(r)).toBe(false);
     expect(isBlocked(r)).toBe(false);
     expect(verdicts(r)).toMatchObject([
       { verdict: { missing: true } },
@@ -121,8 +126,7 @@ describe("check: failures", () => {
         "https://unfiltered.example/dns-query",
       ],
     });
-    expect(r.realAnswerError).toBeUndefined();
-    expect(r.exists).toBe(true);
+    expect(r.realAnswer).toMatchObject({ exists: true, kind: "answered" });
   });
 
   test("a resolver that fails the AAAA query is skipped", async () => {
@@ -132,16 +136,19 @@ describe("check: failures", () => {
         "https://unfiltered.example/dns-query",
       ],
     });
-    expect(r.realAnswerExchange?.server).toBe(
-      "https://unfiltered.example/dns-query"
-    );
+    expect(r.realAnswer).toMatchObject({
+      exchange: { server: "https://unfiltered.example/dns-query" },
+    });
   });
 
   test("reports when no unfiltered resolver answers", async () => {
     const r = await run(check("good.example", detectNetwork), {
       unfilteredResolvers: ["https://down.example/dns-query"],
     });
-    expect(r.realAnswerError).toContain("timed out");
+    expect(r.realAnswer).toMatchObject({
+      error: expect.stringContaining("timed out"),
+      kind: "failed",
+    });
   });
 });
 
@@ -253,6 +260,5 @@ describe("check: progress", () => {
       true
     );
     expect(seen.at(-1)).toEqual(r);
-    expect(r.realAnswerExchange).toMatchObject({ transport: "HTTPS 443" });
   });
 });

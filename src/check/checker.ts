@@ -22,6 +22,7 @@ import {
   type Network,
   type Outcome,
   pending,
+  type RealAnswer,
   unchecked,
 } from "./result.ts";
 
@@ -54,7 +55,7 @@ const filterOutcome = (
   }
   const { answers, server } = result.success;
   return {
-    exchange: { answers, ms, server, transport: "UDP 53" },
+    exchange: { answers, ms, server },
     kind: "answered",
     verdict: classifyAll(answers, reference),
   };
@@ -73,15 +74,28 @@ const systemOutcome = (
   }
   const { answer, noAddress, notes } = result.success;
   return {
-    exchange: {
-      answers: [answer],
-      ms,
-      notes,
-      server: systemServer,
-      transport: "system resolver",
-    },
+    exchange: { answers: [answer], ms, notes, server: systemServer },
     kind: "answered",
     verdict: classifySystem(answer, noAddress, reference),
+  };
+};
+
+const realAnswerOutcome = (
+  asked: Asked<FilterAnswer & Reference> | undefined
+): Outcome<RealAnswer> => {
+  if (asked === undefined) {
+    return pending;
+  }
+  const { ms, result } = asked;
+  if (Result.isFailure(result)) {
+    return { error: result.failure.message, kind: "failed", ms };
+  }
+  const { addresses, answers, exists, server } = result.success;
+  return {
+    addresses,
+    exchange: { answers, ms, server },
+    exists,
+    kind: "answered",
   };
 };
 
@@ -103,35 +117,18 @@ const assemble = (
   asked: readonly Filter[],
   g: Gathered
 ): CheckResult => {
-  const real = g.realAnswer?.result;
   const reference = referenceOf(g);
-  let result: CheckResult = {
+  const result: CheckResult = {
     ...base,
     checked: true,
-    exists: reference.exists,
     filters: asked.map((filter, i) => ({
       filter,
       outcome: filterOutcome(g.filters[i], reference),
     })),
     network: g.network,
+    realAnswer: realAnswerOutcome(g.realAnswer),
     system: systemOutcome(g.system, reference),
   };
-  if (g.realAnswer !== undefined && real !== undefined) {
-    if (Result.isFailure(real)) {
-      result = { ...result, realAnswerError: real.failure.message };
-    } else {
-      result = {
-        ...result,
-        realAddresses: real.success.addresses,
-        realAnswerExchange: {
-          answers: real.success.answers,
-          ms: g.realAnswer.ms,
-          server: real.success.server,
-          transport: "HTTPS 443",
-        },
-      };
-    }
-  }
   return { ...result, completion: completionOf(result) };
 };
 

@@ -7,10 +7,11 @@ import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   isRedirected,
+  nameExists,
   type Outcome,
-  realAnswerCancelled,
+  realAddresses,
+  realAnswerKnown,
   shouldAnswer,
-  wasCancelled,
 } from "../check/result.ts";
 import { type StatusKind, statusOf, statusText } from "./status.ts";
 
@@ -33,14 +34,6 @@ const failedRow = (
   r: CheckResult,
   filter: Filter | undefined
 ): Row => {
-  if (wasCancelled(o)) {
-    return {
-      icon: "–",
-      name,
-      text: "cancelled before it answered",
-      tone: "dim",
-    };
-  }
   if (filter?.onlyAnswers !== undefined && !shouldAnswer(r, filter)) {
     return {
       icon: "?",
@@ -67,7 +60,7 @@ const missingRow = (
       tone: "dim",
     };
   }
-  if (r.realAnswerExchange === undefined) {
+  if (!realAnswerKnown(r)) {
     return {
       icon: "?",
       name,
@@ -86,6 +79,14 @@ const outcomeRow = (
 ): Row => {
   if (outcome.kind === "pending") {
     return { icon: "…", name, text: "asking…", tone: "dim" };
+  }
+  if (outcome.kind === "cancelled") {
+    return {
+      icon: "–",
+      name,
+      text: "cancelled before it answered",
+      tone: "dim",
+    };
   }
   if (outcome.kind === "failed") {
     return failedRow(name, outcome, r, filter);
@@ -164,7 +165,8 @@ const summaryOf = (r: CheckResult): Line => {
 
 const realAnswerRow = (r: CheckResult): Row => {
   const name = "Real answer";
-  if (realAnswerCancelled(r)) {
+  const o = r.realAnswer;
+  if (o.kind === "cancelled") {
     return {
       icon: "–",
       name,
@@ -172,21 +174,22 @@ const realAnswerRow = (r: CheckResult): Row => {
       tone: "dim",
     };
   }
-  if (r.realAnswerError !== undefined) {
+  if (o.kind === "failed") {
     return {
       icon: "?",
       name,
-      text: `could not reach an unfiltered resolver: ${r.realAnswerError}`,
+      text: `could not reach an unfiltered resolver: ${o.error}`,
       tone: "warn",
     };
   }
-  if (r.realAnswerExchange === undefined) {
+  if (!realAnswerKnown(r)) {
     return { icon: "…", name, text: "asking…", tone: "dim" };
   }
-  if (!r.exists) {
+  if (!nameExists(r)) {
     return { icon: "–", name, text: "the domain doesn't exist", tone: "dim" };
   }
-  if (r.realAddresses.length === 0) {
+  const addresses = realAddresses(r);
+  if (addresses.length === 0) {
     return {
       icon: "✓",
       name,
@@ -197,7 +200,7 @@ const realAnswerRow = (r: CheckResult): Row => {
   return {
     icon: "✓",
     name,
-    text: shortList(r.realAddresses, maxRealAddresses),
+    text: shortList(addresses, maxRealAddresses),
     tone: "plain",
   };
 };
@@ -263,11 +266,7 @@ export const view = (r: CheckResult): View => {
   if (!r.checked) {
     return { ...base, sections: [] };
   }
-  const reference: Row[] = [];
-  if (r.system !== undefined) {
-    reference.push(outcomeRow("Your DNS", r.system, r));
-  }
-  reference.push(realAnswerRow(r));
+  const reference = [outcomeRow("Your DNS", r.system, r), realAnswerRow(r)];
   return {
     ...base,
     sections: [

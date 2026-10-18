@@ -199,8 +199,9 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
       "redirected",
       "passed",
     ]);
-    const why = r.system && systemWhy(r.system, r);
-    expect(why).toContain("same block answer as Family filter");
+    expect(systemWhy(r.system, r)).toContain(
+      "same block answer as Family filter"
+    );
   });
 });
 
@@ -258,9 +259,7 @@ describe("intercepted DNS: this computer's block", () => {
     const r = await runCheck("bad.example", {
       transport: redirectingTransport(),
     });
-    expect(r.system?.kind === "answered" && r.system.verdict.blocked).toBe(
-      true
-    );
+    expect(r.system.kind === "answered" && r.system.verdict.blocked).toBe(true);
     expect(statusOf(r).kind).toBe("blocked-here");
     expect(text(r)).toContain("blocked by your own DNS");
     expect(exitCode([r])).toBe(exitBlocked);

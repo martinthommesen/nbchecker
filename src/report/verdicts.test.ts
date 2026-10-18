@@ -5,7 +5,12 @@
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import type { Category, Filter } from "../check/filters.ts";
-import { type CheckResult, isBlocked } from "../check/result.ts";
+import {
+  type CheckResult,
+  isBlocked,
+  nameExists,
+  realAddresses,
+} from "../check/result.ts";
 import {
   exitBlocked,
   exitCode,
@@ -40,7 +45,7 @@ const json = (r: CheckResult) => toJson({ dnsFilter: "", version: "" }, [r]);
 describe("verdicts: names without an address this computer can use", () => {
   test("an existing name without addresses is not blocked here", async () => {
     const r = await runCheck("mail.example");
-    expect(r.exists).toBe(true);
+    expect(nameExists(r)).toBe(true);
     expect(isBlocked(r)).toBe(false);
     expect(exitCode([r])).toBe(exitNotBlocked);
     expect(text(r)).toContain("– Your DNS         no address on this computer");
@@ -69,7 +74,7 @@ describe("verdicts: names without an address this computer can use", () => {
 describe("verdicts: compared with the real answer", () => {
   test("a domain whose own record is 0.0.0.0 is not blocked", async () => {
     const r = await runCheck("zero.example");
-    expect(r.realAddresses).toEqual(["0.0.0.0"]);
+    expect(realAddresses(r)).toEqual(["0.0.0.0"]);
     expect(isBlocked(r)).toBe(false);
     expect(text(r)).toContain("✓ not blocked by any of 2 filters");
   });
@@ -91,7 +96,7 @@ describe("verdicts: compared with the real answer", () => {
 
   test("a name only this computer resolves isn't said not to exist", async () => {
     const r = await runCheck("private.example");
-    expect(r.exists).toBe(false);
+    expect(nameExists(r)).toBe(false);
     expect(text(r)).toContain(
       "– only resolves on this computer (private or split DNS)"
     );

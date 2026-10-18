@@ -4,13 +4,15 @@
  */
 import {
   type CheckResult,
+  nameExists,
   type Outcome,
+  realAnswerKnown,
   seemsIntercepted,
   trustedFilters,
 } from "../check/result.ts";
 
-const answeredWith = (o: Outcome | undefined, test: keyof Flags): boolean =>
-  o?.kind === "answered" && o.verdict[test];
+const answeredWith = (o: Outcome, test: keyof Flags): boolean =>
+  o.kind === "answered" && o.verdict[test];
 
 interface Flags {
   readonly blocked: boolean;
@@ -20,7 +22,7 @@ interface Flags {
 
 /** This computer finds addresses for the name, and they aren't a block. */
 const resolvesHere = (r: CheckResult): boolean =>
-  r.system?.kind === "answered" &&
+  r.system.kind === "answered" &&
   !r.system.verdict.missing &&
   !r.system.verdict.blocked;
 
@@ -50,14 +52,14 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (seemsIntercepted(r.network)) {
     return "intercepted";
   }
-  const realAnswerKnown = r.realAnswerExchange !== undefined;
-  if (realAnswerKnown && !r.exists && resolvesHere(r)) {
+  const doesntExist = realAnswerKnown(r) && !nameExists(r);
+  if (doesntExist && resolvesHere(r)) {
     return "local-only";
   }
-  if (realAnswerKnown && !r.exists) {
+  if (doesntExist) {
     return "missing";
   }
-  if (!realAnswerKnown && someMissing(r)) {
+  if (!realAnswerKnown(r) && someMissing(r)) {
     return "cant-tell";
   }
   if (s.answered === 0) {

@@ -1,13 +1,20 @@
 /** The --json output. */
 import type { Verdict } from "../check/classify.ts";
-import type { Filter } from "../check/filters.ts";
+import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
+  type Completion,
   isBlocked,
   isRedirected,
+  nameExists,
   type Outcome,
+  realAddresses,
+  realAnswerUnavailable,
 } from "../check/result.ts";
-import { statusOf } from "./status.ts";
+import { type StatusKind, statusOf } from "./status.ts";
+
+/** What JSON says for a lookup cut short by a cancelled check. */
+const cancelledError = "cancelled";
 
 interface JsonVerdict {
   readonly answers?: readonly string[];
@@ -23,6 +30,29 @@ interface JsonVerdict {
   readonly intercepted?: boolean;
   readonly reason?: string;
   readonly server?: string;
+}
+
+/** A filter's verdict, after its category and name. */
+interface JsonFilter extends JsonVerdict {
+  readonly category: Category;
+  readonly name: string;
+}
+
+/** One target's result, its keys in the order they are written. */
+interface JsonResult {
+  readonly blocked: boolean;
+  readonly completion: Completion;
+  readonly error: string | undefined;
+  readonly exists: boolean;
+  readonly filters: readonly JsonFilter[];
+  readonly host: string;
+  readonly isIp: boolean;
+  readonly notes: readonly string[];
+  readonly realAnswer: readonly string[];
+  readonly realAnswerError: string | undefined;
+  readonly status: StatusKind;
+  readonly target: string;
+  readonly thisComputer: JsonVerdict | undefined;
 }
 
 const verdictFields = (v: Verdict) => {
@@ -48,6 +78,9 @@ const outcomeJson = (o: Outcome): JsonVerdict => {
   if (o.kind === "pending") {
     return { blocked: false, error: "not asked" };
   }
+  if (o.kind === "cancelled") {
+    return { blocked: false, error: cancelledError };
+  }
   if (o.kind === "failed") {
     return { blocked: false, error: o.error };
   }
@@ -61,12 +94,31 @@ const filterJson = (r: CheckResult, f: Filter, o: Outcome): JsonVerdict => {
   return outcomeJson(o);
 };
 
-const resultJson = (r: CheckResult) => ({
+/** Why there is no real answer: its error, or that the check was cancelled. */
+const realAnswerError = (r: CheckResult): string | undefined => {
+  if (!realAnswerUnavailable(r)) {
+    return;
+  }
+  if (r.realAnswer.kind === "failed") {
+    return r.realAnswer.error;
+  }
+  return cancelledError;
+};
+
+/** This computer's answer, left out when nothing was checked. */
+const thisComputerJson = (r: CheckResult): JsonVerdict | undefined => {
+  if (!r.checked) {
+    return;
+  }
+  return outcomeJson(r.system);
+};
+
+const resultJson = (r: CheckResult): JsonResult => ({
   blocked: isBlocked(r),
   completion: r.completion,
   // JSON.stringify leaves out fields that are undefined.
   error: r.lookupError,
-  exists: r.exists,
+  exists: nameExists(r),
   filters: r.filters.map((f) => ({
     category: f.filter.category,
     name: f.filter.name,
@@ -75,11 +127,11 @@ const resultJson = (r: CheckResult) => ({
   host: r.host,
   isIp: r.isIp,
   notes: r.notes,
-  realAnswer: r.realAddresses,
-  realAnswerError: r.realAnswerError,
+  realAnswer: realAddresses(r),
+  realAnswerError: realAnswerError(r),
   status: statusOf(r).kind,
   target: r.target,
-  thisComputer: r.system && outcomeJson(r.system),
+  thisComputer: thisComputerJson(r),
 });
 
 /**

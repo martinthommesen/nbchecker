@@ -2,8 +2,12 @@
 import type { StyledText, TextChunk } from "@opentui/core";
 import {
   type CheckResult,
-  type Outcome,
+  nameExists,
+  realAddresses,
+  realAnswerKnown,
+  realAnswerUnavailable,
   seemsIntercepted,
+  settled,
   trustedFilters,
 } from "../check/result.ts";
 import { type Status, statusOf } from "../report/status.ts";
@@ -21,16 +25,13 @@ const extraResolvers = 2;
 const badge = (text: string, color: string): TextChunk =>
   paint(` ${text} `, { bg: color, bold: true, fg: theme.badgeText });
 
-const done = (o: Outcome | undefined): boolean =>
-  o !== undefined && o.kind !== "pending";
-
 /** How many of all the resolvers have answered, the real answer included. */
 const progress = (r: CheckResult) => {
-  let finished = r.filters.filter((f) => done(f.outcome)).length;
-  if (done(r.system)) {
+  let finished = r.filters.filter((f) => settled(f.outcome)).length;
+  if (settled(r.system)) {
     finished += 1;
   }
-  if (r.realAnswerExchange !== undefined || r.realAnswerError !== undefined) {
+  if (settled(r.realAnswer)) {
     finished += 1;
   }
   return { finished, total: r.filters.length + extraResolvers };
@@ -38,10 +39,10 @@ const progress = (r: CheckResult) => {
 
 const systemPhrase = (r: CheckResult): TextChunk => {
   const o = r.system;
-  if (o === undefined || o.kind === "pending") {
+  if (o.kind === "pending") {
     return paint("asking…", { fg: theme.dim });
   }
-  if (o.kind === "failed") {
+  if (o.kind === "failed" || o.kind === "cancelled") {
     return paint("no answer", { fg: theme.warn });
   }
   if (o.verdict.blocked) {
@@ -67,21 +68,20 @@ const systemPhrase = (r: CheckResult): TextChunk => {
 };
 
 const realAnswerPhrase = (r: CheckResult): TextChunk => {
-  if (r.realAnswerError !== undefined) {
+  if (realAnswerUnavailable(r)) {
     return paint("unavailable", { fg: theme.warn });
   }
-  if (r.realAnswerExchange === undefined) {
+  if (!realAnswerKnown(r)) {
     return paint("asking…", { fg: theme.dim });
   }
-  if (!r.exists) {
+  if (!nameExists(r)) {
     return paint("doesn't exist", { fg: theme.dim });
   }
-  if (r.realAddresses.length === 0) {
+  const addresses = realAddresses(r);
+  if (addresses.length === 0) {
     return paint("no addresses", { fg: theme.ok });
   }
-  return paint(shortList(r.realAddresses, realAddressesShown), {
-    fg: theme.ok,
-  });
+  return paint(shortList(addresses, realAddressesShown), { fg: theme.ok });
 };
 
 const counted = (n: number, of: number, color: string): TextChunk =>

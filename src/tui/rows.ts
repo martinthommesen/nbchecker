@@ -2,13 +2,10 @@
 import type { Filter } from "../check/filters.ts";
 import {
   type CheckResult,
-  type Exchange,
   isRedirected,
   type Outcome,
-  realAnswerCancelled,
-  realAnswerPending,
+  realAnswerUnavailable,
   shouldAnswer,
-  wasCancelled,
 } from "../check/result.ts";
 import { answerSummary, responseLines } from "../report/answer.ts";
 import { categoryOrder, categoryTitles } from "../report/view.ts";
@@ -50,18 +47,17 @@ interface RowContext {
   readonly system: boolean;
 }
 
-/** A filter's "doesn't exist" can only be judged against the real answer. */
-const realAnswerUnknown = (r: CheckResult): boolean =>
-  r.realAnswerExchange === undefined && !realAnswerPending(r);
-
 const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.kind === "pending") {
     return "pending";
   }
+  if (o.kind === "cancelled") {
+    return "unavailable";
+  }
   if (c.redirected && o.kind === "answered") {
     return "redirected";
   }
-  if (o.kind === "failed" && (c.optional || wasCancelled(o))) {
+  if (o.kind === "failed" && c.optional) {
     return "unavailable";
   }
   if (o.kind === "failed") {
@@ -73,7 +69,8 @@ const stateOf = (o: Outcome, c: RowContext): RowState => {
   if (o.verdict.inspected) {
     return "inspected";
   }
-  if (o.verdict.missing && !c.system && realAnswerUnknown(c.result)) {
+  // A filter's "doesn't exist" can only be judged against the real answer.
+  if (o.verdict.missing && !c.system && realAnswerUnavailable(c.result)) {
     return "unsure";
   }
   if (o.verdict.missing) {
@@ -83,7 +80,7 @@ const stateOf = (o: Outcome, c: RowContext): RowState => {
 };
 
 const wordOf = (state: RowState, o: Outcome, c: RowContext): string => {
-  if (o.kind === "failed" && wasCancelled(o)) {
+  if (o.kind === "cancelled") {
     return "cancelled";
   }
   if (state === "missing" && c.system) {
@@ -120,6 +117,10 @@ const outcomeRow = (
       response: [`error: ${o.error}`],
     };
   }
+  if (o.kind === "cancelled") {
+    // The details read like a lookup that failed at once with this error.
+    return { ...row, answer: "", ms: "0", response: ["error: cancelled"] };
+  }
   return { ...row, answer: "", ms: "", response: [] };
 };
 
@@ -131,18 +132,19 @@ const realAnswerRow = (r: CheckResult): TableRow => {
     transport: "HTTPS 443",
     why: realAnswerWhy(r),
   };
-  const ex: Exchange | undefined = r.realAnswerExchange;
-  if (ex !== undefined) {
+  const o = r.realAnswer;
+  if (o.kind === "answered") {
+    const { exchange: ex, exists } = o;
     let state: RowState = "resolves";
-    if (!r.exists) {
+    if (!exists) {
       state = "missing";
     }
     const verdict = {
-      answers: r.realAddresses,
+      answers: o.addresses,
       blocked: false,
       detail: "",
       inspected: false,
-      missing: !r.exists,
+      missing: !exists,
       reason: undefined,
     };
     return {
@@ -158,13 +160,13 @@ const realAnswerRow = (r: CheckResult): TableRow => {
   let state: RowState = "pending";
   let verdict = verdictWords.pending;
   let response: string[] = [];
-  if (realAnswerCancelled(r)) {
+  if (o.kind === "cancelled") {
     state = "unavailable";
     verdict = "cancelled";
-  } else if (!realAnswerPending(r)) {
+  } else if (o.kind === "failed") {
     state = "failed";
     verdict = verdictWords.failed;
-    response = [`error: ${r.realAnswerError ?? ""}`];
+    response = [`error: ${o.error}`];
   }
   return { ...base, answer: "", ms: "", response, state, verdict };
 };
@@ -240,7 +242,6 @@ export const resultGroups = (r: CheckResult): Group[] => {
   if (!r.checked) {
     return [];
   }
-  const system = r.system ?? { kind: "pending" };
   const reference: Group = {
     rows: [
       outcomeRow(
@@ -250,8 +251,8 @@ export const resultGroups = (r: CheckResult): Group[] => {
           server: "this computer",
           transport: "system resolver",
         },
-        system,
-        systemWhy(system, r),
+        r.system,
+        systemWhy(r.system, r),
         { optional: false, redirected: false, result: r, system: true }
       ),
       realAnswerRow(r),
