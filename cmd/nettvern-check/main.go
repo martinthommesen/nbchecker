@@ -1,0 +1,225 @@
+// Command nettvern-check tells you whether Telenor's Nettvern or Nettvern+
+// DNS filters block a domain, URL or IP address.
+package main
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"runtime"
+	"strings"
+
+	"github.com/martinthommesen/nettvern-check/internal/check"
+)
+
+// Set by the release build with -ldflags "-X main.version=...".
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout))
+}
+
+func run(args []string, stdin io.Reader, stdout io.Writer) int {
+	fs := flag.NewFlagSet("nettvern-check", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print results as JSON")
+	showVersion := fs.Bool("version", false, "print the version and exit")
+	fs.Usage = func() {
+		out{fs.Output()}.f(`Usage: nettvern-check [--json] <domain|url|ip> ...
+
+Checks whether Telenor's Nettvern or Nettvern+ blocks each target, by asking
+their DNS servers directly. Run it on a Telenor connection.
+
+Run without arguments to type targets one at a time.
+
+Exit status: 0 if nothing is blocked, 1 if anything is blocked, 2 on errors.
+
+`)
+		fs.PrintDefaults()
+	}
+	o := out{stdout}
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *showVersion {
+		o.f("nettvern-check %s (%s, %s)\n", version, commit, date)
+		return 0
+	}
+
+	ctx := context.Background()
+	c := check.New()
+
+	if fs.NArg() == 0 {
+		return interactive(ctx, c, stdin, stdout)
+	}
+
+	var results []check.Result
+	for _, t := range fs.Args() {
+		results = append(results, c.Check(ctx, t))
+	}
+	if *asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(toJSON(c.Status(ctx), results)); err != nil {
+			return 2
+		}
+	} else {
+		o.f("Your computer's DNS filter: %s\n", c.Status(ctx))
+		for _, r := range results {
+			o.ln()
+			printResult(stdout, r)
+		}
+	}
+	return exitCode(results)
+}
+
+func interactive(ctx context.Context, c *check.Checker, stdin io.Reader, stdout io.Writer) int {
+	o := out{stdout}
+	o.f("nettvern-check %s\n", version)
+	o.f("Your computer's DNS filter: %s\n\n", c.Status(ctx))
+	sc := bufio.NewScanner(stdin)
+	for {
+		o.f("Domain, URL or IP to check (empty line to quit): ")
+		if !sc.Scan() {
+			o.ln()
+			return 0
+		}
+		t := strings.TrimSpace(sc.Text())
+		if t == "" {
+			return 0
+		}
+		o.ln()
+		printResult(stdout, c.Check(ctx, t))
+		o.ln()
+	}
+}
+
+func exitCode(results []check.Result) int {
+	code := 0
+	for _, r := range results {
+		if r.Blocked() {
+			code = 1
+		}
+	}
+	for _, r := range results {
+		if !r.IsIP && allFiltersFailed(r) {
+			return 2
+		}
+	}
+	return code
+}
+
+func allFiltersFailed(r check.Result) bool {
+	for _, f := range r.Filters {
+		if f.Err == nil {
+			return false
+		}
+	}
+	return len(r.Filters) > 0
+}
+
+// out writes to the terminal. A failed write to stdout has no useful
+// recovery, so errors are dropped here once instead of at every call.
+type out struct{ w io.Writer }
+
+func (o out) f(format string, a ...any) { _, _ = fmt.Fprintf(o.w, format, a...) }
+func (o out) ln(a ...any)               { _, _ = fmt.Fprintln(o.w, a...) }
+
+func printResult(w io.Writer, r check.Result) {
+	o := out{w}
+	o.ln(r.Host)
+	for _, n := range r.Notes {
+		o.ln("  " + n)
+	}
+	if r.IsIP && r.Host == strings.Trim(r.Target, "[] ") {
+		return
+	}
+	for _, f := range r.Filters {
+		o.f("  %-15s %s\n", f.Filter+":", filterLine(f))
+	}
+	sys := "could not look it up"
+	if r.SysErr == nil {
+		sys = r.System.Describe() + answers(r.System)
+	}
+	o.f("  %-15s %s\n", "This computer:", sys)
+	switch {
+	case r.TruthErr != nil:
+		o.f("  %-15s could not reach an unfiltered resolver (%v)\n", "Real answer:", r.TruthErr)
+	case !r.Exists:
+		o.f("  %-15s the domain does not exist\n", "Real answer:")
+	default:
+		o.f("  %-15s %s\n", "Real answer:", strings.Join(r.Truth, ", "))
+	}
+	if allFiltersFailed(r) {
+		o.ln("  Telenor's DNS servers did not answer. They only answer Telenor customers, so run this on a Telenor connection, with any work VPN switched off.")
+	}
+}
+
+func filterLine(f check.FilterResult) string {
+	if f.Err != nil {
+		return "no answer from its servers"
+	}
+	return f.Verdict.Describe() + answers(f.Verdict)
+}
+
+func answers(v check.Verdict) string {
+	if !v.Blocked || len(v.Answers) == 0 {
+		return ""
+	}
+	return " → " + strings.Join(v.Answers, ", ")
+}
+
+type jsonFilter struct {
+	Filter  string   `json:"filter"`
+	Server  string   `json:"server,omitempty"`
+	Blocked bool     `json:"blocked"`
+	Reason  string   `json:"reason,omitempty"`
+	Detail  string   `json:"detail,omitempty"`
+	Answers []string `json:"answers,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+type jsonResult struct {
+	Target  string       `json:"target"`
+	Host    string       `json:"host"`
+	IsIP    bool         `json:"is_ip"`
+	Blocked bool         `json:"blocked"`
+	Exists  bool         `json:"exists"`
+	Truth   []string     `json:"real_answer,omitempty"`
+	Filters []jsonFilter `json:"filters,omitempty"`
+	System  jsonFilter   `json:"this_computer"`
+	Notes   []string     `json:"notes,omitempty"`
+}
+
+func toJSON(status string, rs []check.Result) any {
+	out := struct {
+		Version string       `json:"version"`
+		OS      string       `json:"os"`
+		Status  string       `json:"computer_dns_filter"`
+		Results []jsonResult `json:"results"`
+	}{Version: version, OS: runtime.GOOS + "/" + runtime.GOARCH, Status: status}
+	for _, r := range rs {
+		jr := jsonResult{Target: r.Target, Host: r.Host, IsIP: r.IsIP, Blocked: r.Blocked(), Exists: r.Exists, Truth: r.Truth, Notes: r.Notes}
+		for _, f := range r.Filters {
+			jr.Filters = append(jr.Filters, verdictJSON(f.Filter, f.Server, f.Verdict, f.Err))
+		}
+		jr.System = verdictJSON("this computer", "", r.System, r.SysErr)
+		out.Results = append(out.Results, jr)
+	}
+	return out
+}
+
+func verdictJSON(name, server string, v check.Verdict, err error) jsonFilter {
+	j := jsonFilter{Filter: name, Server: server, Blocked: v.Blocked, Reason: string(v.Reason), Detail: v.Detail, Answers: v.Answers}
+	if err != nil {
+		j.Error = err.Error()
+	}
+	return j
+}
