@@ -1,6 +1,8 @@
 /**
- * Turns a check result into rows and sections, shared by the terminal
- * interface and plain text output.
+ * Turns a check result into the plain text output's rows and sections, which
+ * the command prints and the interactive screen copies. The screen's table
+ * builds its own rows in tui/rows.ts; both read each row's state from
+ * resolver-state.ts, so they agree.
  */
 import type { Verdict } from "../check/classify.ts";
 import type {

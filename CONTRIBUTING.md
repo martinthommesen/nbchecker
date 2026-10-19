@@ -33,12 +33,18 @@ bun run fix      # fixes formatting and the lint problems it can
 The code is TypeScript with [Effect](https://effect.website) and
 [OpenTUI](https://github.com/sst/opentui):
 
-- `src/cli` is the command: it prints results for scripts, with an exit
-  status, or opens the interactive screen.
 - `src/dns` sends DNS queries and reads the answers.
 - `src/check` asks every filter and works out what each answer means.
-- `src/report` turns a result into text and JSON.
-- `src/tui` is the interactive screen.
+- `src/report` holds the words every output shares: each row's state and what
+  it means, the reasons and their explanations, the overall status and the
+  category labels. It also writes the text and JSON output.
+- `src/tui` is the interactive screen: it lays out and colors those words
+  with OpenTUI.
+- `src/cli` is the command: it prints results for scripts, with an exit
+  status, or opens the interactive screen.
+- Imports point down only: dns <- check <- report <- tui <- cli <-
+  `src/main.ts`. `src/testing` may import any layer, and production code
+  never imports it.
 
 Tests don't touch the network. The DNS transport and this computer's resolver
 are Effect services, so tests swap in the fakes in `src/testing`, and the

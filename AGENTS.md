@@ -5,11 +5,17 @@ compares DNS filters with the computer's resolver and an unfiltered DoH referenc
 
 ## Working in the repository
 
-- `src/cli/`: the command, batch checks of arguments or standard input, flushed
-  output, and exit statuses.
 - `src/dns/`: DNS wire format and UDP, TCP, and DoH transports.
 - `src/check/`: target normalization, provider queries, and verdicts.
-- `src/report/`: text and JSON output. `src/tui/`: interactive terminal UI.
+- `src/report/`: the words every output shares (row states and what they mean,
+  reasons and explanations, the overall status, category labels), plus the text
+  and JSON output.
+- `src/tui/`: the interactive screen, which lays out and colors those words with
+  OpenTUI.
+- `src/cli/`: the command, batch checks of arguments or standard input, flushed
+  output, and exit statuses.
+- Imports point down only: dns <- check <- report <- tui <- cli <- `main.ts`.
+  `src/testing/` may import any layer; production code never imports it.
 - `src/testing/`: fake Effect services and terminal fixtures. Tests should be
   deterministic and must not depend on live DNS providers.
 - Use the Bun version in CI. Install with `bun install --frozen-lockfile`, then run
