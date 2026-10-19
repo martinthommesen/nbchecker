@@ -5,7 +5,6 @@
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
 import { isBlocked } from "../check/evidence.ts";
-import type { Category, Filter } from "../check/filters.ts";
 import {
   type CheckResult,
   nameExists,
@@ -17,7 +16,7 @@ import {
   exitIncomplete,
   exitNotBlocked,
 } from "../cli/exit-status.ts";
-import { downRealAnswerUrl, fakeCanary } from "../testing/fake-network.ts";
+import { downRealAnswerUrl, fakeFilter } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
 import { plainText } from "../tui/paint.ts";
 import { initialState } from "../tui/state.ts";
@@ -30,14 +29,6 @@ const text = (r: CheckResult): string => renderText(view(r), false);
 
 const screen = (r: CheckResult): string =>
   plainText(summaryText({ ...initialState("0.0.0"), result: r }, true));
-
-/** A filter with one server, which blocks the fake canary. */
-const fake = (category: Category, name: string, server: string): Filter => ({
-  canary: fakeCanary,
-  category,
-  name,
-  servers: [server],
-});
 
 const json = (r: CheckResult) => toJson({ dnsFilter: "", version: "" }, [r]);
 
@@ -123,7 +114,7 @@ describe("verdicts: block answers", () => {
   });
 
   test("a plain REFUSED is a failure, named as such", async () => {
-    const refusing = fake("security", "Refusing", "192.0.2.53");
+    const refusing = fakeFilter("security", "Refusing", "192.0.2.53");
     const r = await runCheck("refused.example", { filters: [refusing] });
     expect(r.filters[0]?.outcome).toMatchObject({
       error: "192.0.2.53: REFUSED",
@@ -165,8 +156,8 @@ describe("verdicts: block answers", () => {
   test("blocked by counts only the filters that answered", async () => {
     const r = await runCheck("bad.example", {
       filters: [
-        fake("ads", "Down", "203.0.113.1"),
-        fake("family", "Family", "198.51.100.53"),
+        fakeFilter("ads", "Down", "203.0.113.1"),
+        fakeFilter("family", "Family", "198.51.100.53"),
       ],
     });
     expect(text(r)).toContain("✗ blocked by 1 of 1 filters");

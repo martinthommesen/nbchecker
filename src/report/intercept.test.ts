@@ -16,11 +16,15 @@ import {
 import {
   blockingRedirectTransport,
   computerWith,
-  fakeCanary,
+  fakeFilter,
   fakeFilters,
+  familyFilter,
+  ispFilter,
   publicTestPage,
   redirectingTransport,
   rewritingTransport,
+  securityFilter,
+  untestedSecurityFilter,
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
 import { toJson } from "./json.ts";
@@ -146,16 +150,9 @@ describe("intercepted DNS: self-tests that get no answer", () => {
   });
 
   test("Telenor's filters off its network aren't redirected", async () => {
-    const telenor: Filter = {
-      canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
-      category: "security",
-      name: "ISP filter",
-      onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
-      servers: ["203.0.113.1"],
-    };
     const r = await runCheck("good.example", {
       dns: computerWith(publicTestPage),
-      filters: [...fakeFilters, telenor],
+      filters: [...fakeFilters, ispFilter],
     });
     expect(text(r)).toContain(
       "? ISP filter       no answer (it only answers Telenor customers)"
@@ -186,14 +183,13 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
   test("this computer's block isn't put down to an untrusted filter", async () => {
     // Both filters answer AdGuard's block page; only the family filter's
     // self-test passes.
-    const [security, family] = fakeFilters as [Filter, Filter];
     const r = await runCheck("adult.example", {
       filters: [
         {
-          ...security,
+          ...securityFilter,
           canary: { answers: ["148.123.15.44"], name: "canary.example" },
         },
-        family,
+        familyFilter,
       ],
       transport: blockingRedirectTransport,
     });
@@ -206,12 +202,12 @@ describe("intercepted DNS: what an untrusted filter is said to do", () => {
 });
 
 describe("intercepted DNS: filters without a test name", () => {
+  const untested = { ...untestedSecurityFilter, name: "Untested filter" };
+
   test("don't count on a network that seems intercepted", async () => {
-    const [security] = fakeFilters as [Filter, Filter];
-    const { canary: _, ...untested } = security;
     const r = await runCheck("bad.example", {
       dns: redirectedComputer,
-      filters: [...fakeFilters, { ...untested, name: "Untested filter" }],
+      filters: [...fakeFilters, untested],
       transport: redirectingTransport(),
     });
     expect(statusOf(r).kind).toBe("intercepted");
@@ -222,10 +218,8 @@ describe("intercepted DNS: filters without a test name", () => {
   });
 
   test("count as usual where DNS isn't intercepted", async () => {
-    const [security] = fakeFilters as [Filter, Filter];
-    const { canary: _, ...untested } = security;
     const r = await runCheck("bad.example", {
-      filters: [...fakeFilters, { ...untested, name: "Untested filter" }],
+      filters: [...fakeFilters, untested],
     });
     expect(text(r)).toContain("✗ blocked by 3 of 3 filters");
   });
@@ -233,12 +227,7 @@ describe("intercepted DNS: filters without a test name", () => {
 
 describe("intercepted DNS: the self-test count", () => {
   test("leaves out a self-test that got no answer", async () => {
-    const quiet: Filter = {
-      canary: fakeCanary,
-      category: "ads",
-      name: "Quiet filter",
-      servers: ["203.0.113.1"],
-    };
+    const quiet = fakeFilter("ads", "Quiet filter", "203.0.113.1");
     const r = await runCheck("bad.example", {
       dns: redirectedComputer,
       filters: [...fakeFilters, quiet],
@@ -268,10 +257,13 @@ describe("intercepted DNS: this computer's block", () => {
 
 describe("intercepted DNS: a filter that still passes", () => {
   test("its block is the headline", async () => {
-    const [security, family] = fakeFilters as [Filter, Filter];
     const r = await runCheck("bad.example", {
       dns: redirectedComputer,
-      filters: [security, { ...security, name: "Other filter" }, family],
+      filters: [
+        securityFilter,
+        { ...securityFilter, name: "Other filter" },
+        familyFilter,
+      ],
       // Only the family filter's server gives its own answers.
       transport: redirectingTransport(["203.0.113.1", "192.0.2.53"]),
     });

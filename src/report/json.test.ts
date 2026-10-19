@@ -1,9 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Layer } from "effect";
-import { check } from "../check/checker.ts";
-import { detectNetwork } from "../check/network.ts";
-import { CheckerOptions } from "../check/options.ts";
-import { Progress } from "../check/progress.ts";
 import {
   type CheckResult,
   cancelPending,
@@ -11,13 +6,8 @@ import {
   unchecked,
 } from "../check/result.ts";
 import { exitCode, exitIncomplete } from "../cli/exit-status.ts";
-import {
-  computer,
-  fakeFilters,
-  fakeTransport,
-  realAnswerUrl,
-} from "../testing/fake-network.ts";
-import { runCheck } from "../testing/run-check.ts";
+import { fakeFilters } from "../testing/fake-network.ts";
+import { progressOf, runCheck } from "../testing/run-check.ts";
 import { jsonMeta, jsonText, toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
@@ -26,30 +16,17 @@ const exported = (r: CheckResult) =>
   toJson({ dnsFilter: "", version: "" }, [r]).results[0];
 
 /** The check as it stood before anything answered, then cancelled. */
-const cancelledAtOnce = Effect.gen(function* () {
-  const seen: CheckResult[] = [];
-  yield* check("bad.example", detectNetwork).pipe(
-    Effect.provideService(Progress, (sofar) =>
-      Effect.sync(() => {
-        seen.push(sofar);
-      })
-    ),
-    Effect.provideService(CheckerOptions, {
-      filters: fakeFilters,
-      unfilteredResolvers: [realAnswerUrl],
-    }),
-    Effect.provide(Layer.merge(fakeTransport, computer))
-  );
-  const [first] = seen;
+const cancelledAtOnce = async (): Promise<CheckResult> => {
+  const [first] = (await progressOf("bad.example")).reports;
   if (first === undefined) {
     throw new Error("no progress was reported");
   }
   return cancelPending(first);
-});
+};
 
 describe("a cancelled check", () => {
   test("says it was cancelled when copied or exported", async () => {
-    const r = await Effect.runPromise(cancelledAtOnce);
+    const r = await cancelledAtOnce();
     const copied = renderText(view(r), false);
     expect(copied).toContain(
       "? cancelled: 0 of 2 filters answered first, 0 of them blocking"
@@ -64,7 +41,7 @@ describe("a cancelled check", () => {
   });
 
   test("says in JSON which lookups were cut short", async () => {
-    const json = exported(await Effect.runPromise(cancelledAtOnce));
+    const json = exported(await cancelledAtOnce());
     const cancelled = { blocked: false, error: "cancelled" };
     expect(json).toMatchObject({
       exists: false,

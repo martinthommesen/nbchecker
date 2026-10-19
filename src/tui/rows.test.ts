@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { Filter } from "../check/filters.ts";
 import { type CheckResult, cancelPending, pending } from "../check/result.ts";
 import {
   computer,
   computerWith,
   downRealAnswerUrl,
-  fakeCanary,
   fakeFilters,
+  ispFilter,
   publicTestPage,
 } from "../testing/fake-network.ts";
 import { runCheck } from "../testing/run-check.ts";
@@ -101,13 +100,6 @@ describe("tableGroups after a cancel", () => {
 });
 
 describe("tableGroups for a filter that only answers its own network", () => {
-  const ispFilter: Filter = {
-    canary: fakeCanary,
-    category: "security",
-    name: "ISP filter",
-    onlyAnswers: { customers: "Telenor customers", network: "Telenor" },
-    servers: ["203.0.113.1"],
-  };
   const filters = [...fakeFilters, ispFilter];
 
   test("not answering elsewhere is explained as expected", async () => {
