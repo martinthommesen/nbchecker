@@ -47,12 +47,6 @@ export interface Connection extends Detected {
 }
 
 /**
- * What detection found: a filter, no filter, or, when the test lookup
- * failed, nothing either way.
- */
-export type ConnectionState = "detected" | "none" | "unknown";
-
-/**
  * Looks up the test page through this computer's resolver. Only Telenor
  * publishes such a page so far, so other filters are not detected.
  */
@@ -73,17 +67,6 @@ export const detectConnection = Effect.gen(function* () {
     testAnswers,
   } satisfies Connection;
 });
-
-/** Whether detection found a filter, found none, or couldn't tell. */
-export const connectionState = (c: Connection): ConnectionState => {
-  if (c.filter !== undefined) {
-    return "detected";
-  }
-  if (c.error !== undefined) {
-    return "unknown";
-  }
-  return "none";
-};
 
 /** One phrase for the filter on this computer, as the text output shows it. */
 export const connectionText = (c: Connection): string => {

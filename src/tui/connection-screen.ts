@@ -6,6 +6,7 @@ import {
   detectedText,
   filtersText,
   howText,
+  paneTitles,
   safeZoneText,
 } from "./connection-text.ts";
 import type { State } from "./state.ts";
@@ -42,22 +43,22 @@ const buildConnection = (renderer: CliRenderer, items: readonly Filter[]) => {
   const detected = pane(renderer, {
     color: theme.accent,
     flexGrow: 0,
-    title: "Detected filter",
+    title: paneTitles.detected,
   });
   detected.borderColor = theme.accent;
-  const how = pane(renderer, { title: "How we know" });
+  const how = pane(renderer, { title: paneTitles.how });
   addAll(left, [detected, how]);
   const right = column(renderer, 1);
-  const filters = pane(renderer, { flexGrow: 0, title: "Filters we look for" });
+  const filters = pane(renderer, { flexGrow: 0, title: paneTitles.filters });
   const safeZone = pane(renderer, {
     color: theme.warn,
     flexGrow: 0,
-    title: "About SafeZone",
+    title: paneTitles.safeZone,
   });
   const browser = pane(renderer, {
     color: theme.warn,
     flexGrow: 0,
-    title: "Your browser may differ",
+    title: paneTitles.browser,
   });
   addAll(right, [filters, safeZone, browser]);
   addAll(panes, [left, right]);

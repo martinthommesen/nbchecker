@@ -1,10 +1,6 @@
 /** The "your connection" screen: which filter this computer's DNS uses. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import {
-  type Connection,
-  type ConnectionState,
-  connectionState,
-} from "../check/connection.ts";
+import type { Connection } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
 import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
@@ -30,6 +26,15 @@ const mark = {
  * of Telenor's filters on its test page.
  */
 const safeZoneFollows = telenorTestPage.answers[0]?.filter;
+
+/** Each pane's title, as the screen shows it and its copied text repeats it. */
+const paneTitles = {
+  browser: "Your browser may differ",
+  detected: "Detected filter",
+  filters: "Filters we look for",
+  how: "How we know",
+  safeZone: "About SafeZone",
+} as const;
 
 const selfTestNote =
   "Self-test: each filter is asked for a name it documents as blocked. One that doesn't block it is marked redirected?: its answers seem to come from another resolver, so they don't count.";
@@ -76,23 +81,26 @@ const testAnswerText = (c: Connection): string => {
   return c.testAnswers.join(", ");
 };
 
-/** What the test lookup saw. */
-const testMarks: Record<ConnectionState, Mark> = {
-  detected: mark.detected,
-  none: mark.notSeen,
-  unknown: mark.cantSee,
+/** What the test lookup saw: a filter, no filter, or nothing either way. */
+const seenMark = (c: Connection): Mark => {
+  if (c.filter !== undefined) {
+    return mark.detected;
+  }
+  if (c.error !== undefined) {
+    return mark.cantSee;
+  }
+  return mark.notSeen;
 };
 
 const telenorMark = (c: Connection | undefined, name: string): Mark => {
   if (c === undefined) {
     return mark.cantSee;
   }
-  const state = connectionState(c);
   // Seeing one of Telenor's filters is not seeing the others.
-  if (state === "detected" && c.filter !== name) {
+  if (c.filter !== undefined && c.filter !== name) {
     return mark.notSeen;
   }
-  return testMarks[state];
+  return seenMark(c);
 };
 
 /** Whether Telenor's test page can tell that this computer uses `f`. */
@@ -132,7 +140,7 @@ const howText = (c: Connection | undefined, width: number): StyledText => {
   if (c === undefined) {
     return lines([]);
   }
-  const seen = testMarks[connectionState(c)];
+  const seen = seenMark(c);
   return lines([
     [
       paint(fit("test lookup", lookupWidth), { fg: theme.dim }),
@@ -221,11 +229,11 @@ const connectionCopy = (
   items: readonly Filter[]
 ): string =>
   [
-    { body: detectedText(n?.connection, 0), title: "Detected filter" },
-    { body: howText(n?.connection, 0), title: "How we know" },
-    { body: filtersText(n, items), title: "Filters we look for" },
-    { body: safeZoneText(), title: "About SafeZone" },
-    { body: browserText(), title: "Your browser may differ" },
+    { body: detectedText(n?.connection, 0), title: paneTitles.detected },
+    { body: howText(n?.connection, 0), title: paneTitles.how },
+    { body: filtersText(n, items), title: paneTitles.filters },
+    { body: safeZoneText(), title: paneTitles.safeZone },
+    { body: browserText(), title: paneTitles.browser },
   ]
     .map(({ body, title }) => `${title}\n${plainText(body)}`)
     .join("\n\n");
@@ -237,5 +245,6 @@ export {
   detecting,
   filtersText,
   howText,
+  paneTitles,
   safeZoneText,
 };
