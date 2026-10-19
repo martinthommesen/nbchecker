@@ -1,5 +1,5 @@
 /**
- * The overall verdict of a check, worked out once and shared by the text
+ * The overall status of a check, worked out once and shared by the text
  * output, the interactive screen, copied text and JSON, so they agree.
  */
 import {
@@ -114,7 +114,7 @@ export interface Status {
   readonly total: number;
 }
 
-/** Works out a check's overall verdict. */
+/** Works out a check's overall status. */
 export const statusOf = (r: CheckResult): Status => {
   const { passed, redirected } = selfTestCounts(r.network);
   const answered = trustedFilters(r).filter(

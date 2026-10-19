@@ -1,16 +1,10 @@
 /**
- * The summary under the input: the verdict, or progress while checking, and
- * the hint at the end of the input.
+ * The summary under the input: the check's overall status, or progress while
+ * checking, and the hint at the end of the input.
  */
 import type { StyledText, TextChunk } from "@opentui/core";
-import type { Reason } from "../check/classify.ts";
 import { trustedFilters } from "../check/evidence.ts";
-import {
-  type CheckResult,
-  type Outcome,
-  realAddresses,
-  settled,
-} from "../check/result.ts";
+import { type CheckResult, realAddresses, settled } from "../check/result.ts";
 import { realAnswerState, systemState } from "../report/resolver-state.ts";
 import { type Status, statusOf, statusPhrases } from "../report/status.ts";
 import { shortList } from "../report/view.ts";
@@ -39,21 +33,16 @@ const progress = (r: CheckResult) => {
   return { finished, total: r.filters.length + extraResolvers };
 };
 
-/** The reason a lookup's answer gives, if it answered. */
-const reasonOf = (o: Outcome): Reason | undefined => {
-  if (o.kind === "answered") {
-    return o.verdict.reason;
-  }
-  return undefined;
-};
-
 /** "blocked", naming the ISP's filter whose block answer this computer gets. */
 const blockedPhrase = (r: CheckResult): string => {
-  const reason = reasonOf(r.system);
+  const own = r.system;
+  if (own.kind !== "answered") {
+    return "blocked";
+  }
   const same = trustedFilters(r).find(
     (f) =>
       f.outcome.kind === "answered" &&
-      f.outcome.verdict.reason === reason &&
+      f.outcome.verdict.reason === own.verdict.reason &&
       f.filter.onlyAnswers !== undefined
   );
   if (same === undefined) {
@@ -119,8 +108,8 @@ const inspectedBadge = (status: Status): TextChunk[] => {
   ];
 };
 
-/** The verdict's badge and the words after it. */
-const verdictBadge = (status: Status): TextChunk[] => {
+/** The status's badge and the words after it. */
+const statusBadge = (status: Status): TextChunk[] => {
   switch (status.kind) {
     case "blocked":
       return [
@@ -189,11 +178,11 @@ const resultSummary = (r: CheckResult, wide: boolean): StyledText => {
     paint("    real answer: ", { fg: theme.dim }),
     realAnswerPhrase(r),
   ];
-  const verdict = verdictBadge(statusOf(r));
+  const status = statusBadge(statusOf(r));
   if (wide) {
-    return lines([[...verdict, paint("   "), ...references], ...notesLines(r)]);
+    return lines([[...status, paint("   "), ...references], ...notesLines(r)]);
   }
-  return lines([verdict, references, ...notesLines(r)]);
+  return lines([status, references, ...notesLines(r)]);
 };
 
 const checkingSummary = (
@@ -227,7 +216,7 @@ const checkingSummary = (
   return lines([bar, blocked]);
 };
 
-/** A cancelled check has no verdict, only what answered before. */
+/** A cancelled check concludes nothing; it only counts what answered first. */
 const cancelledSummary = (r: CheckResult): StyledText =>
   lines([
     [
@@ -237,7 +226,7 @@ const cancelledSummary = (r: CheckResult): StyledText =>
   ]);
 
 /**
- * The line under the input: the verdict, or progress while checking. On a
+ * The line under the input: the status, or progress while checking. On a
  * narrow screen the reference answers, or the blocked count, go on a line of
  * their own.
  */
