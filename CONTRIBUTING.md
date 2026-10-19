@@ -42,9 +42,9 @@ The code is TypeScript with [Effect](https://effect.website) and
   with OpenTUI.
 - `src/cli` is the command: it prints results for scripts, with an exit
   status, or opens the interactive screen.
-- Imports point down only: dns <- check <- report <- tui <- cli <-
-  `src/main.ts`. `src/testing` may import any layer, and production code
-  never imports it.
+- Production imports point down only: dns <- check <- report <- tui <-
+  cli <- `src/main.ts`. Tests and `src/testing` may import any layer, and
+  production code never imports `src/testing`.
 
 Tests don't touch the network. The DNS transport and this computer's resolver
 are Effect services, so tests swap in the fakes in `src/testing`, and the

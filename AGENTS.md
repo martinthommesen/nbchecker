@@ -14,8 +14,9 @@ compares DNS filters with the computer's resolver and an unfiltered DoH referenc
   OpenTUI.
 - `src/cli/`: the command, batch checks of arguments or standard input, flushed
   output, and exit statuses.
-- Imports point down only: dns <- check <- report <- tui <- cli <- `main.ts`.
-  `src/testing/` may import any layer; production code never imports it.
+- Production imports point down only: dns <- check <- report <- tui <- cli <-
+  `main.ts`. Tests and `src/testing/` may import any layer; production code
+  never imports `src/testing/`.
 - `src/testing/`: fake Effect services and terminal fixtures. Tests should be
   deterministic and must not depend on live DNS providers.
 - Use the Bun version in CI. Install with `bun install --frozen-lockfile`, then run
