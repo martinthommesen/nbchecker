@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { sleep, udpSocket } from "bun";
 import { Effect, Fiber } from "effect";
-import { replyTo } from "../testing/response.ts";
+import { query, replyTo } from "../testing/response.ts";
+import { Rcode } from "./codes.ts";
 import { type OpenUdp, sendUdp, type UdpOptions } from "./sockets.ts";
-import { encodeQuery } from "./wire.ts";
 
-const queryId = 7;
 const refused = /refused/i;
 /** The fakes ignore the port, and the bind test fails before using it. */
 const dnsPort = 53;
-const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
 
 /** A UDP socket that opens when the test says so and records its use. */
 const fakeUdp = () => {
@@ -77,7 +75,7 @@ describe("sendUdp", () => {
     const udp = fakeUdp();
     const fiber = run(udp.factory);
     await udp.opened();
-    const right = replyTo(query, { rcode: 3 });
+    const right = replyTo(query, { rcode: Rcode.nxDomain });
     udp.receive(replyTo(query, { question: "bad.example" }));
     udp.receive(right);
     expect(await Effect.runPromise(Fiber.join(fiber))).toEqual(right);

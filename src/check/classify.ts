@@ -1,45 +1,29 @@
 /**
  * Works out from a resolver's answer whether, and why, a name is blocked.
  */
-import { Result } from "effect";
-import { NetAddress } from "effect/net";
-import { type DnsAnswer, Rcode } from "../dns/wire.ts";
-import { extendedErrorName, isBlockingError } from "./codes.ts";
-
-/** Telenor answers a blocked name with a CNAME to one of these hosts. */
-const telenorTargets = new Map<string, Reason>([
-  ["dns-block.telenor.net", "legal"],
-  ["kid.telenor.net", "kripos"],
-  ["nettvern-info.telenor.net", "nettvern"],
-  ["nettvernpluss-info.telenor.net", "nettvern+"],
-]);
-
-/** Cisco Umbrella block-page addresses and what each one means. */
-const umbrellaBlockPages = new Map<string, string>([
-  ["146.112.61.104", "domain list"],
-  ["146.112.61.105", "command and control"],
-  ["146.112.61.106", "content category"],
-  ["146.112.61.107", "malware"],
-  ["146.112.61.108", "phishing"],
-  ["146.112.61.109", "blocked"],
-  ["146.112.61.110", "security"],
-]);
+import { Ede, extendedErrorName, Rcode } from "../dns/codes.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
+import { canonicalAddress, isIpv4 } from "./address.ts";
+import {
+  adguardBlockPages,
+  nullAddresses,
+  telenorBlockCnames,
+  umbrellaBlockPages,
+  umbrellaProxyPrefix,
+} from "./known-answers.ts";
 
 /**
- * Cisco Umbrella's inspection proxy. A name sent there isn't blocked by DNS;
- * the proxy checks the pages as they load, and may block some URLs.
+ * The Extended DNS Errors that mean the name was blocked. Prohibited is left
+ * out: a resolver says it to a client it won't serve at all.
  */
-const umbrellaProxyPrefix = "146.112.56.";
+const blockingCodes: ReadonlySet<number> = new Set([
+  Ede.blocked,
+  Ede.censored,
+  Ede.filtered,
+]);
 
-/** AdGuard Family's block page, which it answers adult sites with. */
-const adguardBlockPages = new Set(["94.140.14.35"]);
-
-/** The first 12 bytes of an IPv4-mapped IPv6 address, ::ffff:a.b.c.d. */
-const ff = 0xff;
-const ipv4MappedPrefix = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ff, ff];
-
-const isUnspecified = (address: string): boolean =>
-  address === "0.0.0.0" || address === "::";
+/** Whether an Extended DNS Error says the name was blocked. */
+const isBlockingError = (code: number): boolean => blockingCodes.has(code);
 
 interface Draft {
   answers: string[];
@@ -66,7 +50,7 @@ const addAddress = (v: Draft, raw: string, real: ReadonlySet<string>): void => {
     return;
   }
   const category = umbrellaBlockPages.get(address);
-  if (isUnspecified(address)) {
+  if (nullAddresses.includes(address)) {
     block(v, "null-ip");
   } else if (category !== undefined) {
     block(v, "umbrella", category);
@@ -75,24 +59,6 @@ const addAddress = (v: Draft, raw: string, real: ReadonlySet<string>): void => {
   } else if (address.startsWith(umbrellaProxyPrefix)) {
     v.inspected = true;
   }
-};
-
-const isIpv4 = (address: string): boolean => !address.includes(":");
-
-const reasonText: Record<Reason, string> = {
-  adguard: "blocked: points to AdGuard's block page",
-  ede: "blocked with an Extended DNS Error",
-  kripos: "blocked by the Kripos child-abuse filter",
-  legal: "blocked by Telenor on legal grounds, for every Telenor customer",
-  nettvern: "blocked by Nettvern",
-  "nettvern+": "blocked by Nettvern+",
-  "no-address":
-    "blocked: no address on this computer, though the domain has one",
-  "null-ip": "blocked: answers 0.0.0.0",
-  nxdomain: "blocked: says the domain doesn't exist",
-  umbrella: "blocked by Cisco Umbrella",
-  "umbrella-proxy":
-    "sent through Cisco's inspection proxy; the site may still be blocked by URL",
 };
 
 export type Reason =
@@ -137,25 +103,6 @@ export interface Reference {
 /** Nothing known yet: a missing name is not a block. */
 export const noReference: Reference = { addresses: [], exists: false };
 
-/**
- * Formats an address the same way whichever way it was written, turning
- * IPv4-mapped IPv6 addresses back into IPv4.
- */
-export const canonicalAddress = (s: string): string => {
-  const parsed = NetAddress.ipFromString(s);
-  if (Result.isFailure(parsed)) {
-    return s;
-  }
-  const ip = parsed.success;
-  if (NetAddress.isIpv6Address(ip)) {
-    const octets = NetAddress.ipv6ToOctets(ip);
-    if (ipv4MappedPrefix.every((b, i) => octets[i] === b)) {
-      return octets.slice(ipv4MappedPrefix.length).join(".");
-    }
-  }
-  return NetAddress.formatIp(ip);
-};
-
 /** Whether an answer carries an Extended DNS Error saying it was blocked. */
 export const hasBlockingError = (answer: DnsAnswer): boolean =>
   answer.extendedErrors.some((e) => isBlockingError(e.code));
@@ -185,7 +132,7 @@ export const classify = (answer: DnsAnswer, reference: Reference): Verdict => {
   for (const r of answer.records) {
     if (r.type === "CNAME") {
       v.answers.push(r.value);
-      const reason = telenorTargets.get(r.value);
+      const reason = telenorBlockCnames.get(r.value);
       if (reason !== undefined) {
         block(v, reason);
       }
@@ -247,17 +194,8 @@ export const merge = (...verdicts: readonly Verdict[]): Verdict => {
   };
 };
 
-/** Says what a verdict means, in a phrase for people. */
-export const describe = (v: Verdict): string => {
-  if (v.reason === undefined) {
-    if (v.missing) {
-      return "not found (the domain doesn't exist)";
-    }
-    return "not blocked";
-  }
-  const text = reasonText[v.reason];
-  if (v.detail === "") {
-    return text;
-  }
-  return `${text} (${v.detail})`;
-};
+/** Reads a resolver's A and AAAA answers together. */
+export const classifyAll = (
+  answers: readonly DnsAnswer[],
+  reference: Reference
+): Verdict => merge(...answers.map((a) => classify(a, reference)));

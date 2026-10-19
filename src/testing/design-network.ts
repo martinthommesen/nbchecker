@@ -2,50 +2,35 @@
 import { type Duration, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
 import { type Filter, filters } from "../check/filters.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
 import { QueryError } from "../dns/query-error.ts";
 import { DnsTransport } from "../dns/transport.ts";
-import {
-  type DnsAnswer,
-  type DnsRecord,
-  type QueryType,
-  Rcode,
-} from "../dns/wire.ts";
+import type { DnsAnswer, QueryType } from "../dns/wire.ts";
+import { nettvernTestPage, testPageName } from "./fake-network.ts";
+import { a, answer, cname, noRecords } from "./records.ts";
 
 const domain = "bad.example";
+/** The blocked name's address, as the unfiltered resolver answers it. */
 const realAddress = "203.0.113.42";
-const edeBlocked = 15;
 
-const answer = (
-  records: readonly DnsRecord[],
-  rcode: number = Rcode.noError,
-  ede = false
-): DnsAnswer => ({
-  extendedErrors: [{ code: edeBlocked, text: "" }].filter(() => ede),
-  rcode,
-  records,
-  truncated: false,
-});
+/** An answer for `domain` with just this address. */
+const addressAnswer = (value: string): DnsAnswer => answer([a(domain, value)]);
 
-const address = (value: string): DnsRecord => ({
-  name: domain,
-  type: "A",
-  value,
-});
-const cname = (value: string): DnsRecord[] => [
-  { name: domain, type: "CNAME", value },
-];
+/** An answer for `domain` with just a CNAME to `target`. */
+const cnameAnswer = (target: string): DnsAnswer =>
+  answer([cname(domain, target)]);
 
 const byFilter = new Map<string, DnsAnswer | "down">([
-  ["Telenor Nettvern", answer(cname("nettvern-info.telenor.net"))],
-  ["Telenor Nettvern+", answer(cname("nettvernpluss-info.telenor.net"))],
-  ["Cloudflare Security", answer([address("0.0.0.0")])],
-  ["Cloudflare Family", answer([address("0.0.0.0")])],
-  ["Quad9", answer([], Rcode.nxDomain)],
-  ["OpenDNS FamilyShield", answer([address(realAddress)])],
-  ["AdGuard Family", answer([address("0.0.0.0")])],
-  ["CleanBrowsing Family", answer([], Rcode.nxDomain, true)],
+  ["Telenor Nettvern", cnameAnswer("nettvern-info.telenor.net")],
+  ["Telenor Nettvern+", cnameAnswer("nettvernpluss-info.telenor.net")],
+  ["Cloudflare Security", addressAnswer("0.0.0.0")],
+  ["Cloudflare Family", addressAnswer("0.0.0.0")],
+  ["Quad9", noRecords(Rcode.nxDomain)],
+  ["OpenDNS FamilyShield", addressAnswer(realAddress)],
+  ["AdGuard Family", addressAnswer("0.0.0.0")],
+  ["CleanBrowsing Family", noRecords(Rcode.nxDomain, Ede.blocked)],
   ["AdGuard DNS", "down"],
-  ["CleanBrowsing Security", answer([], Rcode.nxDomain, true)],
+  ["CleanBrowsing Security", noRecords(Rcode.nxDomain, Ede.blocked)],
 ]);
 
 const filterOf = new Map(
@@ -54,47 +39,42 @@ const filterOf = new Map(
 
 /** Each filter blocks its own canary, as on a network that doesn't redirect. */
 const canaryAnswer = (f: Filter): DnsAnswer =>
-  answer([address(f.canary?.answers[0] ?? "0.0.0.0")]);
+  addressAnswer(f.canary?.answers[0] ?? "0.0.0.0");
 
 const serverAnswer = (server: string, name: string) => {
   const f = filterOf.get(server);
   if (f === undefined) {
     return;
   }
-  const a = byFilter.get(f.name);
-  if (a !== "down" && name === f.canary?.name) {
+  const reply = byFilter.get(f.name);
+  if (reply !== "down" && name === f.canary?.name) {
     return canaryAnswer(f);
   }
-  return a;
+  return reply;
 };
 
 const realAnswer = (type: QueryType) => {
   if (type === "AAAA") {
     return Effect.succeed(answer([]));
   }
-  return Effect.succeed(answer([address(realAddress)]));
+  return Effect.succeed(addressAnswer(realAddress));
 };
 
 export const designTransport = Layer.succeed(DnsTransport, {
   ask: (server, name, type) => {
-    const a = serverAnswer(server, name);
-    if (a === undefined || a === "down") {
+    const reply = serverAnswer(server, name);
+    if (reply === undefined || reply === "down") {
       return Effect.fail(new QueryError({ reason: "timed out", server }));
     }
     if (type === "AAAA") {
       return Effect.succeed({
-        ...a,
-        records: a.records.filter((r) => r.type === "CNAME"),
+        ...reply,
+        records: reply.records.filter((r) => r.type === "CNAME"),
       });
     }
-    return Effect.succeed(a);
+    return Effect.succeed(reply);
   },
-  doh: (_url, _name, type) => {
-    if (type === "AAAA") {
-      return Effect.succeed(answer([]));
-    }
-    return Effect.succeed(answer([address(realAddress)]));
-  },
+  doh: (_url, _name, type) => realAnswer(type),
 });
 
 /** The same, with some filters `delay` slow to answer, to show progress. */
@@ -133,11 +113,20 @@ export const redirectedDesignTransport = Layer.succeed(DnsTransport, {
   doh: (_url, _name, type) => realAnswer(type),
 });
 
-export const designComputer = Dns.layerStatic({
-  hosts: {
-    [domain]: ["0.0.0.0"],
-    "nettvern.telenor.net": ["148.123.15.38"],
-  },
-});
+/**
+ * This computer on the design network: on Telenor's network, behind
+ * Nettvern, with its DNS answering `address` for the blocked name.
+ */
+export const designComputerWith = (address: string) =>
+  Dns.layerStatic({
+    hosts: {
+      [domain]: [address],
+      [testPageName]: [nettvernTestPage],
+    },
+  });
+
+export const designComputer = designComputerWith("0.0.0.0");
 
 export const blockedName = domain;
+
+export { realAddress };

@@ -1,11 +1,9 @@
-/** Everything the interactive screen shows, in one value. */
+/** Everything the interactive screen shows, in one value, and its store. */
 import type { CheckResult, Network } from "../check/result.ts";
 
 export type Screen = "connection" | "help" | "main";
 
 export interface State {
-  /** The last check was cancelled, so `result` is only part of an answer. */
-  readonly cancelled: boolean;
   /** A check is running; `result` holds what has answered so far. */
   readonly checking: boolean;
   /** How long the last check took. */
@@ -27,8 +25,24 @@ export interface State {
   readonly version: string;
 }
 
+/** Holds the state, and draws the screen again whenever it changes. */
+export interface Store {
+  readonly get: () => State;
+  readonly set: (patch: Partial<State>) => void;
+}
+
+export const makeStore = (initial: State, draw: (s: State) => void): Store => {
+  let state = initial;
+  return {
+    get: () => state,
+    set: (patch) => {
+      state = { ...state, ...patch };
+      draw(state);
+    },
+  };
+};
+
 export const initialState = (version: string): State => ({
-  cancelled: false,
   checking: false,
   elapsedMs: undefined,
   focus: "input",

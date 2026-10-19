@@ -1,38 +1,43 @@
 /** Works out which filter, if any, this computer's own DNS goes through. */
-import { Effect, Result } from "effect";
+import { type Cause, Effect, Result } from "effect";
 import { Dns, NetAddress } from "effect/net";
+import { telenorTestPage } from "./known-answers.ts";
 
-/**
- * What each answer from Telenor's test page means. Telenor's filters give an
- * address of their own; every other resolver, Telenor's unfiltered one, Google
- * and Cloudflare included, gets the public answer, so that one says nothing
- * about the network.
- */
-const testPageAnswers: readonly {
-  readonly filter?: string;
-  readonly ip: string;
-  readonly meaning: string;
-}[] = [
-  { filter: "Telenor Nettvern", ip: "148.123.15.38", meaning: "Nettvern" },
-  { filter: "Telenor Nettvern+", ip: "148.123.15.1", meaning: "Nettvern+" },
-  { ip: "148.123.15.37", meaning: "public answer (no filter)" },
-];
-
+/** Which of Telenor's filters gives this answer to its test page, if any. */
 const detectedBy = (ip: string): Detected | undefined => {
-  const filter = testPageAnswers.find((a) => a.ip === ip)?.filter;
+  const filter = telenorTestPage.answers.find((a) => a.ip === ip)?.filter;
   if (filter === undefined) {
     return;
   }
-  return { filter, network: "Telenor" };
+  return { filter, network: telenorTestPage.network };
 };
-
-const testPageName = "nettvern.telenor.net";
 
 interface Detected {
   readonly filter: string | undefined;
   /** The network the filter belongs to; only known along with the filter. */
   readonly network: string | undefined;
 }
+
+/** What detection says before it has found anything. */
+const nothingDetected: Connection = {
+  error: undefined,
+  filter: undefined,
+  network: undefined,
+  testAnswers: [],
+};
+
+/**
+ * Why the test lookup failed. Undefined when the resolver says the test page
+ * doesn't exist: that is an answer, and none of Telenor's filters gives it.
+ */
+const lookupError = (
+  failure: Cause.TimeoutError | Dns.DnsError
+): string | undefined => {
+  if (failure._tag === "DnsError" && failure.reason === "NotFound") {
+    return;
+  }
+  return String(failure.message);
+};
 
 export interface Connection extends Detected {
   /** Why the test lookup failed, if it did. */
@@ -41,10 +46,6 @@ export interface Connection extends Detected {
   readonly testAnswers: readonly string[];
 }
 
-/** The addresses each answer from Telenor's test page stands for. */
-export const testPageMeaning: readonly (readonly [string, string])[] =
-  testPageAnswers.map((a) => [a.ip, a.meaning]);
-
 /**
  * Looks up the test page through this computer's resolver. Only Telenor
  * publishes such a page so far, so other filters are not detected.
@@ -52,24 +53,10 @@ export const testPageMeaning: readonly (readonly [string, string])[] =
 export const detectConnection = Effect.gen(function* () {
   const dns = yield* Dns.Dns;
   const addresses = yield* dns
-    .lookup(testPageName)
+    .lookup(telenorTestPage.name)
     .pipe(Effect.timeout("5 seconds"), Effect.result);
   if (Result.isFailure(addresses)) {
-    const error = addresses.failure;
-    let notFound = false;
-    if (error._tag === "DnsError") {
-      notFound = error.reason === "NotFound";
-    }
-    const connection: Connection = {
-      error: String(error.message),
-      filter: undefined,
-      network: undefined,
-      testAnswers: [],
-    };
-    if (notFound) {
-      return { ...connection, error: undefined };
-    }
-    return connection;
+    return { ...nothingDetected, error: lookupError(addresses.failure) };
   }
   const testAnswers = addresses.success.map(NetAddress.formatIp);
   const detected = testAnswers.map(detectedBy).find((d) => d !== undefined);
@@ -92,4 +79,16 @@ export const connectionText = (c: Connection): string => {
   return "none detected";
 };
 
-export const testPage = testPageName;
+/**
+ * The filter on this computer, or `fallback` while the network hasn't been
+ * detected, which each output words its own way.
+ */
+export const dnsFilterOf = (
+  c: Connection | undefined,
+  fallback: string
+): string => {
+  if (c === undefined) {
+    return fallback;
+  }
+  return connectionText(c);
+};

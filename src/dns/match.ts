@@ -2,16 +2,11 @@
  * Checks that a reply answers the query it was sent for: the ID, the QR bit,
  * the opcode and the question (RFC 5452).
  */
-import { MalformedResponse } from "./malformed.ts";
-import { Reader } from "./reader.ts";
-import { Rcode } from "./wire.ts";
+import { Rcode } from "./codes.ts";
+import { MalformedMessage } from "./malformed.ts";
+import { headerLength } from "./protocol.ts";
+import { type Header, Reader } from "./reader.ts";
 
-const headerLength = 12;
-const flagResponse = 0x80_00;
-/** The opcode sits above the AA, TC, RD, RA, Z and rcode bits. */
-const opcodeDivisor = 0x8_00;
-const opcodeValues = 16;
-const rcodeValues = 16;
 const notMatching = "bad answer: question doesn't match";
 
 /**
@@ -25,41 +20,28 @@ const questionlessRcodes: ReadonlySet<number> = new Set([
   Rcode.refused,
 ]);
 
-interface Message {
-  readonly flags: number;
-  readonly id: number;
+interface Message extends Header {
   /** The first question as name, type and class, if there is one. */
   readonly question: string | undefined;
-  readonly questions: number;
 }
 
 const read = (bytes: Uint8Array): Message => {
   // A reply without a whole header can't be checked, even an empty one.
   if (bytes.length < headerLength) {
-    throw new MalformedResponse({ reason: "bad answer: header cut short" });
+    throw new MalformedMessage({ reason: "bad answer: header cut short" });
   }
   const r = new Reader(bytes);
-  const id = r.u16();
-  const flags = r.u16();
-  const questions = r.u16();
-  if (questions === 0) {
-    return { flags, id, question: undefined, questions };
+  const header = r.header();
+  if (header.questions === 0) {
+    return { ...header, question: undefined };
   }
-  r.offset = headerLength;
-  const name = r.name();
-  const question = `${name} ${r.u16()} ${r.u16()}`;
-  return { flags, id, question, questions };
+  const { dnsClass, name, type } = r.question();
+  return { ...header, question: `${name} ${type} ${dnsClass}` };
 };
-
-const isResponse = (m: Message): boolean =>
-  Math.floor(m.flags / flagResponse) === 1;
-
-const opcode = (m: Message): number =>
-  Math.floor(m.flags / opcodeDivisor) % opcodeValues;
 
 const questionMatches = (query: Message, reply: Message): boolean => {
   if (reply.questions === 0) {
-    return questionlessRcodes.has(reply.flags % rcodeValues);
+    return questionlessRcodes.has(reply.rcode);
   }
   return reply.questions === 1 && reply.question === query.question;
 };
@@ -68,10 +50,10 @@ const compare = (query: Message, reply: Message): string | undefined => {
   if (reply.id !== query.id) {
     return "answer was for a different query";
   }
-  if (!isResponse(reply)) {
+  if (!reply.isResponse) {
     return "bad answer: not a response";
   }
-  if (opcode(reply) !== opcode(query)) {
+  if (reply.opcode !== query.opcode) {
     return "bad answer: wrong opcode";
   }
   if (questionMatches(query, reply)) {
@@ -88,7 +70,7 @@ export const mismatch = (
   try {
     return compare(read(query), read(reply));
   } catch (error) {
-    if (error instanceof MalformedResponse) {
+    if (error instanceof MalformedMessage) {
       return error.reason;
     }
     throw error;

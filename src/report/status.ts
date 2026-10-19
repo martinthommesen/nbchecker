@@ -1,26 +1,22 @@
 /**
- * The overall verdict of a check, worked out once and shared by the text
+ * The overall status of a check, worked out once and shared by the text
  * output, the interactive screen, copied text and JSON, so they agree.
  */
 import {
-  type CheckResult,
-  type Outcome,
+  answeredWith,
   seemsIntercepted,
+  selfTestCounts,
   trustedFilters,
+} from "../check/evidence.ts";
+import {
+  type CheckResult,
+  nameExists,
+  realAnswerKnown,
 } from "../check/result.ts";
-
-const answeredWith = (o: Outcome | undefined, test: keyof Flags): boolean =>
-  o?.kind === "answered" && o.verdict[test];
-
-interface Flags {
-  readonly blocked: boolean;
-  readonly inspected: boolean;
-  readonly missing: boolean;
-}
 
 /** This computer finds addresses for the name, and they aren't a block. */
 const resolvesHere = (r: CheckResult): boolean =>
-  r.system?.kind === "answered" &&
+  r.system.kind === "answered" &&
   !r.system.verdict.missing &&
   !r.system.verdict.blocked;
 
@@ -50,14 +46,14 @@ const kindOf = (r: CheckResult, s: Omit<Status, "kind">): StatusKind => {
   if (seemsIntercepted(r.network)) {
     return "intercepted";
   }
-  const truthKnown = r.truthExchange !== undefined;
-  if (truthKnown && !r.exists && resolvesHere(r)) {
+  const doesntExist = realAnswerKnown(r) && !nameExists(r);
+  if (doesntExist && resolvesHere(r)) {
     return "local-only";
   }
-  if (truthKnown && !r.exists) {
+  if (doesntExist) {
     return "missing";
   }
-  if (!truthKnown && someMissing(r)) {
+  if (!realAnswerKnown(r) && someMissing(r)) {
     return "cant-tell";
   }
   if (s.answered === 0) {
@@ -118,9 +114,9 @@ export interface Status {
   readonly total: number;
 }
 
-/** Works out a check's overall verdict. */
+/** Works out a check's overall status. */
 export const statusOf = (r: CheckResult): Status => {
-  const selfTests = r.network?.selfTests ?? [];
+  const { passed, redirected } = selfTestCounts(r.network);
   const answered = trustedFilters(r).filter(
     (f) => f.outcome.kind === "answered"
   );
@@ -130,14 +126,24 @@ export const statusOf = (r: CheckResult): Status => {
     inspected: answered.filter((f) => answeredWith(f.outcome, "inspected"))
       .length,
     inspectedHere: answeredWith(r.system, "inspected"),
-    redirected: selfTests.filter((t) => t.result === "redirected").length,
-    tested: selfTests.filter(
-      (t) => t.result === "passed" || t.result === "redirected"
-    ).length,
+    redirected,
+    tested: passed + redirected,
     total: r.filters.length,
   };
   return { ...counts, kind: kindOf(r, counts) };
 };
+
+/**
+ * Words the text output and the screen's summary share; the summary puts a
+ * badge of its own before them.
+ */
+export const statusPhrases = {
+  cancelled: (s: Status) =>
+    `${s.answered} of ${s.total} filters answered first, ${s.blocked} of them blocking`,
+  cantTell: "the real answer is unavailable",
+  localOnly: "only resolves on this computer (private or split DNS)",
+  noAnswer: "no filter answered",
+} as const;
 
 /** How a status reads in one line of text. */
 export const statusText = (s: Status): string => {
@@ -147,9 +153,9 @@ export const statusText = (s: Status): string => {
     case "blocked-here":
       return "blocked by your own DNS, but by none of the filters";
     case "cancelled":
-      return `cancelled: ${s.answered} of ${s.total} filters answered first, ${s.blocked} of them blocking`;
+      return `cancelled: ${statusPhrases.cancelled(s)}`;
     case "cant-tell":
-      return "couldn't tell: the real answer is unavailable";
+      return `couldn't tell: ${statusPhrases.cantTell}`;
     case "error":
       return "could not check";
     case "inspected":
@@ -160,11 +166,11 @@ export const statusText = (s: Status): string => {
     case "intercepted":
       return `DNS on this network seems to be intercepted: ${s.redirected} of ${s.tested} filters failed the self-test, so these results can't be trusted`;
     case "local-only":
-      return "only resolves on this computer (private or split DNS)";
+      return statusPhrases.localOnly;
     case "missing":
       return "the domain doesn't exist";
     case "no-answer":
-      return "no filter answered";
+      return statusPhrases.noAnswer;
     case "not-blocked":
       return `not blocked by any of ${s.answered} filters`;
     default:

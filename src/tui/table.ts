@@ -1,15 +1,8 @@
 /** Draws the resolvers table and the details pane. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import {
-  columns,
-  fit,
-  fitRight,
-  lines,
-  paint,
-  spinner,
-  wrap,
-} from "./paint.ts";
+import { lines, oneLine, paint, shaded, spinner } from "./paint.ts";
 import type { Group, RowState, TableRow } from "./rows.ts";
+import { columns, fit, fitRight, wrap } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const glyphWidth = 2;
@@ -22,19 +15,26 @@ const labelWidth = 11;
 const responseIndent = 1;
 const responseHang = 2;
 
+/**
+ * Rows whose lack of an answer says nothing: the check was cancelled, or the
+ * filter needn't answer here.
+ */
+const unavailable = { color: theme.faint, glyph: "·" } as const;
+
 const looks: Record<
   RowState,
   { readonly color: string; readonly glyph: string }
 > = {
   blocked: { color: theme.block, glyph: "✕" },
+  cancelled: unavailable,
   failed: { color: theme.warn, glyph: "?" },
   idle: { color: theme.faint, glyph: "·" },
   inspected: { color: theme.warn, glyph: "!" },
   missing: { color: theme.dim, glyph: "–" },
+  optional: unavailable,
   pending: { color: theme.dim, glyph: "" },
   redirected: { color: theme.warn, glyph: "?" },
   resolves: { color: theme.ok, glyph: "✓" },
-  unavailable: { color: theme.faint, glyph: "·" },
   unsure: { color: theme.warn, glyph: "?" },
 };
 
@@ -65,7 +65,7 @@ const rowLine = (
   return [
     paint(fit(glyph, glyphWidth), { ...back, fg: color }),
     paint(fit(row.name, nameWidth), { ...back, bold: selected }),
-    paint(fit(row.verdict, verdictWidth), { ...back, fg: color }),
+    paint(fit(row.word, verdictWidth), { ...back, fg: color }),
     paint(`${fit(row.answer, answer)} `, { ...back, fg: theme.answer }),
     paint(` ${fitRight(row.ms, msWidth - 1)}`, { ...back, fg: theme.dim }),
   ];
@@ -78,14 +78,10 @@ const field = (label: string, value: string): TextChunk[] => [
 
 /** The column titles above the table. */
 export const tableHeader = (width: number): StyledText =>
-  lines([
-    [
-      paint(
-        `${" ".repeat(glyphWidth)}${fit("resolver", nameWidth)}${fit("verdict", verdictWidth)}${fit("answer", answerWidth(width) + 1)}${fitRight("ms", msWidth)}`,
-        { fg: theme.faint }
-      ),
-    ],
-  ]);
+  oneLine(
+    `${" ".repeat(glyphWidth)}${fit("resolver", nameWidth)}${fit("verdict", verdictWidth)}${fit("answer", answerWidth(width) + 1)}${fitRight("ms", msWidth)}`,
+    { fg: theme.faint }
+  );
 
 /** The table, and which line the selected row is on so it can be kept in view. */
 export const tableText = (
@@ -124,13 +120,13 @@ export const detailsText = (
     return lines([]);
   }
   const { color, glyph } = lookOf(row.state, tick);
-  const verdict = `${glyph} ${row.verdict}`.trim();
+  const said = `${glyph} ${row.word}`.trim();
   const out: TextChunk[][] = [
     [
-      paint(fit(row.name, Math.max(width - columns(verdict), 1)), {
+      paint(fit(row.name, Math.max(width - columns(said), 1)), {
         bold: true,
       }),
-      paint(verdict, { fg: color }),
+      paint(said, { fg: color }),
     ],
     [],
     field("category", row.category),
@@ -141,17 +137,11 @@ export const detailsText = (
     out.push(field("query", `A + AAAA ${host}`));
   }
   if (row.response.length > 0) {
-    const block = { bg: theme.response };
-    out.push(
-      [],
-      [paint(fit(" RESPONSE", width), { ...block, fg: theme.faint })]
-    );
+    out.push([], [shaded(" RESPONSE", width, theme.faint)]);
     // Wrapped, not cut: the exact address is what the details are for.
     for (const line of row.response) {
       for (const part of wrap(line, width - responseIndent, responseHang)) {
-        out.push([
-          paint(fit(` ${part}`, width), { ...block, fg: theme.answer }),
-        ]);
+        out.push([shaded(` ${part}`, width)]);
       }
     }
   }

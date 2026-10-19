@@ -1,14 +1,12 @@
 /** The "your connection" screen: which filter this computer's DNS uses. */
 import type { StyledText, TextChunk } from "@opentui/core";
-import {
-  type Connection,
-  testPage,
-  testPageMeaning,
-} from "../check/connection.ts";
+import type { Connection } from "../check/connection.ts";
 import type { Filter } from "../check/filters.ts";
+import { telenorTestPage } from "../check/known-answers.ts";
 import type { Network, SelfTestResult } from "../check/result.ts";
-import { categoryOrder } from "../report/view.ts";
-import { fit, lines, paint, spinner } from "./paint.ts";
+import { categoryLabels, categoryOrder } from "../report/categories.ts";
+import { lines, oneLine, paint, plainText, shaded, spinner } from "./paint.ts";
+import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
 const nameWidth = 24;
@@ -16,17 +14,26 @@ const markWidth = 14;
 const lookupWidth = 24;
 const addressWidth = 15;
 
-const groupTitles = {
-  ads: "ADS AND TRACKERS",
-  family: "FAMILY",
-  security: "SECURITY",
-} as const;
-
 const mark = {
   cantSee: { color: theme.warn, glyph: "?", text: "can't see" },
   detected: { color: theme.block, glyph: "✕", text: "detected" },
   noTest: { color: theme.faint, glyph: "·", text: "no test page" },
   notSeen: { color: theme.dim, glyph: "·", text: "not seen" },
+} as const;
+
+/**
+ * SafeZone has no server to ask, so it is only listed here, after the first
+ * of Telenor's filters on its test page.
+ */
+const safeZoneFollows = telenorTestPage.answers[0]?.filter;
+
+/** Each pane's title, as the screen shows it and its copied text repeats it. */
+const paneTitles = {
+  browser: "Your browser may differ",
+  detected: "Detected filter",
+  filters: "Filters we look for",
+  how: "How we know",
+  safeZone: "About SafeZone",
 } as const;
 
 const selfTestNote =
@@ -74,18 +81,34 @@ const testAnswerText = (c: Connection): string => {
   return c.testAnswers.join(", ");
 };
 
-const telenorMark = (c: Connection | undefined, name: string): Mark => {
-  if (c?.filter === name) {
+/** What the test lookup saw: a filter, no filter, or nothing either way. */
+const seenMark = (c: Connection): Mark => {
+  if (c.filter !== undefined) {
     return mark.detected;
   }
-  if (c === undefined || c.error !== undefined) {
+  if (c.error !== undefined) {
     return mark.cantSee;
   }
   return mark.notSeen;
 };
 
+const telenorMark = (c: Connection | undefined, name: string): Mark => {
+  if (c === undefined) {
+    return mark.cantSee;
+  }
+  // Seeing one of Telenor's filters is not seeing the others.
+  if (c.filter !== undefined && c.filter !== name) {
+    return mark.notSeen;
+  }
+  return seenMark(c);
+};
+
+/** Whether Telenor's test page can tell that this computer uses `f`. */
+const onTestPage = (f: Filter): boolean =>
+  telenorTestPage.answers.some((a) => a.filter === f.name);
+
 const markOf = (c: Connection | undefined, f: Filter): Mark => {
-  if (f.onlyAnswers !== undefined) {
+  if (onTestPage(f)) {
     return telenorMark(c, f.name);
   }
   return mark.noTest;
@@ -97,10 +120,14 @@ const filterRow = (name: string, m: Mark): TextChunk[] => [
   paint(fit(m.text, markWidth), { fg: m.color }),
 ];
 
+/** What the screen says while the connection is being detected. */
+const detecting = (tick: number): TextChunk =>
+  paint(`${spinner(tick)} detecting…`, { fg: theme.dim });
+
 /** What was detected. */
 const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   if (c === undefined) {
-    return lines([[paint(`${spinner(tick)} detecting…`, { fg: theme.dim })]]);
+    return lines([[detecting(tick)]]);
   }
   return lines([
     ...detectedLines(c),
@@ -108,56 +135,26 @@ const detectedText = (c: Connection | undefined, tick: number): StyledText => {
   ]);
 };
 
-const testMark = (c: Connection): Mark => {
-  if (c.filter !== undefined) {
-    return mark.detected;
-  }
-  if (c.error !== undefined) {
-    return mark.cantSee;
-  }
-  return mark.notSeen;
-};
-
-/** Fills a line of the shaded block, or leaves it as it is for copying. */
-const fill = (text: string, width: number): string => {
-  if (width <= 0) {
-    return text;
-  }
-  return fit(text, width);
-};
-
 /** How it was detected: the test lookup and what its answers mean. */
 const howText = (c: Connection | undefined, width: number): StyledText => {
   if (c === undefined) {
     return lines([]);
   }
-  const glyph = testMark(c);
-  const block = { bg: theme.response };
+  const seen = seenMark(c);
   return lines([
     [
       paint(fit("test lookup", lookupWidth), { fg: theme.dim }),
       paint("this computer got", { fg: theme.dim }),
     ],
     [
-      paint(`${glyph.glyph} `, { fg: glyph.color }),
-      paint(fit(testPage, lookupWidth - 2)),
+      paint(`${seen.glyph} `, { fg: seen.color }),
+      paint(fit(telenorTestPage.name, lookupWidth - 2)),
       paint(testAnswerText(c)),
     ],
     [],
-    [
-      paint(
-        fill(" Telenor's test page answers differently per filter:", width),
-        {
-          ...block,
-          fg: theme.answer,
-        }
-      ),
-    ],
-    ...testPageMeaning.map(([ip, meaning]) => [
-      paint(fill(`   ${fit(ip, addressWidth)}${meaning}`, width), {
-        ...block,
-        fg: theme.answer,
-      }),
+    [shaded(" Telenor's test page answers differently per filter:", width)],
+    ...telenorTestPage.answers.map(({ ip, meaning }) => [
+      shaded(`   ${fit(ip, addressWidth)}${meaning}`, width),
     ]),
     [],
     prose(selfTestNote),
@@ -198,11 +195,12 @@ const filtersText = (
     ],
   ];
   for (const category of categoryOrder) {
-    out.push([paint(groupTitles[category], { fg: theme.faint })]);
+    out.push([
+      paint(categoryLabels[category].shortHeading, { fg: theme.faint }),
+    ]);
     for (const f of items.filter((x) => x.category === category)) {
       out.push([...filterRow(f.name, markOf(c, f)), selfTestChunk(n, f)]);
-      // SafeZone has no server to ask, so it is only listed here.
-      if (f.name === "Telenor Nettvern") {
+      if (f.name === safeZoneFollows) {
         out.push(filterRow("Telenor SafeZone", mark.cantSee));
       }
     }
@@ -223,10 +221,7 @@ const safeZoneText = (): StyledText =>
   lines([prose(safeZone[0]), [paint(safeZone[1], { fg: theme.dim })]]);
 
 /** Why a browser can disagree with this computer. */
-const browserText = (): StyledText =>
-  lines([[paint(browser, { fg: theme.dim })]]);
-
-const plain = (t: StyledText): string => t.chunks.map((ch) => ch.text).join("");
+const browserText = (): StyledText => oneLine(browser, { fg: theme.dim });
 
 /** The connection screen as plain text, for copying. */
 const connectionCopy = (
@@ -234,20 +229,22 @@ const connectionCopy = (
   items: readonly Filter[]
 ): string =>
   [
-    { body: detectedText(n?.connection, 0), title: "Detected filter" },
-    { body: howText(n?.connection, 0), title: "How we know" },
-    { body: filtersText(n, items), title: "Filters we look for" },
-    { body: safeZoneText(), title: "About SafeZone" },
-    { body: browserText(), title: "Your browser may differ" },
+    { body: detectedText(n?.connection, 0), title: paneTitles.detected },
+    { body: howText(n?.connection, 0), title: paneTitles.how },
+    { body: filtersText(n, items), title: paneTitles.filters },
+    { body: safeZoneText(), title: paneTitles.safeZone },
+    { body: browserText(), title: paneTitles.browser },
   ]
-    .map(({ body, title }) => `${title}\n${plain(body)}`)
+    .map(({ body, title }) => `${title}\n${plainText(body)}`)
     .join("\n\n");
 
 export {
   browserText,
   connectionCopy,
   detectedText,
+  detecting,
   filtersText,
   howText,
+  paneTitles,
   safeZoneText,
 };

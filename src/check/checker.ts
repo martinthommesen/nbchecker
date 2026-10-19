@@ -2,33 +2,37 @@
  * Checks one target against every filter, this computer's DNS and an
  * unfiltered resolver.
  */
-import { Context, Duration, Effect, Ref, Result } from "effect";
-import { QueryError } from "../dns/query-error.ts";
+import { Duration, Effect, Ref, Result } from "effect";
 import {
-  classify,
+  classifyAll,
   classifySystem,
-  merge,
   noReference,
   type Reference,
 } from "./classify.ts";
-import { type Filter, filters, truthResolvers } from "./filters.ts";
-import { lookupSystem, reverseName, type SystemAnswer } from "./local.ts";
+import { completionOf } from "./evidence.ts";
+import type { Filter } from "./filters.ts";
 import { normalize } from "./normalize.ts";
+import { CheckerOptions } from "./options.ts";
 import { Progress } from "./progress.ts";
-import {
-  askFilter,
-  type FilterAnswer,
-  lookupTruth,
-  type Truth,
-} from "./remote.ts";
+import { askFilter, askUnfiltered, type ServerAnswer } from "./remote.ts";
 import {
   type CheckResult,
-  completionOf,
+  type Exchange,
   type Network,
   type Outcome,
   pending,
+  type RealAnswer,
   unchecked,
 } from "./result.ts";
+import {
+  lookupSystem,
+  reverseName,
+  type SystemAnswer,
+  systemServer,
+} from "./system.ts";
+
+const ipNote =
+  "DNS filters block names, not IP addresses, so an IP address you connect to directly is not blocked by them.";
 
 /** One lookup's result and how long it took. */
 interface Asked<A> {
@@ -38,18 +42,20 @@ interface Asked<A> {
 
 /** Everything that has answered so far. */
 interface Gathered {
-  readonly filters: readonly (Asked<FilterAnswer> | undefined)[];
+  readonly filters: readonly (Asked<ServerAnswer> | undefined)[];
   readonly network: Network | undefined;
+  readonly realAnswer: Asked<ServerAnswer & Reference> | undefined;
   readonly system: Asked<SystemAnswer> | undefined;
-  readonly truth: Asked<Truth> | undefined;
 }
 
-const systemServer = "this computer";
-
-const filterOutcome = (
-  asked: Asked<FilterAnswer> | undefined,
-  reference: Reference
-): Outcome => {
+/**
+ * How one lookup stands: pending until it comes back, failed with its error,
+ * or answered with what `toAnswered` makes of the answer and its time.
+ */
+const outcomeOf = <A, B>(
+  asked: Asked<A> | undefined,
+  toAnswered: (answer: A, ms: number) => B
+): Outcome<B> => {
   if (asked === undefined) {
     return pending;
   }
@@ -57,86 +63,58 @@ const filterOutcome = (
   if (Result.isFailure(result)) {
     return { error: result.failure.message, kind: "failed", ms };
   }
-  const { answers, server } = result.success;
-  return {
-    exchange: { answers, ms, server, transport: "UDP 53" },
-    kind: "answered",
-    verdict: merge(...answers.map((a) => classify(a, reference))),
-  };
-};
-
-const systemOutcome = (
-  asked: Asked<SystemAnswer> | undefined,
-  reference: Reference
-): Outcome => {
-  if (asked === undefined) {
-    return pending;
-  }
-  const { ms, result } = asked;
-  if (Result.isFailure(result)) {
-    return { error: result.failure.message, kind: "failed", ms };
-  }
-  const { answer, noAddress, notes } = result.success;
-  return {
-    exchange: {
-      answers: [answer],
-      ms,
-      notes,
-      server: systemServer,
-      transport: "system resolver",
-    },
-    kind: "answered",
-    verdict: classifySystem(answer, noAddress, reference),
-  };
+  return { ...toAnswered(result.success, ms), kind: "answered" };
 };
 
 /**
  * What every answer is compared with. Until the real answer arrives, or if
  * it can't be fetched, a missing name is not a block.
  */
-const referenceOf = (g: Gathered): Reference => {
-  const truth = g.truth?.result;
-  if (truth === undefined || Result.isFailure(truth)) {
+const referenceOf = (realAnswer: Outcome<RealAnswer>): Reference => {
+  if (realAnswer.kind !== "answered") {
     return noReference;
   }
-  return truth.success;
+  return realAnswer;
 };
+
+/** How a remote resolver was asked, and what it said. */
+const exchangeOf = (a: ServerAnswer, ms: number): Exchange => ({
+  answers: a.answers,
+  ms,
+  server: a.server,
+});
 
 /** Builds the result from what has answered, classifying it afresh. */
 const assemble = (
   base: CheckResult,
-  asked: readonly Filter[],
+  filters: readonly Filter[],
   g: Gathered
 ): CheckResult => {
-  const truth = g.truth?.result;
-  const reference = referenceOf(g);
-  let result: CheckResult = {
+  const realAnswer = outcomeOf(g.realAnswer, (a, ms) => ({
+    addresses: a.addresses,
+    exchange: exchangeOf(a, ms),
+    exists: a.exists,
+  }));
+  const reference = referenceOf(realAnswer);
+  const filterAnswered = (a: ServerAnswer, ms: number) => ({
+    exchange: exchangeOf(a, ms),
+    verdict: classifyAll(a.answers, reference),
+  });
+  const systemAnswered = (a: SystemAnswer, ms: number) => ({
+    exchange: { answers: [a.answer], ms, notes: a.notes, server: systemServer },
+    verdict: classifySystem(a.answer, a.noAddress, reference),
+  });
+  const result: CheckResult = {
     ...base,
     checked: true,
-    exists: reference.exists,
-    filters: asked.map((filter, i) => ({
+    filters: filters.map((filter, i) => ({
       filter,
-      outcome: filterOutcome(g.filters[i], reference),
+      outcome: outcomeOf(g.filters[i], filterAnswered),
     })),
     network: g.network,
-    system: systemOutcome(g.system, reference),
+    realAnswer,
+    system: outcomeOf(g.system, systemAnswered),
   };
-  if (g.truth !== undefined && truth !== undefined) {
-    if (Result.isFailure(truth)) {
-      result = { ...result, truthError: truth.failure.message };
-    } else {
-      result = {
-        ...result,
-        truth: truth.success.addresses,
-        truthExchange: {
-          answers: truth.success.answers,
-          ms: g.truth.ms,
-          server: truth.success.server,
-          transport: "HTTPS 443",
-        },
-      };
-    }
-  }
   return { ...result, completion: completionOf(result) };
 };
 
@@ -154,23 +132,6 @@ const timedResult = <A, E extends { readonly message: string }, R>(
     )
   );
 
-/** The system resolver retries on its own, so it gets longer than a filter. */
-const systemTimeout = "5 seconds";
-
-const systemAnswer = (host: string) =>
-  lookupSystem(host).pipe(
-    Effect.timeoutOrElse({
-      duration: systemTimeout,
-      orElse: () =>
-        Effect.fail(
-          new QueryError({
-            reason: "no answer (timed out)",
-            server: systemServer,
-          })
-        ),
-    })
-  );
-
 /**
  * Asks everything about one name at once, reporting each answer. `query` is
  * the name as looked up, which can end in a dot that the shown name drops.
@@ -186,8 +147,8 @@ const checkName = <NetworkNeeds>(
     const state = yield* Ref.make<Gathered>({
       filters: options.filters.map(() => undefined),
       network: undefined,
+      realAnswer: undefined,
       system: undefined,
-      truth: undefined,
     });
     const report = (update: (g: Gathered) => Gathered) =>
       Ref.updateAndGet(state, update).pipe(
@@ -203,11 +164,14 @@ const checkName = <NetworkNeeds>(
     yield* progress(assemble(base, options.filters, yield* Ref.get(state)));
     yield* Effect.all(
       [
-        record(lookupTruth(options.truthUrls, query), (g, truth) => ({
+        record(
+          askUnfiltered(options.unfilteredResolvers, query),
+          (g, realAnswer) => ({ ...g, realAnswer })
+        ),
+        record(lookupSystem(query, base.host), (g, system) => ({
           ...g,
-          truth,
+          system,
         })),
-        record(systemAnswer(query), (g, system) => ({ ...g, system })),
         // Says whether an ISP's filter should have answered this computer,
         // and which filters' answers can be trusted.
         network.pipe(
@@ -225,16 +189,43 @@ const checkName = <NetworkNeeds>(
     return assemble(base, options.filters, yield* Ref.get(state));
   });
 
-export interface CheckerOptions {
-  readonly filters: readonly Filter[];
-  readonly truthUrls: readonly string[];
-}
-
-/** Which filters and resolvers to ask; tests swap them for fakes. */
-export const CheckerOptions = Context.Reference<CheckerOptions>(
-  "nbchecker/CheckerOptions",
-  { defaultValue: () => ({ filters, truthUrls: truthResolvers }) }
-);
+/** Checks an IP address by its reverse DNS name, as filters only see names. */
+const checkIp = <NetworkNeeds>(
+  target: string,
+  ip: string,
+  network: Effect.Effect<Network, never, NetworkNeeds>
+) =>
+  Effect.gen(function* () {
+    const base = unchecked(target, ip, true);
+    const named = yield* reverseName(ip).pipe(Effect.result);
+    if (Result.isFailure(named)) {
+      const error = named.failure.message;
+      return {
+        ...base,
+        completion: "incomplete",
+        lookupError: error,
+        notes: [ipNote, `Could not look up its reverse DNS name: ${error}`],
+      } satisfies CheckResult;
+    }
+    const name = named.success;
+    if (name === undefined) {
+      return {
+        ...base,
+        notes: [
+          ipNote,
+          "The address has no reverse DNS name, so there is nothing else to check.",
+        ],
+      } satisfies CheckResult;
+    }
+    return yield* checkName(
+      {
+        ...base,
+        host: name,
+        notes: [ipNote, `Checking its reverse DNS name ${name} instead.`],
+      },
+      network
+    );
+  });
 
 /**
  * Checks a domain, URL or IP address. `network` is found out once per run,
@@ -262,9 +253,5 @@ export const check = <NetworkNeeds>(
         t.query
       );
     }
-    const named = yield* reverseName(target, t.host);
-    if (named.host === t.host || named.lookupError !== undefined) {
-      return { ...named, completion: completionOf(named) };
-    }
-    return yield* checkName(named, network);
+    return yield* checkIp(target, t.host, network);
   });

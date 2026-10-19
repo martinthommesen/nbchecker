@@ -4,39 +4,40 @@
  */
 import { describe, expect, test } from "bun:test";
 import { Dns } from "effect/net";
-import type { Category, Filter } from "../check/filters.ts";
-import { type CheckResult, isBlocked } from "../check/result.ts";
-import { fakeCanary } from "../testing/fake-network.ts";
-import { downTruthUrl, runCheck } from "../testing/run-check.ts";
+import { isBlocked } from "../check/evidence.ts";
+import {
+  type CheckResult,
+  nameExists,
+  realAddresses,
+} from "../check/result.ts";
+import {
+  exitBlocked,
+  exitCode,
+  exitIncomplete,
+  exitNotBlocked,
+} from "../cli/exit-status.ts";
+import { downRealAnswerUrl, fakeFilter } from "../testing/fake-network.ts";
+import { runCheck } from "../testing/run-check.ts";
+import { plainText } from "../tui/paint.ts";
 import { initialState } from "../tui/state.ts";
 import { summaryText } from "../tui/summary.ts";
-import { exitBlocked, exitCode, exitIncomplete, toJson } from "./json.ts";
+import { toJson } from "./json.ts";
 import { renderText } from "./text.ts";
 import { view } from "./view.ts";
 
 const text = (r: CheckResult): string => renderText(view(r), false);
 
 const screen = (r: CheckResult): string =>
-  summaryText({ ...initialState("0.0.0"), result: r }, true)
-    .chunks.map((c) => c.text)
-    .join("");
-
-/** A filter with one server, which blocks the fake canary. */
-const fake = (category: Category, name: string, server: string): Filter => ({
-  canary: fakeCanary,
-  category,
-  name,
-  servers: [server],
-});
+  plainText(summaryText({ ...initialState("0.0.0"), result: r }, true));
 
 const json = (r: CheckResult) => toJson({ dnsFilter: "", version: "" }, [r]);
 
 describe("verdicts: names without an address this computer can use", () => {
   test("an existing name without addresses is not blocked here", async () => {
     const r = await runCheck("mail.example");
-    expect(r.exists).toBe(true);
+    expect(nameExists(r)).toBe(true);
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
     expect(text(r)).toContain("– Your DNS         no address on this computer");
     expect(text(r)).toContain("the domain exists, but has no addresses");
     expect(text(r)).not.toContain("doesn't exist");
@@ -45,7 +46,7 @@ describe("verdicts: names without an address this computer can use", () => {
   test("an IPv6-only name on a computer without IPv6 is not blocked", async () => {
     const r = await runCheck("v6.example");
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 
   test("no address for a name with an IPv4 address is a block", async () => {
@@ -63,13 +64,15 @@ describe("verdicts: names without an address this computer can use", () => {
 describe("verdicts: compared with the real answer", () => {
   test("a domain whose own record is 0.0.0.0 is not blocked", async () => {
     const r = await runCheck("zero.example");
-    expect(r.truth).toEqual(["0.0.0.0"]);
+    expect(realAddresses(r)).toEqual(["0.0.0.0"]);
     expect(isBlocked(r)).toBe(false);
     expect(text(r)).toContain("✓ not blocked by any of 2 filters");
   });
 
   test("a filter's NXDOMAIN without the real answer can't be told", async () => {
-    const r = await runCheck("nope.example", { truthUrls: [downTruthUrl] });
+    const r = await runCheck("nope.example", {
+      unfilteredResolvers: [downRealAnswerUrl],
+    });
     expect(text(r)).toContain(
       "? couldn't tell: the real answer is unavailable"
     );
@@ -83,7 +86,7 @@ describe("verdicts: compared with the real answer", () => {
 
   test("a name only this computer resolves isn't said not to exist", async () => {
     const r = await runCheck("private.example");
-    expect(r.exists).toBe(false);
+    expect(nameExists(r)).toBe(false);
     expect(text(r)).toContain(
       "– only resolves on this computer (private or split DNS)"
     );
@@ -96,7 +99,7 @@ describe("verdicts: compared with the real answer", () => {
     const r = await runCheck("nope.example");
     expect(text(r)).toContain("– the domain doesn't exist");
     expect(screen(r)).toContain("DOESN'T EXIST");
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
   });
 });
 
@@ -111,7 +114,7 @@ describe("verdicts: block answers", () => {
   });
 
   test("a plain REFUSED is a failure, named as such", async () => {
-    const refusing = fake("security", "Refusing", "192.0.2.53");
+    const refusing = fakeFilter("security", "Refusing", "192.0.2.53");
     const r = await runCheck("refused.example", { filters: [refusing] });
     expect(r.filters[0]?.outcome).toMatchObject({
       error: "192.0.2.53: REFUSED",
@@ -133,7 +136,7 @@ describe("verdicts: block answers", () => {
   test("Cisco's inspection proxy is inspected, not blocked", async () => {
     const r = await runCheck("grey.example");
     expect(isBlocked(r)).toBe(false);
-    expect(exitCode([r])).toBe(0);
+    expect(exitCode([r])).toBe(exitNotBlocked);
     expect(text(r)).toContain(
       "! Security filter  sent through Cisco's inspection proxy; the site may still be blocked by URL"
     );
@@ -153,8 +156,8 @@ describe("verdicts: block answers", () => {
   test("blocked by counts only the filters that answered", async () => {
     const r = await runCheck("bad.example", {
       filters: [
-        fake("ads", "Down", "203.0.113.1"),
-        fake("family", "Family", "198.51.100.53"),
+        fakeFilter("ads", "Down", "203.0.113.1"),
+        fakeFilter("family", "Family", "198.51.100.53"),
       ],
     });
     expect(text(r)).toContain("✗ blocked by 1 of 1 filters");
@@ -170,6 +173,6 @@ describe("verdicts: text from the network", () => {
     expect(out).not.toContain("\n  ✓ Fake");
     const narrow = summaryText({ ...initialState("0.0.0"), result: r }, false);
     expect(narrow.chunks.filter((c) => c.text === "\n")).toHaveLength(1);
-    expect(narrow.chunks.map((c) => c.text).join("")).not.toContain("\n  ✓");
+    expect(plainText(narrow)).not.toContain("\n  ✓");
   });
 });

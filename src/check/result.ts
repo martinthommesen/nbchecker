@@ -1,25 +1,29 @@
+/**
+ * What a check finds out, from one answer up to the whole check: a Verdict
+ * reads one resolver's answer, an Outcome says how asking one resolver went,
+ * and the Completion (see evidence.ts) and the report's Status sum up the
+ * whole check.
+ */
 import type { DnsAnswer } from "../dns/wire.ts";
-import type { Verdict } from "./classify.ts";
+import type { Reference, Verdict } from "./classify.ts";
 import type { Connection } from "./connection.ts";
 import type { Filter } from "./filters.ts";
 
-const outcomeBlocks = (o: Outcome | undefined): boolean =>
-  o?.kind === "answered" && o.verdict.blocked;
+const cancelled = { kind: "cancelled" } as const;
 
-/** The error of a lookup that was still running when a check was cancelled. */
-const cancelledError = "cancelled";
-
-const cancelled: Outcome = { error: cancelledError, kind: "failed", ms: 0 };
-
-const settle = (o: Outcome): Outcome => {
+/** A lookup still on its way when the check was cancelled never arrives. */
+const settle = <A>(o: Outcome<A>): Outcome<A> => {
   if (o.kind === "pending") {
     return cancelled;
   }
   return o;
 };
 
-/** One failed self-test marks that filter, not the whole network. */
-const minRedirected = 2;
+/** A filter's or this computer's answer, and what it means for the name. */
+interface Resolved {
+  readonly exchange: Exchange;
+  readonly verdict: Verdict;
+}
 
 /** How one resolver was asked, and what it said. */
 export interface Exchange {
@@ -29,18 +33,20 @@ export interface Exchange {
   /** What the raw answers leave out, such as a CNAME query that failed. */
   readonly notes?: readonly string[];
   readonly server: string;
-  /** How it was asked, such as "UDP 53". */
-  readonly transport: string;
 }
 
-export type Outcome =
+/**
+ * How asking one resolver went: still on its way, cut short by a cancelled
+ * check, failed, or answered with `A`.
+ */
+export type Outcome<A = Resolved> =
   | { readonly kind: "pending" }
+  | { readonly kind: "cancelled" }
   | { readonly error: string; readonly kind: "failed"; readonly ms: number }
-  | {
-      readonly exchange: Exchange;
-      readonly kind: "answered";
-      readonly verdict: Verdict;
-    };
+  | (A & { readonly kind: "answered" });
+
+/** What the unfiltered resolver says, and how it was asked. */
+export type RealAnswer = Reference & { readonly exchange: Exchange };
 
 /**
  * How a filter answered the self-test, which asks it for a name it
@@ -78,8 +84,6 @@ export interface CheckResult {
   /** DNS was checked; false for an IP address with no reverse name. */
   readonly checked: boolean;
   readonly completion: Completion;
-  /** An unfiltered resolver found the name. */
-  readonly exists: boolean;
   readonly filters: readonly FilterResult[];
   /** The name looked up: from a URL, or the reverse name of an IP. */
   readonly host: string;
@@ -93,123 +97,75 @@ export interface CheckResult {
    */
   readonly network: Network | undefined;
   readonly notes: readonly string[];
-  /** What this computer's own DNS says; undefined when not checked. */
-  readonly system: Outcome | undefined;
+  /**
+   * The unfiltered answer every other answer is read against; pending when
+   * not checked.
+   */
+  readonly realAnswer: Outcome<RealAnswer>;
+  /** What this computer's own DNS says; pending when not checked. */
+  readonly system: Outcome;
   readonly target: string;
-  /** The unfiltered answers. */
-  readonly truth: readonly string[];
-  readonly truthError: string | undefined;
-  /** How the unfiltered answer was fetched; undefined until it arrives. */
-  readonly truthExchange: Exchange | undefined;
 }
 
-export const pending: Outcome = { kind: "pending" };
+/**
+ * A lookup still on its way, or one never asked because the target isn't
+ * checked.
+ */
+export const pending = { kind: "pending" } as const;
 
-/** Whether the real answer was cut short by a cancelled check. */
-export const truthCancelled = (r: CheckResult): boolean =>
-  r.truthError === cancelledError;
+/** Whether a lookup is over, whichever way it went. */
+export const settled = (o: Outcome<unknown>): boolean => o.kind !== "pending";
 
-/** Whether an outcome is a lookup cut short by a cancelled check. */
-export const wasCancelled = (o: Outcome): boolean =>
-  o.kind === "failed" && o.error === cancelledError;
+/** Whether a lookup ended without an answer: it failed, or was cancelled. */
+export const unavailable = <A>(
+  o: Outcome<A>
+): o is Extract<Outcome<A>, { readonly kind: "cancelled" | "failed" }> =>
+  o.kind === "failed" || o.kind === "cancelled";
 
 /**
- * Whether a filter should answer this computer. One that only answers its
- * own network's customers needn't, unless this computer is on that network,
- * or the connection couldn't be detected, so nobody can tell.
+ * Whether the real answer is still on its way; false for a target that was
+ * never checked, whose lookups stay pending.
  */
-export const shouldAnswer = (r: CheckResult, f: Filter): boolean => {
-  const c = r.network?.connection;
-  if (f.network === undefined || c === undefined || c.error !== undefined) {
-    return true;
-  }
-  return c.network === f.network;
-};
+export const realAnswerPending = (r: CheckResult): boolean =>
+  r.checked && r.realAnswer.kind === "pending";
 
-/** The filters that failed the self-test. */
-export const redirectedFilters = (n: Network): readonly string[] =>
-  n.selfTests.filter((t) => t.result === "redirected").map((t) => t.filter);
+/** Whether the real answer arrived. */
+export const realAnswerKnown = (r: CheckResult): boolean =>
+  r.realAnswer.kind === "answered";
 
-/**
- * Whether most filters that answered the self-test failed it, and more than
- * one did, so DNS on this network seems to be intercepted.
- */
-export const seemsIntercepted = (n: Network | undefined): boolean => {
-  if (n === undefined) {
-    return false;
+/** Whether the real answer failed or was cut short by a cancel. */
+export const realAnswerUnavailable = (r: CheckResult): boolean =>
+  unavailable(r.realAnswer);
+
+/** Whether the real answer says the name exists. */
+export const nameExists = (r: CheckResult): boolean =>
+  r.realAnswer.kind === "answered" && r.realAnswer.exists;
+
+/** The real answer's addresses; none until it arrives. */
+export const realAddresses = (r: CheckResult): readonly string[] => {
+  if (r.realAnswer.kind === "answered") {
+    return r.realAnswer.addresses;
   }
-  const passed = n.selfTests.filter((t) => t.result === "passed").length;
-  const redirected = redirectedFilters(n).length;
-  return redirected >= minRedirected && redirected > passed;
+  return [];
 };
 
 /**
- * Whether a filter's answers seem to come from somewhere else and say
- * nothing about the filter: it failed the self-test, or it has none on a
- * network that seems to intercept DNS.
+ * Marks everything that hadn't answered when a check was cancelled. The real
+ * answer and this computer's lookup only when the check asked them.
  */
-export const isRedirected = (r: CheckResult, f: Filter): boolean => {
-  const test = r.network?.selfTests.find((t) => t.filter === f.name);
-  if (test?.result === "redirected") {
-    return true;
-  }
-  return test?.result === "untested" && seemsIntercepted(r.network);
-};
-
-/** The filters whose answers count: all but those that seem redirected. */
-export const trustedFilters = (r: CheckResult): readonly FilterResult[] =>
-  r.filters.filter((f) => !isRedirected(r, f.filter));
-
-/**
- * Works out whether everything that should have answered did, with answers
- * that can be trusted.
- */
-export const completionOf = (r: CheckResult): Completion => {
-  if (r.lookupError !== undefined) {
-    return "incomplete";
-  }
-  if (!r.checked) {
-    return "complete";
-  }
-  const outcomes = [r.system, ...r.filters.map((f) => f.outcome)];
-  const failed = (o: Outcome | undefined) => o?.kind === "failed";
-  if (
-    r.network === undefined ||
-    r.truthExchange === undefined ||
-    outcomes.some((o) => o === undefined || o.kind === "pending") ||
-    failed(r.system) ||
-    r.filters.some((f) => failed(f.outcome) && shouldAnswer(r, f.filter)) ||
-    r.filters.some((f) => isRedirected(r, f.filter))
-  ) {
-    return "incomplete";
-  }
-  return "complete";
-};
-
-/** Whether any trusted filter, or this computer, blocks the target. */
-export const isBlocked = (r: CheckResult): boolean =>
-  trustedFilters(r).some((f) => outcomeBlocks(f.outcome)) ||
-  outcomeBlocks(r.system);
-
-/** Whether the unfiltered answer is still on its way. */
-export const truthPending = (r: CheckResult): boolean =>
-  r.checked && r.truthError === undefined && r.truthExchange === undefined;
-
-/** Marks everything that hadn't answered when a check was cancelled. */
 export const cancelPending = (r: CheckResult): CheckResult => {
-  let { system, truthError } = r;
-  if (system !== undefined) {
-    system = settle(system);
-  }
-  if (truthPending(r)) {
-    truthError = cancelledError;
-  }
-  return {
+  const stopped: CheckResult = {
     ...r,
     completion: "cancelled",
     filters: r.filters.map((f) => ({ ...f, outcome: settle(f.outcome) })),
-    system,
-    truthError,
+  };
+  if (!r.checked) {
+    return stopped;
+  }
+  return {
+    ...stopped,
+    realAnswer: settle(r.realAnswer),
+    system: settle(r.system),
   };
 };
 
@@ -221,16 +177,13 @@ export const unchecked = (
 ): CheckResult => ({
   checked: false,
   completion: "complete",
-  exists: false,
   filters: [],
   host,
   isIp,
   lookupError: undefined,
   network: undefined,
   notes: [],
-  system: undefined,
+  realAnswer: pending,
+  system: pending,
   target,
-  truth: [],
-  truthError: undefined,
-  truthExchange: undefined,
 });

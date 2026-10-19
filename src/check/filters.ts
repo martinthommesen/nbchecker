@@ -1,14 +1,25 @@
 /** The filtering DNS services nbchecker asks. */
+import {
+  nullAddresses,
+  telenorTestPage,
+  umbrellaBlockPages,
+} from "./known-answers.ts";
+
+/** Telenor's filters only answer its own customers. */
+const telenorCustomers = {
+  customers: "Telenor customers",
+  network: telenorTestPage.network,
+};
+
+/** Telenor's test page as a canary: only `filter`'s own address passes. */
+const telenorCanary = (filter: string): Canary => ({
+  answers: telenorTestPage.answers
+    .filter((a) => a.filter === filter)
+    .map((a) => a.ip),
+  name: telenorTestPage.name,
+});
 
 /** What a filter blocks; results are grouped by this, not by provider. */
-/** Umbrella's block pages, 146.112.61.104 to .110, as OpenDNS answers. */
-const umbrellaBlock = ["104", "105", "106", "107", "108", "109", "110"].map(
-  (n) => `146.112.61.${n}`
-);
-
-/** Cloudflare's filters answer a blocked name with these. */
-const cloudflareBlock = ["0.0.0.0", "::"];
-
 export type Category = "ads" | "family" | "security";
 
 /**
@@ -39,24 +50,23 @@ export interface Filter {
   readonly canary?: Canary;
   readonly category: Category;
   readonly name: string;
-  /**
-   * The network whose customers it answers, as connection detection names
-   * it. Set along with `onlyAnswers`.
-   */
-  readonly network?: string;
-  /** Set when the servers only answer some networks, such as one ISP's. */
-  readonly onlyAnswers?: string;
+  /** Set when the servers only answer one network's customers, as an ISP's. */
+  readonly onlyAnswers?: {
+    /** Who it answers, in words, such as "Telenor customers". */
+    readonly customers: string;
+    /** The network, as connection detection names it. */
+    readonly network: string;
+  };
   readonly servers: readonly string[];
 }
 
 export const filters: readonly Filter[] = [
   {
     // Telenor's test page, which each of its filters answers differently.
-    canary: { answers: ["148.123.15.38"], name: "nettvern.telenor.net" },
+    canary: telenorCanary("Telenor Nettvern"),
     category: "security",
     name: "Telenor Nettvern",
-    network: "Telenor",
-    onlyAnswers: "Telenor customers",
+    onlyAnswers: telenorCustomers,
     servers: [
       "148.122.16.253",
       "148.122.164.253",
@@ -65,11 +75,10 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { answers: ["148.123.15.1"], name: "nettvern.telenor.net" },
+    canary: telenorCanary("Telenor Nettvern+"),
     category: "family",
     name: "Telenor Nettvern+",
-    network: "Telenor",
-    onlyAnswers: "Telenor customers",
+    onlyAnswers: telenorCustomers,
     servers: [
       "148.122.16.252",
       "148.122.164.252",
@@ -78,7 +87,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { answers: cloudflareBlock, name: "malware.testcategory.com" },
+    canary: { answers: nullAddresses, name: "malware.testcategory.com" },
     category: "security",
     name: "Cloudflare Security",
     servers: [
@@ -89,7 +98,7 @@ export const filters: readonly Filter[] = [
     ],
   },
   {
-    canary: { answers: cloudflareBlock, name: "nudity.testcategory.com" },
+    canary: { answers: nullAddresses, name: "nudity.testcategory.com" },
     category: "family",
     name: "Cloudflare Family",
     servers: [
@@ -106,7 +115,10 @@ export const filters: readonly Filter[] = [
   },
   {
     // Any of Umbrella's block pages; a content category usually gets .106.
-    canary: { answers: umbrellaBlock, name: "exampleadultsite.com" },
+    canary: {
+      answers: [...umbrellaBlockPages.keys()],
+      name: "exampleadultsite.com",
+    },
     category: "family",
     name: "OpenDNS FamilyShield",
     servers: [
@@ -159,7 +171,7 @@ export const filters: readonly Filter[] = [
 ];
 
 /** Unfiltered DNS-over-HTTPS resolvers give the real answer from anywhere. */
-export const truthResolvers: readonly string[] = [
+export const unfilteredResolvers: readonly string[] = [
   "https://cloudflare-dns.com/dns-query",
   "https://dns.google/dns-query",
 ];

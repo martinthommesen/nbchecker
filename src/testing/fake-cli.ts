@@ -9,16 +9,15 @@ import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { env } from "bun";
 import { Console, Effect, Layer } from "effect";
 import { Dns } from "effect/net";
-import { CheckerOptions } from "../check/checker.ts";
-import { cli } from "../cli.ts";
+import { CheckerOptions } from "../check/options.ts";
+import { cli } from "../cli/command.ts";
 import { DnsTransport } from "../dns/transport.ts";
 import {
   computer,
-  fakeFilters,
+  fakeOptions,
   fakeTransport,
   redirectingTransport,
 } from "./fake-network.ts";
-import { truthUrl } from "./run-check.ts";
 
 const { NBCHECKER_FAKE_NETWORK: network, NBCHECKER_FAKE_QUERIES: logQueries } =
   env;
@@ -66,10 +65,7 @@ const recordedComputer = Layer.effect(
 ).pipe(Layer.provide(computer));
 
 cli.pipe(
-  Effect.provideService(CheckerOptions, {
-    filters: fakeFilters,
-    truthUrls: [truthUrl],
-  }),
+  Effect.provideService(CheckerOptions, fakeOptions),
   Effect.provide(
     Layer.mergeAll(BunServices.layer, recordedTransport, recordedComputer)
   ),

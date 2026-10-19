@@ -8,9 +8,10 @@ import {
   HttpClientRequest,
   type HttpClientResponse,
 } from "effect/http";
-import type { MalformedResponse } from "./malformed.ts";
+import { concat } from "./bytes.ts";
+import type { MalformedMessage } from "./malformed.ts";
 import { mismatch } from "./match.ts";
-import { QueryError } from "./query-error.ts";
+import { QueryError, timeoutAfter } from "./query-error.ts";
 import { sendTcp, sendUdp } from "./sockets.ts";
 import {
   type DnsAnswer,
@@ -24,29 +25,40 @@ const dnsMessage = "application/dns-message";
 /** The largest DNS message, and so the largest DoH body (RFC 8484). */
 const maxMessageBytes = 65_535;
 
+/** Sends a query message to a server and returns the reply to it. */
+type Send = (
+  server: string,
+  port: number,
+  packet: Uint8Array
+) => Effect.Effect<Uint8Array, QueryError>;
+
 /** A random 16-bit ID; unpredictable IDs make forged answers harder. */
 const randomId = (): number => {
   const [id = 0] = globalThis.crypto.getRandomValues(new Uint16Array(1));
   return id;
 };
 
-const malformed = (server: string) => (error: MalformedResponse) =>
-  new QueryError({ reason: error.reason, server });
+/** A message that can't be encoded or decoded fails the query to `server`. */
+const asQueryError = (server: string) =>
+  Effect.mapError(
+    (error: MalformedMessage) =>
+      new QueryError({ reason: error.reason, server })
+  );
 
 const failed =
   (server: string) =>
   (error: { readonly message: string }): QueryError =>
     new QueryError({ reason: error.message, server });
 
-const timedOut = (server: string) => () =>
-  Effect.fail(new QueryError({ reason: "no answer (timed out)", server }));
-
-const append = (a: Uint8Array, b: Uint8Array): Uint8Array => {
-  const out = new Uint8Array(a.length + b.length);
-  out.set(a);
-  out.set(b, a.length);
-  return out;
-};
+/** Fails with `reason` when only part of the answer came back. */
+const rejectTruncated =
+  (server: string, reason: string) =>
+  (answer: DnsAnswer): Effect.Effect<DnsAnswer, QueryError> => {
+    if (answer.truncated) {
+      return Effect.fail(new QueryError({ reason, server }));
+    }
+    return Effect.succeed(answer);
+  };
 
 /** Reads a DoH body, giving up as soon as it is bigger than a DNS message. */
 const readBody = (
@@ -63,82 +75,73 @@ const readBody = (
             new QueryError({ reason: "answer is too big", server: url })
           );
         }
-        return Effect.succeed(append(body, chunk));
+        return Effect.succeed(concat([body, chunk]));
       }
     )
+  );
+
+/** Posts a query to a DoH endpoint and reads the reply. */
+const post = (
+  client: HttpClient.HttpClient,
+  url: string,
+  packet: Uint8Array
+) => {
+  const request = HttpClientRequest.post(url).pipe(
+    HttpClientRequest.setHeader("accept", dnsMessage),
+    HttpClientRequest.bodyUint8Array(packet, dnsMessage)
+  );
+  return client.execute(request).pipe(
+    Effect.mapError(failed(url)),
+    Effect.flatMap((response) => readBody(response, url))
+  );
+};
+
+/** Sends a query one way, UDP or TCP, and decodes the reply. */
+const exchange = (
+  send: Send,
+  server: string,
+  port: number,
+  packet: Uint8Array
+) =>
+  send(server, port, packet).pipe(
+    Effect.flatMap((reply) => decodeResponse(reply).pipe(asQueryError(server)))
   );
 
 const ask = (port: number) => (server: string, name: string, type: QueryType) =>
   Effect.gen(function* () {
     const packet = yield* encodeQuery(randomId(), name, type).pipe(
-      Effect.mapError(malformed(server))
+      asQueryError(server)
     );
-    const answer = yield* sendUdp(server, port, packet).pipe(
-      Effect.flatMap(decodeResponse),
-      Effect.mapError((e) => {
-        if (e._tag === "MalformedResponse") {
-          return malformed(server)(e);
-        }
-        return e;
-      })
-    );
+    const answer = yield* exchange(sendUdp, server, port, packet);
     if (!answer.truncated) {
       return answer;
     }
-    const full = yield* sendTcp(server, port, packet).pipe(
-      Effect.flatMap(decodeResponse),
-      Effect.mapError((e) => {
-        if (e._tag === "MalformedResponse") {
-          return malformed(server)(e);
-        }
-        return e;
-      })
+    // Classifying part of an answer could miss a block.
+    return yield* exchange(sendTcp, server, port, packet).pipe(
+      Effect.flatMap(
+        rejectTruncated(server, "answer was truncated over TCP too")
+      )
     );
-    if (full.truncated) {
-      // Classifying part of an answer could miss a block.
-      return yield* Effect.fail(
-        new QueryError({ reason: "answer was truncated over TCP too", server })
-      );
-    }
-    return full;
-  }).pipe(
-    Effect.timeoutOrElse({ duration: "2 seconds", orElse: timedOut(server) })
-  );
+  }).pipe(timeoutAfter("2 seconds", server));
 
 const doh =
   (client: HttpClient.HttpClient) =>
   (url: string, name: string, type: QueryType) =>
     Effect.gen(function* () {
-      const packet = yield* encodeQuery(0, name, type).pipe(
-        Effect.mapError(malformed(url))
-      );
-      const request = HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeader("accept", dnsMessage),
-        HttpClientRequest.bodyUint8Array(packet, dnsMessage)
-      );
-      const response = yield* client
-        .execute(request)
-        .pipe(Effect.mapError(failed(url)));
-      const body = yield* readBody(response, url);
+      const packet = yield* encodeQuery(0, name, type).pipe(asQueryError(url));
+      const body = yield* post(client, url, packet);
       const problem = mismatch(packet, body);
       if (problem !== undefined) {
         return yield* Effect.fail(
           new QueryError({ reason: problem, server: url })
         );
       }
-      const answer = yield* decodeResponse(body).pipe(
-        Effect.mapError(malformed(url))
+      // A partial reference answer could make a filter look like it blocks.
+      return yield* decodeResponse(body).pipe(
+        asQueryError(url),
+        Effect.flatMap(rejectTruncated(url, "answer was truncated"))
       );
-      if (answer.truncated) {
-        // A partial reference answer could make a filter look like it blocks.
-        return yield* Effect.fail(
-          new QueryError({ reason: "answer was truncated", server: url })
-        );
-      }
-      return answer;
-    }).pipe(
-      Effect.timeoutOrElse({ duration: "5 seconds", orElse: timedOut(url) })
-    );
+    }).pipe(timeoutAfter("5 seconds", url));
 
 export interface DnsTransportShape {
   /** Asks one DNS server over UDP, retrying over TCP when truncated. */

@@ -1,99 +1,92 @@
-/** Builds DNS response messages for tests. */
+/**
+ * Builds DNS messages for tests: responses, the query they answer, and
+ * messages written by hand as hex dumps. The responses use the codec's own
+ * constants, so only hand-written bytes can catch a wrong one.
+ */
+import { Effect } from "effect";
 import { NetAddress } from "effect/net";
+import { concat, uint16s } from "../dns/bytes.ts";
+import { Rcode } from "../dns/codes.ts";
+import {
+  classIn,
+  extendedErrorOption,
+  extendedRcodeUnit,
+  Flag,
+  RecordType,
+  rcodeValues,
+  uint16Bytes,
+  uint32Bytes,
+} from "../dns/protocol.ts";
 import { Reader } from "../dns/reader.ts";
-import type { DnsRecord, ExtendedError, QueryType } from "../dns/wire.ts";
+import {
+  type DnsRecord,
+  type ExtendedError,
+  encodeName,
+  encodeQuery,
+  type QueryType,
+  typeCode,
+} from "../dns/wire.ts";
 
-const typeA = 1;
-const typeCname = 5;
-const typeAaaa = 28;
-const typeCodes = new Map<DnsRecord["type"], number>([
-  ["A", typeA],
-  ["AAAA", typeAaaa],
-  ["CNAME", typeCname],
-]);
-const questionTypes = new Map<number, QueryType>([
-  [typeA, "A"],
-  [typeAaaa, "AAAA"],
-]);
-const typeOpt = 41;
-const classIn = 1;
 const ttl = 60;
-const flagResponse = 0x80_00;
-const flagTruncated = 0x02_00;
-const rcodeValues = 16;
-const extendedRcodeMultiplier = 2 ** 24;
-const extendedErrorOption = 15;
-const uint16Bytes = 2;
-const uint32Bytes = 4;
-const headerLength = 12;
 const encoder = new TextEncoder();
+const hexRadix = 16;
+const whitespace = /\s+/;
 
-const bytes = (...parts: readonly (number[] | Uint8Array)[]): number[] =>
-  parts.flatMap((p) => [...p]);
-
-const u16 = (n: number): number[] => {
-  const b = new Uint8Array(uint16Bytes);
-  new DataView(b.buffer).setUint16(0, n);
-  return [...b];
+const uint32 = (n: number): Uint8Array => {
+  const out = new Uint8Array(uint32Bytes);
+  new DataView(out.buffer).setUint32(0, n);
+  return out;
 };
 
-const u32 = (n: number): number[] => {
-  const b = new Uint8Array(uint32Bytes);
-  new DataView(b.buffer).setUint32(0, n);
-  return [...b];
-};
-
-const name = (n: string): number[] =>
-  bytes(
-    ...n
-      .split(".")
-      .filter((l) => l !== "")
-      .map((l) => bytes([l.length], encoder.encode(l))),
-    [0]
-  );
-
-const rdata = (r: DnsRecord): number[] => {
+const rdata = (r: DnsRecord): Uint8Array => {
   if (r.type === "CNAME") {
-    return name(r.value);
+    return encodeName(r.value);
   }
   const ip = NetAddress.ipFromStringUnsafe(r.value);
   if (NetAddress.isIpv4Address(ip)) {
-    return [...NetAddress.ipv4ToOctets(ip)];
+    return Uint8Array.from(NetAddress.ipv4ToOctets(ip));
   }
-  return [...NetAddress.ipv6ToOctets(ip)];
+  return Uint8Array.from(NetAddress.ipv6ToOctets(ip));
 };
 
-const record = (r: DnsRecord): number[] => {
+const record = (r: DnsRecord): Uint8Array => {
   const data = rdata(r);
-  return bytes(
-    name(r.name),
-    u16(typeCodes.get(r.type) ?? 0),
-    u16(classIn),
-    u32(ttl),
-    u16(data.length),
-    data
-  );
+  return concat([
+    encodeName(r.name),
+    uint16s(typeCode(r.type), classIn),
+    uint32(ttl),
+    uint16s(data.length),
+    data,
+  ]);
 };
 
-const opt = (rcode: number, errors: readonly ExtendedError[]): number[] => {
-  const options = errors.flatMap((e) => {
-    const text = encoder.encode(e.text);
-    return bytes(
-      u16(extendedErrorOption),
-      u16(text.length + uint16Bytes),
-      u16(e.code),
-      text
-    );
-  });
-  const extended = Math.floor(rcode / rcodeValues) * extendedRcodeMultiplier;
-  return bytes(
-    [0],
-    u16(typeOpt),
-    u16(classIn),
-    u32(extended),
-    u16(options.length),
-    options
-  );
+const extendedError = (e: ExtendedError): Uint8Array => {
+  const text = encoder.encode(e.text);
+  return concat([
+    uint16s(extendedErrorOption, text.length + uint16Bytes, e.code),
+    text,
+  ]);
+};
+
+/** An OPT record with the rcode's upper bits and the Extended DNS Errors. */
+const opt = (rcode: number, errors: readonly ExtendedError[]): Uint8Array => {
+  const options = concat(errors.map(extendedError));
+  const extended = Math.floor(rcode / rcodeValues) * extendedRcodeUnit;
+  return concat([
+    Uint8Array.of(0),
+    uint16s(RecordType.opt, classIn),
+    uint32(extended),
+    uint16s(options.length),
+    options,
+  ]);
+};
+
+/** The type a question asks for; the tests only ask for A and AAAA. */
+const queryType = (code: number): QueryType => {
+  if (code === RecordType.aaaa) {
+    return "AAAA";
+  }
+  return "A";
 };
 
 export interface ResponseSpec {
@@ -106,38 +99,52 @@ export interface ResponseSpec {
   readonly truncated?: boolean;
 }
 
-/** Encodes a response with an optional OPT record. */
+/**
+ * Encodes a response with one question, the records and an OPT record that
+ * carries the rcode's upper bits and any Extended DNS Errors.
+ */
 export const response = (spec: ResponseSpec): Uint8Array => {
   const records = spec.records ?? [];
-  const rcode = spec.rcode ?? 0;
-  const errors = spec.extendedErrors ?? [];
-  let flags = flagResponse + (rcode % rcodeValues);
+  const rcode = spec.rcode ?? Rcode.noError;
+  let flags = Flag.response + (rcode % rcodeValues);
   if (spec.truncated === true) {
-    flags += flagTruncated;
+    flags += Flag.truncated;
   }
-  return Uint8Array.from(
-    bytes(
-      u16(spec.id ?? 0),
-      u16(flags),
-      u16(1),
-      u16(records.length),
-      u16(0),
-      u16(1),
-      name(spec.question ?? "example.com"),
-      u16(typeCodes.get(spec.questionType ?? "A") ?? typeA),
-      u16(classIn),
-      ...records.map(record),
-      opt(rcode, errors)
-    )
-  );
+  return concat([
+    // Header: one question, the records, no authorities, the OPT record.
+    uint16s(spec.id ?? 0, flags, 1, records.length, 0, 1),
+    encodeName(spec.question ?? "example.com"),
+    uint16s(typeCode(spec.questionType ?? "A"), classIn),
+    ...records.map(record),
+    opt(rcode, spec.extendedErrors ?? []),
+  ]);
 };
 
-/** Encodes a response to `query`, with its ID and question. */
-export const replyTo = (query: Uint8Array, spec: ResponseSpec = {}) => {
-  const r = new Reader(query);
-  const id = r.u16();
-  r.offset = headerLength;
-  const question = r.name();
-  const questionType = questionTypes.get(r.u16()) ?? "A";
-  return response({ id, question, questionType, ...spec });
+/** Encodes a response to the query `asked`, with its ID and question. */
+export const replyTo = (asked: Uint8Array, spec: ResponseSpec = {}) => {
+  const r = new Reader(asked);
+  const { id } = r.header();
+  const question = r.question();
+  return response({
+    id,
+    question: question.name,
+    questionType: queryType(question.type),
+    ...spec,
+  });
 };
+
+/** The ID of `query`. */
+export const queryId = 7;
+
+/** An A query for example.com, as nbchecker sends one. */
+export const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
+
+/** Turns "0a 0b ..." into bytes, so test messages read like a hex dump. */
+export const hex = (s: string): Uint8Array =>
+  Uint8Array.from(s.split(whitespace).filter(Boolean), (b) =>
+    Number.parseInt(b, hexRadix)
+  );
+
+/** Writes bytes as "0a 0b ...", the way `hex` reads them. */
+export const toHex = (bytes: Uint8Array): string =>
+  [...bytes].map((b) => b.toString(hexRadix).padStart(2, "0")).join(" ");

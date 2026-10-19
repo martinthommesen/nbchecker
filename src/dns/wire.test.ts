@@ -1,34 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { response } from "../testing/response.ts";
-import { decodeResponse, encodeQuery, Rcode, responseId } from "./wire.ts";
+import { hex, response, toHex } from "../testing/response.ts";
+import { Ede, Rcode } from "./codes.ts";
+import { Reader } from "./reader.ts";
+import { decodeResponse, encodeQuery } from "./wire.ts";
 
 const decode = (bytes: Uint8Array) => Effect.runSync(decodeResponse(bytes));
 const decodeError = (bytes: Uint8Array) =>
   Effect.runSync(Effect.flip(decodeResponse(bytes)));
 
-const hexRadix = 16;
-const whitespace = /\s+/;
 const longestLabel = 63;
 
-/** Turns "0a 0b ..." into bytes, so test messages read like a hex dump. */
-const hex = (s: string): Uint8Array =>
-  Uint8Array.from(s.split(whitespace).filter(Boolean), (b) =>
-    Number.parseInt(b, hexRadix)
-  );
-
-const toHex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(hexRadix).padStart(2, "0")).join(" ");
-
 const queryId = 4242;
-const edeFiltered = 17;
 // BADCOOKIE (23) is carried partly in the OPT record's extended rcode.
 const extendedRcode = 23;
+// BADVERS (16): an extended rcode of 1 in the OPT record over a header's 0.
+const badVers = 16;
 
 describe("encodeQuery", () => {
   test("writes the header, question and an EDNS OPT record", () => {
     const q = Effect.runSync(encodeQuery(queryId, "vg.no", "AAAA"));
-    expect(responseId(q)).toBe(queryId);
+    expect(new Reader(q).header().id).toBe(queryId);
     expect(toHex(q)).toBe(
       [
         "10 92 01 00 00 01 00 00 00 00 00 01", // header
@@ -42,7 +34,7 @@ describe("encodeQuery", () => {
     const error = Effect.runSync(
       Effect.flip(encodeQuery(1, `${"a".repeat(longestLabel + 1)}.no`, "A"))
     );
-    expect(error._tag).toBe("MalformedResponse");
+    expect(error._tag).toBe("MalformedMessage");
   });
 });
 
@@ -81,14 +73,33 @@ describe("decodeResponse: flags and errors", () => {
   test("reads Extended DNS Errors and the extended rcode", () => {
     const answer = decode(
       response({
-        extendedErrors: [{ code: edeFiltered, text: "malware" }],
+        extendedErrors: [{ code: Ede.filtered, text: "malware" }],
         rcode: extendedRcode,
       })
     );
     expect(answer.extendedErrors).toEqual([
-      { code: edeFiltered, text: "malware" },
+      { code: Ede.filtered, text: "malware" },
     ]);
     expect(answer.rcode).toBe(extendedRcode);
+  });
+
+  test("reads a response written byte by byte, not by the test encoder", () => {
+    // TC set, and an OPT record with extended rcode 1 and one Extended DNS
+    // Error: info code 17 (Filtered), "malware".
+    const answer = decode(
+      hex(`
+        00 01 83 80 00 01 00 00 00 00 00 01
+        07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01
+        00 00 29 04 d0 01 00 00 00 00 0d
+        00 0f 00 09 00 11 6d 61 6c 77 61 72 65
+      `)
+    );
+    expect(answer).toEqual({
+      extendedErrors: [{ code: Ede.filtered, text: "malware" }],
+      rcode: badVers,
+      records: [],
+      truncated: true,
+    });
   });
 
   test("reports truncation", () => {
@@ -100,7 +111,7 @@ describe("decodeResponse: flags and errors", () => {
     const whole = response({
       records: [{ name: "example.com", type: "A", value: "192.0.2.1" }],
     });
-    expect(decodeError(whole.subarray(0, -1))._tag).toBe("MalformedResponse");
+    expect(decodeError(whole.subarray(0, -1))._tag).toBe("MalformedMessage");
   });
 
   test("fails on a compression loop", () => {

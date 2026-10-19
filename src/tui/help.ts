@@ -1,7 +1,11 @@
-/** The help screen. */
-import type { StyledText, TextChunk } from "@opentui/core";
-import { fit, lines, paint } from "./paint.ts";
+/** The help screen: the keys, what the rows mean, and how nbchecker works. */
+import type { CliRenderer, StyledText, TextChunk } from "@opentui/core";
+import { lines, paint } from "./paint.ts";
+import type { RowState } from "./rows.ts";
+import { lookOf } from "./table.ts";
+import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
+import { bodyOf, pane, scrollBox } from "./widgets.ts";
 
 const keyWidth = 10;
 
@@ -18,41 +22,39 @@ const keys: readonly (readonly [string, string])[] = [
   ["q", "quit (ctrl+c works anywhere)"],
 ];
 
-const glyphs: readonly (readonly [string, string, string])[] = [
+/** What the rows mean, each drawn as the table draws a row in that state. */
+const legend: readonly (readonly [RowState, string])[] = [
+  ["blocked", "blocked: a known block answer, such as a block page or 0.0.0.0"],
+  ["resolves", "resolves: an ordinary answer"],
   [
-    "✕",
-    theme.block,
-    "blocked: a known block answer, such as a block page or 0.0.0.0",
-  ],
-  ["✓", theme.ok, "resolves: an ordinary answer"],
-  [
-    "–",
-    theme.dim,
+    "missing",
     "not found: the domain doesn't exist, and the real answer agrees",
   ],
   [
-    "!",
-    theme.warn,
+    "inspected",
     "inspected: sent through Cisco's inspection proxy, which may still block some URLs",
   ],
   [
-    "?",
-    theme.warn,
+    "failed",
     "no answer, or can't tell: the resolver couldn't be reached, or the real answer is needed",
   ],
-  ["·", theme.faint, "no answer, as expected: it only answers some networks"],
+  ["optional", "no answer, as expected: it only answers some networks"],
   [
-    "?",
-    theme.warn,
+    "redirected",
     "untrusted: it failed the self-test, so its answers seem to come from another resolver",
   ],
 ];
+
+const legendLine = ([state, text]: readonly [RowState, string]) => {
+  const { color, glyph } = lookOf(state, 0);
+  return [paint(`${glyph} `, { fg: color }), paint(text)];
+};
 
 const heading = (text: string): TextChunk[] => [
   paint(text, { bold: true, fg: theme.accent }),
 ];
 
-export const helpText = (): StyledText =>
+const helpText = (): StyledText =>
   lines([
     heading("Keys"),
     ...keys.map(([key, text]) => [
@@ -61,10 +63,7 @@ export const helpText = (): StyledText =>
     ]),
     [],
     heading("What the rows mean"),
-    ...glyphs.map(([glyph, color, text]) => [
-      paint(`${glyph} `, { fg: color }),
-      paint(text),
-    ]),
+    ...legend.map(legendLine),
     [],
     heading("How it works"),
     [
@@ -81,3 +80,17 @@ export const helpText = (): StyledText =>
     [],
     [paint("Press esc or ? to go back.", { fg: theme.dim })],
   ]);
+
+/** The help never changes, so it is written once, when the screen is built. */
+const buildHelp = (renderer: CliRenderer) => {
+  const box = pane(renderer, { title: "Help" });
+  box.visible = false;
+  box.flexShrink = 1;
+  box.minHeight = 0;
+  const scroll = scrollBox(renderer);
+  bodyOf(renderer, scroll).content = helpText();
+  box.add(scroll);
+  return { box, scroll };
+};
+
+export { buildHelp };

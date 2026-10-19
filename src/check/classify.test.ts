@@ -1,49 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { type DnsAnswer, type DnsRecord, Rcode } from "../dns/wire.ts";
+import { Ede, Rcode } from "../dns/codes.ts";
+import type { DnsAnswer } from "../dns/wire.ts";
+import { a, aaaa, answer, cname, noRecords } from "../testing/records.ts";
 import {
-  canonicalAddress,
   classify,
   classifySystem,
-  describe as describeVerdict,
   merge,
   type Reason,
   type Reference,
 } from "./classify.ts";
 
-const edeBlocked = 15;
-const edeFiltered = 17;
 const edeStale = 3;
 
 /** The real answer for a name that exists, with an address of its own. */
 const exists: Reference = { addresses: ["192.0.2.20"], exists: true };
 const missing: Reference = { addresses: [], exists: false };
-
-const answer = (
-  records: readonly DnsRecord[],
-  extra: Partial<DnsAnswer> = {}
-): DnsAnswer => ({
-  extendedErrors: [],
-  rcode: Rcode.noError,
-  records,
-  truncated: false,
-  ...extra,
-});
-
-const cname = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "CNAME",
-  value,
-});
-const a = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "A",
-  value,
-});
-const aaaa = (name: string, value: string): DnsRecord => ({
-  name,
-  type: "AAAA",
-  value,
-});
 
 interface Case {
   readonly answer: DnsAnswer;
@@ -96,19 +67,13 @@ const cases: readonly Case[] = [
     reason: "adguard",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: edeBlocked, text: "" }],
-      rcode: Rcode.servFail,
-    }),
+    answer: noRecords(Rcode.servFail, Ede.blocked),
     detail: "Blocked",
     name: "SERVFAIL with Extended DNS Error 15",
     reason: "ede",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: edeBlocked, text: "policy" }],
-      rcode: Rcode.refused,
-    }),
+    answer: noRecords(Rcode.refused, { code: Ede.blocked, text: "policy" }),
     detail: "Blocked: policy",
     name: "REFUSED with Extended DNS Error 15",
     reason: "ede",
@@ -124,9 +89,7 @@ const cases: readonly Case[] = [
     reason: "null-ip",
   },
   {
-    answer: answer([], {
-      extendedErrors: [{ code: edeFiltered, text: "malware" }],
-    }),
+    answer: noRecords(Rcode.noError, { code: Ede.filtered, text: "malware" }),
     detail: "Filtered: malware",
     name: "Extended DNS Error",
     reason: "ede",
@@ -139,12 +102,12 @@ const cases: readonly Case[] = [
     reason: undefined,
   },
   {
-    answer: answer([], { rcode: Rcode.nxDomain }),
+    answer: noRecords(Rcode.nxDomain),
     name: "filter-only NXDOMAIN (Quad9)",
     reason: "nxdomain",
   },
   {
-    answer: answer([], { rcode: Rcode.nxDomain }),
+    answer: noRecords(Rcode.nxDomain),
     name: "NXDOMAIN for a name that doesn't exist",
     reason: undefined,
     reference: missing,
@@ -190,21 +153,6 @@ test("merge keeps the block and removes duplicate answers", () => {
   expect(merged.answers).toEqual(["192.0.2.1", "nettvern-info.telenor.net"]);
 });
 
-test("canonicalAddress unmaps IPv4-mapped IPv6 and shortens IPv6", () => {
-  expect(canonicalAddress("::ffff:192.0.2.1")).toBe("192.0.2.1");
-  expect(canonicalAddress("2001:0db8:0000::0001")).toBe("2001:db8::1");
-  expect(canonicalAddress("not-an-ip")).toBe("not-an-ip");
-});
-
-test("describe", () => {
-  const absent = classify(answer([], { rcode: Rcode.nxDomain }), missing);
-  expect(describeVerdict(absent)).toBe("not found (the domain doesn't exist)");
-  const umbrella = classify(answer([a("x.example", "146.112.61.108")]), exists);
-  expect(describeVerdict(umbrella)).toBe(
-    "blocked by Cisco Umbrella (phishing)"
-  );
-});
-
 describe("classify: compared with the real answer", () => {
   const zero: Reference = { addresses: ["0.0.0.0"], exists: true };
 
@@ -217,7 +165,7 @@ describe("classify: compared with the real answer", () => {
   test("an Extended DNS Error still counts", () => {
     const v = classify(
       answer([a("zero.example", "0.0.0.0")], {
-        extendedErrors: [{ code: edeFiltered, text: "" }],
+        extendedErrors: [{ code: Ede.filtered, text: "" }],
       }),
       zero
     );
@@ -241,9 +189,6 @@ describe("classify: Cisco's inspection proxy", () => {
       inspected: true,
       reason: "umbrella-proxy",
     });
-    expect(describeVerdict(v)).toBe(
-      "sent through Cisco's inspection proxy; the site may still be blocked by URL"
-    );
   });
 
   test("a block in the other answer wins", () => {

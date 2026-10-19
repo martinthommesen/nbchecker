@@ -12,12 +12,12 @@ import {
   FiberSet,
   Schedule,
 } from "effect";
-import { CheckerOptions } from "../check/checker.ts";
+import { CheckerOptions } from "../check/options.ts";
 import { makeController } from "./controller.ts";
-import type { Needs, Store } from "./controller-deps.ts";
+import type { Needs } from "./controller-deps.ts";
 import { actionFor } from "./keys.ts";
 import { mountScreen } from "./screen.ts";
-import { initialState, type State } from "./state.ts";
+import { initialState, makeStore, type Store } from "./state.ts";
 
 /** Opens the terminal; tests swap in a virtual one. */
 const OpenRenderer = Context.Reference<() => Promise<CliRenderer>>(
@@ -33,17 +33,6 @@ const openRenderer = Effect.acquireRelease(
       await renderer.closed;
     })
 );
-
-const makeStore = (initial: State, draw: (s: State) => void): Store => {
-  let state = initial;
-  return {
-    get: () => state,
-    set: (patch) => {
-      state = { ...state, ...patch };
-      draw(state);
-    },
-  };
-};
 
 /** Moves the spinners while anything is still being asked. */
 const ticker = (store: Store) =>

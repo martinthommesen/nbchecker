@@ -1,11 +1,12 @@
 /** Helpers for building coloured lines of text. */
 import { bg, bold, fg, StyledText, type TextChunk } from "@opentui/core";
 import { printable } from "../report/printable.ts";
+import { fit } from "./text-layout.ts";
 import { theme } from "./theme.ts";
 
-export const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-export interface Ink {
+interface Ink {
   readonly bg?: string;
   readonly bold?: boolean;
   readonly fg?: string;
@@ -27,65 +28,6 @@ export const paint = (text: string, ink: Ink = {}): TextChunk => {
   return chunk;
 };
 
-/** The width of a string in terminal columns, for the text nbchecker shows. */
-export const columns = (s: string): number => [...s].length;
-
-/** Pads or cuts `s` to exactly `n` columns, marking a cut with an ellipsis. */
-export const fit = (s: string, n: number): string => {
-  if (n <= 0) {
-    return "";
-  }
-  const chars = [...s];
-  if (chars.length > n) {
-    return `${chars.slice(0, n - 1).join("")}…`;
-  }
-  return s + " ".repeat(n - chars.length);
-};
-
-/**
- * Breaks `s` into lines of at most `n` columns, at spaces where it can and
- * inside a word too long for a line. Every line keeps the indent `s` starts
- * with, and lines after the first are indented by `hang` more columns, so
- * they read as part of the first.
- */
-export const wrap = (s: string, n: number, hang = 0): string[] => {
-  const text = s.trimStart();
-  const indent = s.slice(0, s.length - text.length);
-  if (indent !== "") {
-    return wrap(text, n - columns(indent), hang).map((l) => indent + l);
-  }
-  const out: string[] = [];
-  const room = () => n - Math.min(out.length, 1) * hang;
-  let line = "";
-  for (const word of s.split(" ")) {
-    let joined = word;
-    if (line !== "") {
-      joined = `${line} ${word}`;
-    }
-    if (columns(joined) <= room()) {
-      line = joined;
-    } else {
-      if (line !== "") {
-        out.push(line);
-      }
-      let chars = [...word];
-      let size = room();
-      while (size > 0 && chars.length > size) {
-        out.push(chars.slice(0, size).join(""));
-        chars = chars.slice(size);
-        size = room();
-      }
-      line = chars.join("");
-    }
-  }
-  out.push(line);
-  return out.map((l, i) => " ".repeat(Math.min(i, 1) * hang) + l);
-};
-
-/** Right-aligns `s` in `n` columns. */
-export const fitRight = (s: string, n: number): string =>
-  " ".repeat(Math.max(n - columns(s), 0)) + s;
-
 /**
  * Joins lines of chunks into one text, a newline between each. The newline
  * is built here, since `paint` replaces newlines in the text it is given.
@@ -103,3 +45,28 @@ export const lines = (rows: readonly (readonly TextChunk[])[]): StyledText =>
 /** The spinner frame for a tick count. */
 export const spinner = (tick: number): string =>
   spinnerFrames[tick % spinnerFrames.length] ?? "";
+
+/** A text of one line in one style. */
+export const oneLine = (text: string, ink: Ink = {}): StyledText =>
+  lines([[paint(text, ink)]]);
+
+/**
+ * A line of a shaded block, such as a raw DNS response, filled to `width` so
+ * the shading reaches the edge. Without a width, as when copying, the text
+ * is left as it is.
+ */
+export const shaded = (
+  text: string,
+  width: number,
+  color: string = theme.answer
+): TextChunk => {
+  let filled = text;
+  if (width > 0) {
+    filled = fit(text, width);
+  }
+  return paint(filled, { bg: theme.response, fg: color });
+};
+
+/** The text without its styles, as it is copied. */
+export const plainText = (t: StyledText): string =>
+  t.chunks.map((c) => c.text).join("");

@@ -1,21 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { connect, listen, sleep } from "bun";
 import { Effect, Fiber } from "effect";
-import { replyTo } from "../testing/response.ts";
+import { query, queryId, replyTo } from "../testing/response.ts";
+import { frame, unframe } from "./bytes.ts";
 import { type OpenTcp, sendTcp } from "./sockets.ts";
-import { encodeQuery } from "./wire.ts";
 
-const lengthPrefix = 2;
-const queryId = 7;
 const waitMs = 500;
-const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
-
-const frame = (body: Uint8Array): Uint8Array => {
-  const framed = new Uint8Array(body.length + lengthPrefix);
-  new DataView(framed.buffer).setUint16(0, body.length);
-  framed.set(body, lengthPrefix);
-  return framed;
-};
 
 /** A loopback DNS server over TCP that says if the client hung up. */
 const tcpServer = (reply: (query: Uint8Array) => Uint8Array) => {
@@ -29,7 +19,10 @@ const tcpServer = (reply: (query: Uint8Array) => Uint8Array) => {
       close: () => resolve(true),
       data: (socket, data) => {
         seen.queries += 1;
-        socket.write(frame(reply(data.subarray(lengthPrefix))));
+        const asked = unframe(data);
+        if (asked !== undefined) {
+          socket.write(frame(reply(asked)));
+        }
       },
     },
   });
