@@ -79,6 +79,14 @@ describe("tableGroups after a cancel", () => {
     });
   });
 
+  test("a filter's NXDOMAIN after the real answer was cancelled can't be told", async () => {
+    const r = await runCheck("nope.example");
+    const stopped = cancelPending({ ...r, realAnswer: pending });
+    const family = row(stopped, "Family filter");
+    expect(family).toMatchObject({ state: "unsure", word: "can't tell" });
+    expect(family?.why).toContain("real answer couldn't be fetched");
+  });
+
   test("a filter or this computer still on its way says cancelled", async () => {
     const r = await runCheck("good.example");
     const waiting: CheckResult = {
