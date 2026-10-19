@@ -1,4 +1,8 @@
-/** Builds DNS response messages for tests, and the query they answer. */
+/**
+ * Builds DNS messages for tests: responses, the query they answer, and
+ * messages written by hand as hex dumps. The responses use the codec's own
+ * constants, so only hand-written bytes can catch a wrong one.
+ */
 import { Effect } from "effect";
 import { NetAddress } from "effect/net";
 import { concat, uint16s } from "../dns/bytes.ts";
@@ -25,6 +29,8 @@ import {
 
 const ttl = 60;
 const encoder = new TextEncoder();
+const hexRadix = 16;
+const whitespace = /\s+/;
 
 const uint32 = (n: number): Uint8Array => {
   const out = new Uint8Array(uint32Bytes);
@@ -132,3 +138,13 @@ export const queryId = 7;
 
 /** An A query for example.com, as nbchecker sends one. */
 export const query = Effect.runSync(encodeQuery(queryId, "example.com", "A"));
+
+/** Turns "0a 0b ..." into bytes, so test messages read like a hex dump. */
+export const hex = (s: string): Uint8Array =>
+  Uint8Array.from(s.split(whitespace).filter(Boolean), (b) =>
+    Number.parseInt(b, hexRadix)
+  );
+
+/** Writes bytes as "0a 0b ...", the way `hex` reads them. */
+export const toHex = (bytes: Uint8Array): string =>
+  [...bytes].map((b) => b.toString(hexRadix).padStart(2, "0")).join(" ");

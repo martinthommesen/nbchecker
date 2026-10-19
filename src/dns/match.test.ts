@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { query, queryId, replyTo, response } from "../testing/response.ts";
+import { hex, query, queryId, replyTo, response } from "../testing/response.ts";
 import { Rcode } from "./codes.ts";
 import { mismatch } from "./match.ts";
 
@@ -26,6 +26,17 @@ const strip = (bytes: Uint8Array) => {
 describe("mismatch", () => {
   test("accepts the answer to the query", () => {
     expect(mismatch(query, replyTo(query))).toBeUndefined();
+  });
+
+  test("accepts an answer written byte by byte, not by the test encoder", () => {
+    // ID 7 (the query's), QR and RD set, one question and one answer:
+    // example.com A 192.0.2.1.
+    const reply = hex(`
+      00 07 81 00 00 01 00 01 00 00 00 00
+      07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01
+      c0 0c 00 01 00 01 00 00 00 3c 00 04 c0 00 02 01
+    `);
+    expect(mismatch(query, reply)).toBeUndefined();
   });
 
   test("ignores the case of the name", () => {

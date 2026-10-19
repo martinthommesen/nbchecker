@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect } from "effect";
-import { response } from "../testing/response.ts";
+import { hex, response, toHex } from "../testing/response.ts";
 import { Ede, Rcode } from "./codes.ts";
 import { Reader } from "./reader.ts";
 import { decodeResponse, encodeQuery } from "./wire.ts";
@@ -9,22 +9,13 @@ const decode = (bytes: Uint8Array) => Effect.runSync(decodeResponse(bytes));
 const decodeError = (bytes: Uint8Array) =>
   Effect.runSync(Effect.flip(decodeResponse(bytes)));
 
-const hexRadix = 16;
-const whitespace = /\s+/;
 const longestLabel = 63;
-
-/** Turns "0a 0b ..." into bytes, so test messages read like a hex dump. */
-const hex = (s: string): Uint8Array =>
-  Uint8Array.from(s.split(whitespace).filter(Boolean), (b) =>
-    Number.parseInt(b, hexRadix)
-  );
-
-const toHex = (bytes: Uint8Array): string =>
-  [...bytes].map((b) => b.toString(hexRadix).padStart(2, "0")).join(" ");
 
 const queryId = 4242;
 // BADCOOKIE (23) is carried partly in the OPT record's extended rcode.
 const extendedRcode = 23;
+// BADVERS (16): an extended rcode of 1 in the OPT record over a header's 0.
+const badVers = 16;
 
 describe("encodeQuery", () => {
   test("writes the header, question and an EDNS OPT record", () => {
@@ -90,6 +81,25 @@ describe("decodeResponse: flags and errors", () => {
       { code: Ede.filtered, text: "malware" },
     ]);
     expect(answer.rcode).toBe(extendedRcode);
+  });
+
+  test("reads a response written byte by byte, not by the test encoder", () => {
+    // TC set, and an OPT record with extended rcode 1 and one Extended DNS
+    // Error: info code 17 (Filtered), "malware".
+    const answer = decode(
+      hex(`
+        00 01 83 80 00 01 00 00 00 00 00 01
+        07 65 78 61 6d 70 6c 65 03 63 6f 6d 00 00 01 00 01
+        00 00 29 04 d0 01 00 00 00 00 0d
+        00 0f 00 09 00 11 6d 61 6c 77 61 72 65
+      `)
+    );
+    expect(answer).toEqual({
+      extendedErrors: [{ code: Ede.filtered, text: "malware" }],
+      rcode: badVers,
+      records: [],
+      truncated: true,
+    });
   });
 
   test("reports truncation", () => {
